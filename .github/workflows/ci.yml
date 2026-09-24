@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches-ignore: [ledger]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Unit and anti-cheat tests
+        run: pytest -q
+      - name: Offline smoke run (synthetic market, no network)
+        run: |
+          aifx cycle --synthetic --state /tmp/state --site /tmp/site --audit 2
+          aifx verify --state /tmp/state
+          test -s /tmp/site/api/meta.json

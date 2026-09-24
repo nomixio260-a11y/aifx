@@ -1,0 +1,98 @@
+# The forecasting server. Every run is one cycle: fetch prices and news, score
+# matured forecasts, learn, issue new forecasts, verify the whole ledger, then
+# append the results to the `ledger` branch and publish the web page.
+name: FX server
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+  push:
+    branches-ignore: [ledger]
+    paths: ["aifx/**", "pyproject.toml", ".github/workflows/server.yml"]
+
+permissions:
+  contents: write   # append to the ledger branch
+  pages: write
+  id-token: write
+
+concurrency:
+  group: fx-server
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    # Only the default branch runs the live server; other branches are tested by CI.
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      deploy: ${{ steps.pages.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[llm]"
+
+      - name: Check out the ledger branch
+        run: |
+          git config user.name "aifx-server[bot]"
+          git config user.email "aifx-server@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin ledger >/dev/null; then
+            git fetch --depth=1 origin ledger:ledger
+            git worktree add state ledger
+          else
+            git worktree add --orphan -b ledger state
+          fi
+          echo "BEFORE=$(aifx head --state state)" >> "$GITHUB_ENV"
+
+      - name: Run one cycle
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: aifx cycle --state state --site site --audit 3 --interval 15
+
+      - name: Verify the ledger only grew
+        run: aifx verify --state state --expect-head "$BEFORE"
+
+      - name: Append to the ledger branch (fast-forward only, never forced)
+        run: |
+          cd state
+          git add -A
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -q -m "cycle $(date -u +%Y-%m-%dT%H:%MZ) head $(aifx head --state .)"
+          git push origin HEAD:ledger
+          echo "::notice::ledger head $(aifx head --state .)"
+
+      - name: Check whether GitHub Pages is enabled
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" --silent 2>/dev/null; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Pages is not enabled. Settings > Pages > Source: GitHub Actions to publish the dashboard."
+          fi
+
+      - name: Upload the web page
+        if: steps.pages.outputs.deploy == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    needs: cycle
+    if: needs.cycle.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

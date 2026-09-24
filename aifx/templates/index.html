@@ -1,0 +1,1036 @@
+<title>AIFX 為替予測</title>
+<meta name="description" content="サーバーで動く為替予測。予測は結果が出る前に改ざん不可能な台帳へ記録され、的中率・誤差・ニュース分析・検証結果を公開します。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground: #f2f3f7;
+  --surface: #fbfbfd;
+  --surface-2: #eceef4;
+  --ink: #14151c;
+  --ink-2: #4c4f62;
+  --muted: #767a8f;
+  --hair: #e0e2ea;
+  --axis: #c3c6d4;
+  --accent: #4a3aa7;
+  --accent-wash: rgba(74, 58, 167, 0.08);
+  --up: #d23c36;
+  --down: #2767d0;
+  --good: #0b7d24;
+  --bad: #c03434;
+  --warn: #a86400;
+  --ma20: #16a06f;
+  --ma75: #d99400;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #b88000;
+  --future: rgba(74, 58, 167, 0.045);
+  --shadow: 0 1px 2px rgba(20, 21, 28, 0.06), 0 8px 24px rgba(20, 21, 28, 0.06);
+  --sans: "IBM Plex Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #0d0e13;
+    --surface: #15161d;
+    --surface-2: #1d1f28;
+    --ink: #eef0f6;
+    --ink-2: #b4b7c8;
+    --muted: #868aa0;
+    --hair: #252733;
+    --axis: #363947;
+    --accent: #9a8ff0;
+    --accent-wash: rgba(154, 143, 240, 0.12);
+    --up: #ee6a62;
+    --down: #5b95f2;
+    --good: #3fbf5a;
+    --bad: #ee6a62;
+    --warn: #e5a92a;
+    --ma20: #2cc58c;
+    --ma75: #e5a92a;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --future: rgba(154, 143, 240, 0.06);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0d0e13;
+  --surface: #15161d;
+  --surface-2: #1d1f28;
+  --ink: #eef0f6;
+  --ink-2: #b4b7c8;
+  --muted: #868aa0;
+  --hair: #252733;
+  --axis: #363947;
+  --accent: #9a8ff0;
+  --accent-wash: rgba(154, 143, 240, 0.12);
+  --up: #ee6a62;
+  --down: #5b95f2;
+  --good: #3fbf5a;
+  --bad: #ee6a62;
+  --warn: #e5a92a;
+  --ma20: #2cc58c;
+  --ma75: #e5a92a;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --future: rgba(154, 143, 240, 0.06);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 40px; display: grid; gap: 18px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
+.good { color: var(--good); } .bad { color: var(--bad); }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
+.brand h1 b { color: var(--accent); }
+.brand p { margin: 0; color: var(--ink-2); font-size: 13px; }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 12px; color: var(--ink-2); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--hair); font-weight: 500; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 20%, transparent); }
+.dot.bad { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 20%, transparent); }
+.dot.busy { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.btn { appearance: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--surface); background: var(--accent); border: 0; border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:focus-visible, .seg button:focus-visible, .tog:focus-visible, .pair:focus-visible, .chipbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+nav.sections { display: flex; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+nav.sections a { text-decoration: none; color: var(--ink-2); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--hair); background: var(--surface); }
+nav.sections a:hover { color: var(--ink); border-color: var(--axis); }
+.notice { background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--ink-2); }
+.notice.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--hair)); }
+
+/* rail */
+.rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(152px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.pair { appearance: none; font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; padding: 10px 12px; cursor: pointer; display: grid; gap: 2px; }
+.pair:hover { border-color: var(--axis); }
+.pair[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pair .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pair .code { font-weight: 600; font-size: 13px; }
+.pair .jp { font-size: 11px; color: var(--muted); line-height: 1.3; }
+.pair .px { font-size: 18px; font-weight: 500; margin-top: 4px; }
+.pair .chg { font-size: 11px; white-space: nowrap; }
+.pair .fc { font-size: 11px; color: var(--ink-2); display: flex; gap: 6px; align-items: center; white-space: nowrap; margin-top: 4px; }
+.pair .live { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; line-height: 1.6; white-space: nowrap; }
+.chip.up { background: color-mix(in srgb, var(--up) 12%, transparent); color: var(--up); }
+.chip.down { background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--down); }
+.chip.flat { background: var(--surface-2); color: var(--ink-2); }
+.chip.good { background: color-mix(in srgb, var(--good) 13%, transparent); color: var(--good); }
+.chip.bad { background: color-mix(in srgb, var(--bad) 13%, transparent); color: var(--bad); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+.chip.accent { background: var(--accent-wash); color: var(--accent); }
+
+.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; box-shadow: var(--shadow); padding: 20px; display: grid; gap: 16px; min-width: 0; scroll-margin-top: 12px; }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px 16px; flex-wrap: wrap; }
+.section-head h2 { font-size: 17px; font-weight: 700; }
+.section-head h3 { font-size: 15px; font-weight: 600; }
+.section-head p { margin: 0; font-size: 12px; color: var(--muted); }
+.lead { margin: 0; color: var(--ink-2); font-size: 13px; max-width: 78ch; }
+
+/* forecast */
+.head { display: grid; grid-template-columns: minmax(220px, 290px) 1fr; gap: 20px; align-items: end; }
+.hero .pairname { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.hero .pairname h2 { font-size: 20px; }
+.hero .pairname span { color: var(--ink-2); font-size: 13px; }
+.hero .price { font-family: var(--mono); font-size: 42px; font-weight: 500; line-height: 1.1; margin-top: 6px; }
+.hero .meta { display: flex; gap: 4px 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.outlook { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { border: 1px solid var(--hair); border-radius: 10px; padding: 10px 12px; display: grid; gap: 3px; min-width: 0; align-content: start; }
+.tile .when { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.tile .when span:first-child { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.tile .val { font-family: var(--mono); font-size: 18px; font-weight: 500; }
+.tile .sub { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tile .prob { font-size: 12px; color: var(--ink-2); }
+.meter { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--down) 45%, transparent); overflow: hidden; margin-top: 2px; }
+.meter i { display: block; height: 100%; background: var(--up); border-right: 2px solid var(--surface); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 8px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+.seg button { appearance: none; border: 0; font: inherit; font-size: 12px; font-weight: 500; color: var(--ink-2); background: transparent; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.ctl-label { font-size: 11px; color: var(--muted); margin-right: 6px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.tog { appearance: none; font: inherit; font-size: 12px; color: var(--ink-2); background: transparent; border: 1px solid var(--hair); border-radius: 999px; padding: 3px 10px 3px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.tog.static { border-color: transparent; cursor: default; padding-inline: 2px 6px; }
+.tog[aria-pressed="false"] { opacity: 0.55; }
+.key { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.key.dash { border-top-style: dashed; }
+.key.box { height: 10px; border: 0; border-radius: 2px; }
+.key.candle { width: 10px; height: 10px; border: 0; background: linear-gradient(90deg, var(--up) 50%, var(--down) 50%); border-radius: 2px; }
+.key.dotk { width: 9px; height: 9px; border: 0; border-radius: 50%; }
+.chart { width: 100%; height: 500px; }
+.chart.small { height: 280px; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; }
+.stack { display: grid; gap: 10px; align-content: start; min-width: 0; }
+
+.tablebox { overflow-x: auto; border: 1px solid var(--hair); border-radius: 10px; }
+.tablebox.tall { max-height: 380px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--hair); }
+th:first-child, td:first-child { text-align: left; }
+td.l, th.l { text-align: left; }
+thead th { position: sticky; top: 0; background: var(--surface-2); color: var(--ink-2); font-weight: 500; font-size: 11.5px; z-index: 1; }
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.hl td { background: var(--accent-wash); font-weight: 600; }
+
+.list { display: grid; border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; }
+.list .item { padding: 9px 12px; border-bottom: 1px solid var(--hair); display: grid; gap: 3px; min-width: 0; }
+.list .item:last-child { border-bottom: 0; }
+.list .item .t { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.list .item .t a { color: var(--ink); text-decoration: none; }
+.list .item .t a:hover { text-decoration: underline; }
+.list .item .m { display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--muted); }
+.empty { padding: 14px; color: var(--muted); font-size: 13px; }
+
+.balance { display: grid; gap: 8px; }
+.brow { display: grid; grid-template-columns: 42px 1fr 64px; gap: 10px; align-items: center; font-size: 12px; }
+.brow .code { font-weight: 600; }
+.dbar { position: relative; height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+.dbar::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--axis); }
+.dbar i { position: absolute; top: 0; bottom: 0; border-radius: 5px; }
+.spark { width: 100%; height: 26px; display: block; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.stat { border: 1px solid var(--hair); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.stat h4 { margin: 0; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.stat .kv { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 12px; }
+.stat .kv span:nth-child(odd) { color: var(--ink-2); }
+.stat .kv span:nth-child(even) { font-family: var(--mono); text-align: right; }
+.stat .big { font-family: var(--mono); font-size: 22px; font-weight: 500; }
+
+.weights { display: flex; height: 10px; border-radius: 5px; overflow: hidden; min-width: 120px; }
+.weights i { display: block; height: 100%; border-right: 2px solid var(--surface); }
+.weights i:last-child { border-right: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--ink-2); }
+.legend span { display: inline-flex; gap: 5px; align-items: center; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.rules { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); max-width: 90ch; }
+.hash { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+code, pre { font-family: var(--mono); font-size: 12px; }
+pre { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 0; }
+.models { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px 20px; margin: 0; }
+.models div { border-top: 1px solid var(--hair); padding-top: 8px; }
+.models dt { font-weight: 600; font-size: 13px; }
+.models dd { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
+.chipbtn { appearance: none; font: inherit; font-size: 12px; border: 1px solid var(--hair); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.chipbtn[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); border-color: transparent; font-weight: 600; }
+footer { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+footer p { margin: 0; max-width: 95ch; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 20; max-width: calc(100% - 32px); }
+
+@media (max-width: 900px) { .head { grid-template-columns: 1fr; } .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .panel { padding: 14px; border-radius: 12px; }
+  .hero .price { font-size: 34px; }
+  .chart { height: 400px; }
+  .outlook { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+<!-- /head -->
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1><b>AI</b>FX 為替予測</h1>
+      <p>予測はサーバーで計算し、結果が出る前に台帳へ記録しています</p>
+    </div>
+    <div class="status" id="status"></div>
+  </header>
+  <nav class="sections" aria-label="セクション">
+    <a href="#forecast">予測</a><a href="#track">実績</a><a href="#news">ニュース分析</a><a href="#learning">学習とモデル</a><a href="#verify">検証</a>
+  </nav>
+  <div id="banner" hidden></div>
+  <div class="rail" id="rail" aria-label="通貨ペア"></div>
+
+  <section class="panel" id="forecast">
+    <div class="head">
+      <div class="hero">
+        <div class="pairname"><h2 id="p-label">読み込み中…</h2><span id="p-name"></span></div>
+        <div class="price num" id="p-price">—</div>
+        <div class="meta" id="p-meta"></div>
+      </div>
+      <div class="stack">
+        <div class="controls">
+          <div><span class="ctl-label">予測の種類</span><span class="seg" id="seg-tf"></span></div>
+          <span class="small muted" id="p-issued"></span>
+        </div>
+        <div class="outlook" id="outlook"></div>
+      </div>
+    </div>
+    <div class="controls">
+      <div><span class="ctl-label">表示期間</span><span class="seg" id="seg-range"></span></div>
+      <div class="toggles" id="toggles"></div>
+    </div>
+    <div class="chart" id="chart" role="img" aria-label="ローソク足、予測レンジ、過去の予測の答え合わせ"></div>
+    <p class="note" id="chart-note"></p>
+    <div class="grid2">
+      <div class="stack">
+        <div class="section-head"><h3>この先の予測</h3><p id="path-caption"></p></div>
+        <div class="tablebox tall">
+          <table><thead><tr><th>時刻 (日本時間)</th><th class="num">予測</th><th class="num">変化 (pips)</th><th class="num">80%レンジ</th><th class="num">上昇確率</th></tr></thead><tbody id="path-body"></tbody></table>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="section-head"><h3>予測に使った材料</h3></div>
+        <div class="balance" id="drivers"></div>
+        <div class="section-head"><h3>関連ニュース</h3><p>起点時刻より前に取得したものだけが予測に使われます</p></div>
+        <div class="list" id="pair-news"></div>
+        <div class="section-head"><h3>今後の重要指標</h3></div>
+        <div class="list" id="pair-cal"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="track">
+    <div class="section-head">
+      <h2>実績: 予測はどれだけ当たっているか</h2>
+      <div class="controls"><span class="seg" id="seg-track-tf"></span><span class="seg" id="seg-track-pair"></span></div>
+    </div>
+    <p class="lead" id="track-lead"></p>
+    <div class="stats" id="track-stats"></div>
+    <div class="grid2">
+      <div class="stack">
+        <div class="section-head"><h3>累積の推移</h3><span class="seg" id="seg-track-metric"></span></div>
+        <div class="chart small" id="track-chart" role="img" aria-label="累積の的中率の推移"></div>
+      </div>
+      <div class="stack">
+        <div class="section-head"><h3>上昇確率の信頼性</h3><p>予測した確率と実際に上がった割合</p></div>
+        <div class="chart small" id="calib-chart" role="img" aria-label="予測確率と実際の頻度"></div>
+      </div>
+    </div>
+    <div class="section-head"><h3>判定済みの予測</h3><p id="recent-caption"></p></div>
+    <div class="tablebox tall">
+      <table><thead><tr><th>対象時刻</th><th class="l">ペア</th><th class="l">期間</th><th class="num">起点</th><th class="num">予測</th><th class="num">80%レンジ</th><th class="num">実際</th><th class="num">誤差 (pips)</th><th>方向</th><th>レンジ</th></tr></thead><tbody id="recent-body"></tbody></table>
+    </div>
+    <div class="section-head"><h3>判定待ち</h3><p id="pending-caption"></p></div>
+    <div class="tablebox">
+      <table><thead><tr><th>判定予定</th><th class="l">ペア</th><th class="l">期間</th><th class="num">起点</th><th class="num">予測</th><th class="num">上昇確率</th><th class="num">残り</th></tr></thead><tbody id="pending-body"></tbody></table>
+    </div>
+  </section>
+
+  <section class="panel" id="news">
+    <div class="section-head"><h2>ニュース分析</h2><p id="news-caption"></p></div>
+    <p class="lead" id="news-lead"></p>
+    <div class="grid2">
+      <div class="stack">
+        <div class="section-head"><h3>通貨ごとのニュース圧力</h3><p>+は通貨高、−は通貨安の材料が多い。線は48時間の推移</p></div>
+        <div class="balance" id="pressures"></div>
+        <div class="section-head"><h3>ペア別のニュース信号</h3></div>
+        <div class="tablebox"><table><thead><tr><th>ペア</th><th class="num">信号</th><th class="l">解釈</th></tr></thead><tbody id="signals-body"></tbody></table></div>
+      </div>
+      <div class="stack">
+        <div class="section-head"><h3>経済指標カレンダー</h3><p>重要度 高・中 (7日先まで)</p></div>
+        <div class="tablebox tall"><table><thead><tr><th>日本時間</th><th class="l">通貨</th><th class="l">重要度</th><th class="l">指標</th><th class="num">予想</th><th class="num">前回</th></tr></thead><tbody id="cal-body"></tbody></table></div>
+      </div>
+    </div>
+    <div class="section-head"><h3>最新の見出しと分析</h3><span class="seg" id="seg-news-cur"></span></div>
+    <div class="list" id="news-list"></div>
+    <p class="note" id="sources-note"></p>
+  </section>
+
+  <section class="panel" id="learning">
+    <div class="section-head"><h2>学習とモデル</h2><span class="seg" id="seg-learn-tf"></span></div>
+    <p class="lead">判定が済んだ予測の結果だけを使って、4つの値を自動で調整しています。重み: 誤差の小さいモデルを重く使う。信号の採用率: モデルの方向予測にどこまで従うか (実績で有効性が示されるまで0に近い値)。レンジ補正: 80%レンジが実際に約80%当たるよう幅を調整。ニュース係数: ニュース信号で予測をどれだけ動かすか。</p>
+    <div class="tablebox"><table><thead><tr><th>期間</th><th class="num">判定済み</th><th class="num">信号の採用率</th><th class="num">レンジ補正</th><th class="num">ニュース係数</th><th class="l">モデルの重み</th></tr></thead><tbody id="learn-body"></tbody></table></div>
+    <div class="legend" id="weights-legend"></div>
+    <div class="section-head"><h3>過去データでの検証 (シミュレーション)</h3><p id="bt-caption"></p></div>
+    <div class="tablebox"><table><thead id="bt-head"></thead><tbody id="bt-body"></tbody></table></div>
+    <dl class="models" id="models"></dl>
+  </section>
+
+  <section class="panel" id="verify">
+    <div class="section-head"><h2>検証: 実績をごまかせない仕組み</h2><p id="verify-caption"></p></div>
+    <div class="stats" id="verify-stats"></div>
+    <ol class="rules">
+      <li>予測は、結果が分かる前に台帳へ追記されます。各記録は前の記録のハッシュ (SHA-256) を含むため、1件でも書き換え・削除・並べ替えをすると検出されます。</li>
+      <li>価格・ニュース・経済指標の生データも追記専用ファイルに保存し、その内容のハッシュを台帳に記録しています。</li>
+      <li>予測に使えるのは、起点時刻までに確定した価格と、起点時刻より前に取得済みのニュース・指標だけです。</li>
+      <li>判定は対象時刻を過ぎてから、その時点で確定していた価格で行います。対象時刻が来た予測はすべて判定され、都合の悪い予測を飛ばすことはできません。</li>
+      <li>予測は定期的に抜き取りで再計算し、当時使えたデータだけで同じ数字が出るかを確かめています (先読みしていれば一致しません)。</li>
+      <li>成績は必ず「予測しない (ランダムウォーク)」と同じ予測で比べ、信頼区間と有意性を表示します。</li>
+      <li>台帳はGitHubの ledger ブランチに追記のみで保存され、誰でも取得して検証できます。</li>
+    </ol>
+    <div class="section-head"><h3>抜き取り再計算の結果</h3><p id="audit-caption"></p></div>
+    <div class="tablebox"><table><thead><tr><th>記録番号</th><th class="l">ペア</th><th class="l">種類</th><th class="l">起点</th><th>結果</th><th class="num">最大差 (bp)</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+    <div class="list" id="problems" hidden></div>
+    <div class="section-head"><h3>自分で検証する</h3></div>
+    <pre id="howto">git clone https://github.com/nomixio260-a11y/aifx
+cd aifx &amp;&amp; pip install -e .
+git fetch origin ledger &amp;&amp; git worktree add state origin/ledger
+aifx verify --state state
+aifx audit --state state --sample 20 --external</pre>
+  </section>
+
+  <footer>
+    <p>価格: Yahoo Finance (1時間足・日足)。ニュース: Google ニュース検索、各中央銀行、ForexLive。経済指標: Forex Factory カレンダー。</p>
+    <p>予測は統計モデルによる参考値で、将来の値動きを保証するものではありません。投資判断はご自身の責任で行ってください。</p>
+    <p id="footer-meta"></p>
+  </footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  var API = "api/";
+  var MODEL_NAMES = { rw: "ランダムウォーク", drift: "ドリフト", holt: "指数平滑", ar: "自己回帰", ridge: "リッジ回帰", knn: "パターン類似" };
+  var MODEL_KEYS = ["rw", "drift", "holt", "ar", "ridge", "knn"];
+  var S = {
+    pair: "USDJPY", tf: "1h", range: { "1h": 120, "1d": 130 },
+    show: { band: true, ma: true, past: true, models: false },
+    trackTf: "1h", trackPair: "ALL", trackMetric: 1, newsCur: "ALL", learnTf: "1h",
+    meta: null, pairs: {}, track: null, news: null, models: null, verify: null, status: null
+  };
+  try {
+    var saved = JSON.parse(localStorage.getItem("aifx-view") || "null");
+    if (saved) { if (saved.show) Object.assign(S.show, saved.show); if (saved.tf) S.tf = saved.tf; if (saved.pair) S.pair = saved.pair; }
+  } catch (e) {}
+  var hash = (location.hash || "").replace("#", "").toUpperCase();
+  if (/^[A-Z]{6}$/.test(hash)) S.pair = hash;
+  function persist() { try { localStorage.setItem("aifx-view", JSON.stringify({ show: S.show, tf: S.tf, pair: S.pair })); } catch (e) {} }
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function fmt(v, d) { return v == null || isNaN(v) ? "—" : Number(v).toFixed(d); }
+  function pct(v, d) { return v == null || isNaN(v) ? "—" : (v * 100).toFixed(d == null ? 0 : d) + "%"; }
+  function signed(v, d, unit) { if (v == null || isNaN(v)) return "—"; var s = v > 0 ? "+" : v < 0 ? "−" : "±"; return s + Math.abs(v).toFixed(d) + (unit || ""); }
+  function dirClass(v) { return v > 0 ? "up" : v < 0 ? "down" : "flat"; }
+  function arrow(v) { return v > 0 ? "▲" : v < 0 ? "▼" : "■"; }
+  function dirChip(label) { var c = label === "上昇" ? "up" : label === "下落" ? "down" : "flat"; var a = label === "上昇" ? "▲" : label === "下落" ? "▼" : "◆"; return el("span", "chip " + c, a + " " + label); }
+  var JST = null, JSTD = null;
+  try {
+    JST = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+    JSTD = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  } catch (e) {}
+  function jst(iso) { if (!iso) return "—"; try { return JST.format(new Date(iso)); } catch (e) { return iso; } }
+  function jstFull(iso) { if (!iso) return "—"; try { return JSTD.format(new Date(iso)) + " JST"; } catch (e) { return iso; } }
+  function rel(iso) {
+    if (!iso) return "";
+    var ms = new Date(iso).getTime() - Date.now(); var m = Math.round(Math.abs(ms) / 60000);
+    var txt = m < 1 ? "1分未満" : m < 60 ? m + "分" : m < 60 * 48 ? Math.round(m / 60) + "時間" : Math.round(m / 1440) + "日";
+    return ms >= 0 ? "あと" + txt : txt + "前";
+  }
+  function tfLabel(tf, h) { if (tf === "1h") return h + "時間後"; return h === 1 ? "翌営業日" : h + "営業日後"; }
+  function pairInfo(code) { var list = (S.meta && S.meta.pairs) || []; for (var i = 0; i < list.length; i++) if (list[i].pair === code) return list[i]; return null; }
+  function toast(msg) { var t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { t.hidden = true; }, 3500); }
+
+  function tokens() {
+    var cs = getComputedStyle(document.documentElement); var t = {};
+    ["surface", "surface-2", "ink", "ink-2", "muted", "hair", "axis", "accent", "up", "down", "good", "bad", "warn", "ma20", "ma75", "future", "s1", "s2", "s3", "s4"].forEach(function (n) { t[n.replace("-", "")] = cs.getPropertyValue("--" + n).trim(); });
+    t.mono = cs.getPropertyValue("--mono").trim(); t.sans = cs.getPropertyValue("--sans").trim();
+    return t;
+  }
+  function alpha(color, a) {
+    var ctx = alpha.ctx || (alpha.ctx = document.createElement("canvas").getContext("2d"));
+    ctx.fillStyle = "#000"; ctx.fillStyle = color; var c = ctx.fillStyle;
+    if (c.charAt(0) === "#") { return "rgba(" + parseInt(c.substr(1, 2), 16) + "," + parseInt(c.substr(3, 2), 16) + "," + parseInt(c.substr(5, 2), 16) + "," + a + ")"; }
+    return c.replace(/rgba?\(([^)]+)\)/, function (_, i) { return "rgba(" + i.split(",").slice(0, 3).join(",") + "," + a + ")"; });
+  }
+
+  function getJSON(path) {
+    return fetch(API + path + "?t=" + Date.now(), { cache: "no-store" }).then(function (r) {
+      if (r.ok) return r.json();
+      return fetch(API + path).then(function (r2) { if (!r2.ok) throw new Error(path + " " + r2.status); return r2.json(); });
+    }).catch(function () {
+      return fetch(API + path).then(function (r2) { if (!r2.ok) throw new Error(path); return r2.json(); });
+    });
+  }
+
+  /* ---------------- status + header ---------------- */
+  function renderStatus() {
+    var m = S.meta; var box = clear($("status"));
+    if (!m) return;
+    var pill = el("span", "pill"); var dot = el("span", "dot");
+    var stale = m.cycle_at && (Date.now() - new Date(m.cycle_at).getTime()) > 3 * m.interval_min * 60000 + 30 * 60000;
+    var txt;
+    if (m.mode === "server" && S.status) {
+      if (S.status.running) { dot.className = "dot busy"; txt = "サーバーで更新中…"; }
+      else if (S.status.last_error) { dot.className = "dot bad"; txt = "前回の更新でエラー"; }
+      else { txt = "サーバー稼働中"; }
+    } else {
+      txt = m.mode === "server" ? "サーバー稼働中" : "自動更新 (約" + Math.round(m.interval_min) + "分ごと)";
+      if (stale) { dot.className = "dot warn"; txt = "更新が遅れています"; }
+    }
+    pill.appendChild(dot); pill.appendChild(el("span", null, txt)); box.appendChild(pill);
+    box.appendChild(el("span", null, "最終更新 " + jst(m.cycle_at) + " (" + rel(m.cycle_at) + ")"));
+    var next = m.mode === "server" && S.status ? S.status.next_run : m.next_update_at;
+    if (next && !(S.status && S.status.running)) box.appendChild(el("span", null, "次回 " + jst(next)));
+    var v = el("a", null, (m.ledger.ok ? "✔ 台帳検証OK" : "✖ 台帳に問題あり") + " · " + m.ledger.records.toLocaleString() + "件");
+    v.href = "#verify"; v.style.color = m.ledger.ok ? "var(--good)" : "var(--bad)"; v.style.fontWeight = "600"; v.style.textDecoration = "none";
+    box.appendChild(v);
+    if (m.mode === "server") {
+      var b = el("button", "btn", "今すぐ更新"); b.type = "button"; b.disabled = !!(S.status && S.status.running);
+      b.addEventListener("click", function () {
+        b.disabled = true;
+        fetch("api/refresh", { method: "POST" }).then(function (r) { return r.json(); }).then(function (j) { toast(j.message || "更新を依頼しました"); pollStatus(); })
+          .catch(function () { toast("サーバーに接続できません"); b.disabled = false; });
+      });
+      box.appendChild(b);
+    }
+    var banner = $("banner");
+    if (m.errors && m.errors.length) {
+      banner.hidden = false; banner.className = "notice warn"; banner.textContent = "取得できなかったデータがあります: " + m.errors.slice(0, 3).join(" / ");
+    } else banner.hidden = true;
+    $("footer-meta").textContent = "サーバー処理: " + jstFull(m.cycle_at) + " · 台帳の先頭 #" + m.ledger.head.seq + " " + m.ledger.head.hash.slice(0, 16) + "…";
+  }
+
+  /* ---------------- rail ---------------- */
+  function renderRail() {
+    var rail = clear($("rail"));
+    (S.meta.pairs || []).forEach(function (p) {
+      var b = el("button", "pair"); b.type = "button"; b.setAttribute("aria-pressed", String(p.pair === S.pair));
+      var r1 = el("div", "row"); r1.appendChild(el("span", "code", p.label));
+      r1.appendChild(el("span", "chg num " + dirClass(p.change_24h_pct), arrow(p.change_24h_pct) + " " + signed(p.change_24h_pct, 2, "%")));
+      b.appendChild(r1); b.appendChild(el("span", "jp", p.name + " · 24時間"));
+      b.appendChild(el("span", "px num", fmt(p.price, p.decimals)));
+      var o = (p.outlook && p.outlook["1h"]) ? p.outlook["1h"][p.outlook["1h"].length - 1] : null;
+      var r3 = el("div", "fc");
+      if (o) { r3.appendChild(el("span", null, o.label)); var c = dirChip(o.dir); c.textContent += " " + pct(o.p_up); r3.appendChild(c); }
+      else r3.appendChild(el("span", null, "予測準備中"));
+      b.appendChild(r3);
+      var live = p.live && p.live.direction ? p.live.direction : null;
+      b.appendChild(el("span", "live", live && live.n ? "1時間後予測の的中 " + pct(live.rate) + " (" + live.n + "件)" : "1時間後予測: 判定待ち"));
+      b.addEventListener("click", function () { S.pair = p.pair; persist(); try { history.replaceState(null, "", "#" + p.pair); } catch (e) {} loadPair().then(renderPairAll); renderRail(); });
+      rail.appendChild(b);
+    });
+  }
+
+  /* ---------------- forecast ---------------- */
+  function segment(host, items, get, set) {
+    clear(host);
+    items.forEach(function (it) {
+      var b = el("button", null, it.label); b.type = "button"; b.setAttribute("aria-pressed", String(get() === it.value));
+      b.addEventListener("click", function () { set(it.value); segment(host, items, get, set); });
+      host.appendChild(b);
+    });
+  }
+  function curPair() { return S.pairs[S.pair]; }
+  function curBlock() { var p = curPair(); return p && p.tf ? p.tf[S.tf] : null; }
+
+  function renderHead() {
+    var p = curPair(); if (!p) return;
+    $("p-label").textContent = p.label; $("p-name").textContent = p.name;
+    $("p-price").textContent = fmt(p.quote.price, p.decimals);
+    var meta = clear($("p-meta"));
+    meta.appendChild(el("span", dirClass(p.change_24h_pct), arrow(p.change_24h_pct) + " " + signed(p.change_24h_pct, 2, "%") + " (24時間)"));
+    meta.appendChild(el("span", null, "レート時刻 " + jst(p.quote.time)));
+    var blk = curBlock(); var box = clear($("outlook"));
+    var issued = $("p-issued");
+    if (!blk || !blk.prediction) { issued.textContent = ""; box.appendChild(el("div", "tile", "この種類の予測はまだ発行されていません。次のサーバー処理で作成されます。")); return; }
+    var pr = blk.prediction;
+    issued.textContent = "起点 " + jst(pr.origin) + " の価格 " + fmt(pr.p0, p.decimals) + " から予測 · 発行 " + jst(pr.issued) + " · 記録 #" + pr.seq;
+    pr.horizons.forEach(function (h) {
+      var t = el("div", "tile");
+      var w = el("div", "when"); w.appendChild(el("span", null, h.label)); w.appendChild(dirChip(h.dir)); t.appendChild(w);
+      t.appendChild(el("div", "val", fmt(h.price, p.decimals)));
+      t.appendChild(el("div", "sub " + dirClass(h.change_pips), signed(h.change_pips, 1, " pips") + " / " + signed(h.change_pct, 3, "%")));
+      t.appendChild(el("div", "sub", "80%: " + fmt(h.lo80, p.decimals) + " – " + fmt(h.hi80, p.decimals)));
+      t.appendChild(el("div", "prob", "上昇確率 " + pct(h.p_up)));
+      var m = el("div", "meter"); m.setAttribute("role", "img"); m.setAttribute("aria-label", "上昇確率 " + pct(h.p_up));
+      var fill = el("i"); fill.style.width = (h.p_up * 100).toFixed(1) + "%"; m.appendChild(fill); t.appendChild(m);
+      var notes = [];
+      if (Math.abs(h.news_pips) >= 0.05) notes.push("ニュース " + signed(h.news_pips, 1, " pips"));
+      if (h.events) notes.push("重要指標 " + h.events + "件");
+      notes.push("判定 " + jst(h.t));
+      t.appendChild(el("div", "sub", notes.join(" · ")));
+      box.appendChild(t);
+    });
+  }
+
+  var TOGGLES = [
+    { key: "band", label: "予測レンジ", cls: "key box", style: function (t) { return "background:" + alpha(t.accent, 0.3); } },
+    { key: "past", label: "過去の予測 (答え合わせ)", cls: "key dotk", style: function (t) { return "background:" + t.good; } },
+    { key: "ma", label: "移動平均 20/75", cls: "key", style: function (t) { return "border-color:" + t.ma20; } },
+    { key: "models", label: "各モデルの予測", cls: "key", style: function (t) { return "border-color:" + alpha(t.ink2, 0.5); } }
+  ];
+  function renderToggles() {
+    var t = tokens(); var host = clear($("toggles"));
+    var f1 = el("span", "tog static"); f1.appendChild(el("i", "key candle")); f1.appendChild(el("span", null, "陽線/陰線")); host.appendChild(f1);
+    var f2 = el("span", "tog static"); var k2 = el("i", "key dash"); k2.style.borderColor = t.accent; f2.appendChild(k2); f2.appendChild(el("span", null, "予測の中心")); host.appendChild(f2);
+    TOGGLES.forEach(function (g) {
+      var b = el("button", "tog"); b.type = "button"; b.setAttribute("aria-pressed", String(!!S.show[g.key]));
+      var k = el("i", g.cls); k.setAttribute("style", g.style(t)); b.appendChild(k); b.appendChild(el("span", null, g.label));
+      b.addEventListener("click", function () { S.show[g.key] = !S.show[g.key]; persist(); renderToggles(); renderChart(); });
+      host.appendChild(b);
+    });
+  }
+
+  var chart = null;
+  function renderChart() {
+    var p = curPair(); var blk = curBlock(); if (!p || !blk) return;
+    var t = tokens(); var d = p.decimals + 1; var tf = S.tf;
+    var bars = blk.bars; var nH = bars.t.length;
+    var steps = blk.path ? blk.path.steps : [];
+    var xs = bars.t.concat(steps.map(function (s) { return s.x; }));
+    var N = xs.length; var lastIdx = nH - 1; var last = bars.ohlc[lastIdx][1];
+    var idxOf = {}; xs.forEach(function (x, i) { idxOf[x] = i; });
+    function pad(arr) { return arr.concat(new Array(steps.length).fill(null)); }
+    function fut(key) { var o = new Array(N).fill(null); if (!steps.length) return o; o[lastIdx] = (blk.prediction ? blk.prediction.p0 : last); steps.forEach(function (s, i) { o[nH + i] = s[key]; }); return o; }
+    var series = [];
+    series.push({
+      name: "ローソク足", type: "candlestick", data: bars.ohlc.concat(new Array(steps.length).fill("-")), barMaxWidth: 9,
+      itemStyle: { color: t.up, color0: t.down, borderColor: t.up, borderColor0: t.down },
+      markArea: steps.length ? { silent: true, itemStyle: { color: t.future }, label: { show: true, position: "insideTop", color: t.muted, fontSize: 11, formatter: "予測" }, data: [[{ xAxis: xs[nH] }, { xAxis: xs[N - 1] }]] } : undefined,
+      markLine: {
+        symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: "solid" },
+        label: { color: t.ink, fontFamily: t.mono, fontSize: 11, backgroundColor: t.surface2, padding: [2, 5], borderRadius: 3 },
+        data: [{ yAxis: last, label: { position: "end", formatter: fmt(last, p.decimals) } }].concat(
+          (blk.path && blk.path.events || []).filter(function (e) { return e.x && idxOf[e.x] != null; }).slice(0, 8).map(function (e) {
+            return { xAxis: e.x, lineStyle: { color: e.impact === "High" ? t.warn : t.axis, width: 1, type: "dashed" }, label: { position: "insideEndTop", formatter: e.cur + " " + (e.impact === "High" ? "重要" : "指標"), color: t.warn, fontSize: 10, backgroundColor: "transparent" } };
+          }))
+      }
+    });
+    if (S.show.ma) {
+      series.push({ name: "移動平均20", type: "line", data: pad(blk.ind.sma20), symbol: "none", lineStyle: { width: 1.5, color: t.ma20 }, silent: true, z: 2 });
+      series.push({ name: "移動平均75", type: "line", data: pad(blk.ind.sma75), symbol: "none", lineStyle: { width: 1.5, color: t.ma75 }, silent: true, z: 2 });
+    }
+    if (S.show.band && steps.length) {
+      [["95", 0.10], ["80", 0.15], ["50", 0.22]].forEach(function (b) {
+        var lo = fut("lo" + b[0]); var hi = fut("hi" + b[0]);
+        series.push({ name: "b" + b[0] + "lo", type: "line", stack: "b" + b[0], data: lo.map(function (v) { return v == null ? "-" : v; }), symbol: "none", lineStyle: { opacity: 0 }, silent: true, z: 3 });
+        series.push({ name: "b" + b[0], type: "line", stack: "b" + b[0], data: hi.map(function (v, i) { return v == null || lo[i] == null ? "-" : v - lo[i]; }), symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: alpha(t.accent, b[1]), opacity: 1 }, silent: true, z: 3 });
+      });
+    }
+    if (S.show.models && blk.path) {
+      MODEL_KEYS.forEach(function (k) {
+        var o = new Array(N).fill(null); o[lastIdx] = blk.prediction.p0; (blk.path.models[k] || []).forEach(function (v, i) { o[nH + i] = v; });
+        series.push({ name: MODEL_NAMES[k], type: "line", data: o, symbol: "none", lineStyle: { width: 1, color: alpha(t.ink2, 0.5) }, silent: true, z: 4,
+          endLabel: { show: true, formatter: MODEL_NAMES[k], color: t.muted, fontSize: 10 }, labelLayout: { moveOverlap: "shiftY" } });
+      });
+    }
+    var pastByIdx = {};
+    if (S.show.past && blk.past && blk.past.length) {
+      var pdata = [];
+      blk.past.forEach(function (q) { var i = idxOf[q.x]; if (i == null) return; pastByIdx[i] = q; pdata.push([i, q.lo80, q.hi80, q.price, q.hit === true ? 1 : q.hit === false ? -1 : 0]); });
+      series.push({
+        name: "過去の予測", type: "custom", z: 5, data: pdata, encode: { x: 0, y: [1, 2, 3] }, silent: true,
+        renderItem: function (params, api) {
+          var x = api.value(0); var lo = api.coord([x, api.value(1)]); var hi = api.coord([x, api.value(2)]); var c = api.coord([x, api.value(3)]);
+          var col = api.value(4) === 1 ? t.good : api.value(4) === -1 ? t.bad : t.muted;
+          return { type: "group", children: [
+            { type: "line", shape: { x1: lo[0], y1: lo[1], x2: hi[0], y2: hi[1] }, style: { stroke: alpha(col, 0.55), lineWidth: 1.5 } },
+            { type: "circle", shape: { cx: c[0], cy: c[1], r: 3.5 }, style: { fill: col, stroke: t.surface, lineWidth: 1.5 } }] };
+        }
+      });
+    }
+    if (steps.length) {
+      series.push({ name: "予測の中心", type: "line", data: fut("c"), symbol: "circle", showSymbol: true,
+        symbolSize: function (v, prm) { return prm.dataIndex === N - 1 ? 8 : 0; },
+        itemStyle: { color: t.accent, borderColor: t.surface, borderWidth: 2 }, lineStyle: { width: 2, color: t.accent, type: [6, 4] }, z: 6,
+        endLabel: { show: true, formatter: function () { return fmt(steps[steps.length - 1].c, p.decimals); }, color: t.ink, fontFamily: t.mono, fontSize: 11, backgroundColor: t.surface, padding: [2, 4], borderRadius: 3 } });
+    }
+    series.push({ name: "RSI", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pad(blk.ind.rsi14), symbol: "none", lineStyle: { width: 1.5, color: t.ink2 }, silent: true,
+      markLine: { symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: "solid" }, label: { color: t.muted, fontSize: 10, position: "end" }, data: [{ yAxis: 30 }, { yAxis: 70 }] } });
+
+    function xlabel(v) { if (tf === "1h") return jst(v); return v.slice(2).replace(/-/g, "/"); }
+    function tooltip(params) {
+      if (!params || !params.length) return "";
+      var i = params[0].dataIndex; var rows = [];
+      function row(label, value, color) {
+        rows.push('<div style="display:flex;justify-content:space-between;gap:16px;align-items:center"><span style="color:' + t.muted + ';display:inline-flex;gap:6px;align-items:center">' +
+          (color ? '<i style="display:inline-block;width:12px;border-top:2px solid ' + color + '"></i>' : "") + esc(label) + '</span><b style="font-family:' + t.mono + ';font-weight:500;color:' + t.ink + '">' + esc(value) + "</b></div>");
+      }
+      var head = '<div style="font-weight:600;margin-bottom:4px;color:' + t.ink + '">' + esc(tf === "1h" ? jst(xs[i]) + " まで" : xs[i]) + (i >= nH ? ' <span style="color:' + t.accent + ';font-weight:500">予測</span>' : "") + "</div>";
+      if (i < nH) {
+        var c = bars.ohlc[i]; row("始値", fmt(c[0], d)); row("高値", fmt(c[3], d)); row("安値", fmt(c[2], d)); row("終値", fmt(c[1], d));
+        if (blk.ind.rsi14[i] != null) row("RSI(14)", fmt(blk.ind.rsi14[i], 1));
+      } else {
+        var s = steps[i - nH];
+        row("予測の中心", fmt(s.c, d), t.accent); row("変化", signed((s.c - blk.prediction.p0) / p.pip, 1, " pips"));
+        row("50%レンジ", fmt(s.lo50, d) + " – " + fmt(s.hi50, d)); row("80%レンジ", fmt(s.lo80, d) + " – " + fmt(s.hi80, d)); row("95%レンジ", fmt(s.lo95, d) + " – " + fmt(s.hi95, d));
+        row("上昇確率", pct(s.p));
+      }
+      var q = pastByIdx[i];
+      if (q) {
+        row("過去の予測 (起点 " + jst(q.origin) + ")", fmt(q.price, d), q.hit ? t.good : t.bad);
+        row("そのときの80%レンジ", fmt(q.lo80, d) + " – " + fmt(q.hi80, d));
+        row("方向", q.hit === true ? "○ 的中" : q.hit === false ? "× 外れ" : "—"); row("レンジ", q.inside80 ? "○ 範囲内" : "× 範囲外");
+      }
+      return head + rows.join("");
+    }
+    var start = Math.max(0, nH - S.range[tf]);
+    var option = {
+      animation: false, backgroundColor: "transparent", textStyle: { fontFamily: t.sans, color: t.muted },
+      grid: [{ left: 36, right: 74, top: 16, bottom: "29%" }, { left: 36, right: 74, top: "76%", bottom: 28 }],
+      xAxis: [
+        { type: "category", data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
+        { type: "category", gridIndex: 1, data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, hideOverlap: true, formatter: xlabel } }
+      ],
+      yAxis: [
+        { scale: true, position: "right", splitNumber: 5, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } },
+        { gridIndex: 1, min: 0, max: 100, interval: 50, position: "right", axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10 } }
+      ],
+      axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: t.muted, width: 1 }, label: { backgroundColor: t.ink2, fontFamily: t.mono, fontSize: 10.5, formatter: function (o) { return o.axisDimension === "x" ? xlabel(o.value) : Number(o.value).toFixed(p.decimals); } } },
+      tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: t.surface, borderColor: t.hair, borderWidth: 1, padding: [8, 10], textStyle: { color: t.ink, fontFamily: t.sans, fontSize: 12 },
+        extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,0.15);border-radius:8px;min-width:200px", formatter: tooltip },
+      dataZoom: [{ type: "inside", xAxisIndex: [0, 1], startValue: start, endValue: N - 1, minValueSpan: 12 }],
+      series: series
+    };
+    if (!chart) { chart = echarts.init($("chart"), null, { renderer: "canvas" }); if (window.ResizeObserver) new ResizeObserver(function () { chart && chart.resize(); }).observe($("chart")); }
+    chart.setOption(option, true);
+    var hits = (blk.past || []).filter(function (q) { return q.hit === true; }).length, judged = (blk.past || []).filter(function (q) { return q.hit != null; }).length;
+    $("chart-note").textContent = "網掛けの帯は予測レンジ (濃い順に50%・80%・95%)。" + (S.show.past ? "点は過去の" + (tf === "1h" ? "1時間後" : "翌営業日") + "予測で、緑は方向が的中、赤は外れ、縦線はそのときの80%レンジ" + (judged ? " (表示中 " + hits + "/" + judged + " 的中)" : "") + "。" : "") + "橙の破線は重要指標の発表時刻。下段はRSI(14)。";
+  }
+
+  function renderPathTable() {
+    var p = curPair(); var blk = curBlock(); var body = clear($("path-body"));
+    if (!blk || !blk.path) { $("path-caption").textContent = ""; return; }
+    var hs = {}; (blk.prediction.horizons || []).forEach(function (h) { hs[h.x] = h; });
+    blk.path.steps.forEach(function (s) {
+      var tr = el("tr", hs[s.x] ? "hl" : null);
+      tr.appendChild(el("td", "num", S.tf === "1h" ? jst(s.t) : s.x + (hs[s.x] ? " (" + hs[s.x].label + ")" : "")));
+      tr.appendChild(el("td", "num", fmt(s.c, p.decimals)));
+      var pip = (s.c - blk.prediction.p0) / p.pip; tr.appendChild(el("td", "num " + dirClass(pip), signed(pip, 1)));
+      tr.appendChild(el("td", "num", fmt(s.lo80, p.decimals) + " – " + fmt(s.hi80, p.decimals)));
+      tr.appendChild(el("td", "num", pct(s.p)));
+      body.appendChild(tr);
+    });
+    $("path-caption").textContent = "起点 " + fmt(blk.prediction.p0, p.decimals) + " (" + jst(blk.prediction.origin) + ")";
+  }
+
+  function balanceRow(host, label, value, count, t) {
+    var r = el("div", "brow"); r.appendChild(el("span", "code", label));
+    var bar = el("div", "dbar"); var fill = el("i"); var w = Math.min(1, Math.abs(value)) * 50;
+    fill.style.left = (value >= 0 ? 50 : 50 - w) + "%"; fill.style.width = w + "%"; fill.style.background = value >= 0 ? t.up : t.down;
+    bar.appendChild(fill); bar.setAttribute("role", "img"); bar.setAttribute("aria-label", label + " " + signed(value, 2));
+    r.appendChild(bar); r.appendChild(el("span", "num " + dirClass(value), signed(value, 2) + (count != null ? " (" + count + ")" : "")));
+    host.appendChild(r);
+  }
+
+  function renderDrivers() {
+    var p = curPair(); var blk = curBlock(); var t = tokens(); var host = clear($("drivers"));
+    if (!p) return;
+    var pr = p.pressure;
+    if (pr) {
+      host.appendChild(el("div", "small muted", "ニュース圧力 (直近48時間・新しいものほど重く)"));
+      balanceRow(host, p.label.slice(0, 3), pr[p.label.slice(0, 3)].p, pr[p.label.slice(0, 3)].n, t);
+      balanceRow(host, p.label.slice(4), pr[p.label.slice(4)].p, pr[p.label.slice(4)].n, t);
+      var used = blk && blk.prediction ? blk.prediction.news_x : null;
+      var h0 = blk && blk.prediction ? blk.prediction.horizons[blk.prediction.horizons.length - 1] : null;
+      host.appendChild(el("div", "small", "ペア信号 (現在) " + signed(pr.signal, 2) + (used != null ? " · 予測に使った値 " + signed(used, 2) : "") +
+        (h0 ? " · 予測への影響 " + signed(h0.news_pips, 1, " pips") + " (" + h0.label + ", 係数 " + fmt(h0.beta, 3) + ")" : "")));
+    }
+    if (blk && blk.prediction) {
+      var h = blk.prediction.horizons[0];
+      host.appendChild(el("div", "small", "モデル信号の採用率 " + fmt(h.gain, 2) + " · レンジ補正 ×" + fmt(h.k, 2) + " (" + h.label + ")" + (Math.abs(h.gain) < 0.05 ? " — 方向の優位性が実証されていないため、予測は「変化なし」に近くなっています" : "")));
+    }
+    if (blk && blk.technical) {
+      var tech = blk.technical.map(function (x) { return x.name + ": " + x.text; }).join(" / ");
+      host.appendChild(el("div", "small muted", "テクニカル (日足): " + tech));
+    }
+    if (blk && blk.path && blk.path.analogs && blk.path.analogs.length) host.appendChild(el("div", "small muted", "似た値動きの過去局面: " + blk.path.analogs.join(", ")));
+    var list = clear($("pair-news"));
+    if (!p.headlines || !p.headlines.length) list.appendChild(el("div", "empty", "このペアに関係する最近の見出しはありません。"));
+    (p.headlines || []).forEach(function (n) { list.appendChild(newsItem(n)); });
+    var cal = clear($("pair-cal"));
+    if (!p.calendar || !p.calendar.length) cal.appendChild(el("div", "empty", "7日以内に予定されている重要指標はありません。"));
+    (p.calendar || []).forEach(function (e) {
+      var it = el("div", "item"); var tt = el("div", "t"); tt.textContent = e.cur + " " + e.title; it.appendChild(tt);
+      var m = el("div", "m"); m.appendChild(el("span", "chip " + (e.impact === "High" ? "warn" : "flat"), e.impact === "High" ? "重要度 高" : "重要度 中"));
+      m.appendChild(el("span", null, jst(e.time) + " (" + rel(e.time) + ")"));
+      if (e.forecast) m.appendChild(el("span", null, "予想 " + e.forecast)); if (e.previous) m.appendChild(el("span", null, "前回 " + e.previous));
+      it.appendChild(m); cal.appendChild(it);
+    });
+  }
+
+  function newsItem(n) {
+    var it = el("div", "item"); var tt = el("div", "t");
+    var a = el("a", null, n.title); a.href = n.link; a.target = "_blank"; a.rel = "noopener noreferrer"; tt.appendChild(a); it.appendChild(tt);
+    var m = el("div", "m");
+    Object.keys(n.cur || {}).forEach(function (c) { var v = n.cur[c]; m.appendChild(el("span", "chip " + dirClass(v), c + " " + arrow(v) + Math.abs(v).toFixed(2))); });
+    if (!Object.keys(n.cur || {}).length) m.appendChild(el("span", "chip flat", "方向なし"));
+    m.appendChild(el("span", null, n.publisher || "")); m.appendChild(el("span", null, jst(n.published_at)));
+    m.appendChild(el("span", null, n.by && n.by.indexOf("claude") === 0 ? "Claude分析" : "キーワード分析"));
+    it.appendChild(m);
+    if (n.ja) it.appendChild(el("div", "m", n.ja));
+    return it;
+  }
+
+  function renderPairAll() {
+    renderHead(); renderToggles(); renderChart(); renderPathTable(); renderDrivers();
+    segment($("seg-range"), S.tf === "1h" ? [{ label: "2日", value: 48 }, { label: "5日", value: 120 }, { label: "10日", value: 240 }] : [{ label: "3か月", value: 65 }, { label: "6か月", value: 130 }, { label: "1年", value: 260 }, { label: "2年", value: 520 }],
+      function () { return S.range[S.tf]; }, function (v) { S.range[S.tf] = v; renderChart(); });
+  }
+
+  /* ---------------- track record ---------------- */
+  var trackChart = null, calibChart = null;
+  function renderTrack() {
+    var tr = S.track; if (!tr) return;
+    var tf = S.trackTf; var t = tokens();
+    var hs = (S.meta.timeframes[tf] || { horizons: [] }).horizons;
+    var stats = clear($("track-stats"));
+    var source = S.trackPair === "ALL" ? tr.overall[tf] : ((tr.by_pair[S.trackPair] || {})[tf] || {});
+    var totalN = 0;
+    hs.forEach(function (h) {
+      var s = source[String(h)] || { n: 0 }; totalN += s.n || 0;
+      var box = el("div", "stat"); var h4 = el("h4"); h4.appendChild(el("span", null, tfLabel(tf, h) + "の予測")); h4.appendChild(el("span", "muted small", (s.n || 0) + "件判定済み")); box.appendChild(h4);
+      if (!s.n) { box.appendChild(el("div", "muted small", "まだ判定済みの予測がありません。")); stats.appendChild(box); return; }
+      var dir = s.direction || {};
+      var big = el("div", "big", dir.rate != null ? pct(dir.rate, 1) : "—"); box.appendChild(big);
+      box.appendChild(el("div", "small muted", "方向の的中率 " + (dir.n ? dir.hits + "/" + dir.n : "") + (dir.lo != null ? " · 95%区間 " + pct(dir.lo) + "–" + pct(dir.hi) : "")));
+      var kv = el("div", "kv");
+      function add(k, v, cls) { kv.appendChild(el("span", null, k)); kv.appendChild(el("span", cls || null, v)); }
+      add("偶然 (50%) との差の有意性", dir.p != null ? (dir.p < 0.05 ? "有意 p=" + fmt(dir.p, 3) : "有意でない p=" + fmt(dir.p, 2)) : "—");
+      add("誤差: ランダムウォーク比", s.skill != null ? signed(s.skill * 100, 1, "%") : "—", s.skill > 0 ? "good" : s.skill < 0 ? "bad" : null);
+      if (s.dm_p != null) add("  その有意性 (DM検定)", s.dm_p < 0.05 ? "有意 p=" + fmt(s.dm_p, 3) : "有意でない p=" + fmt(s.dm_p, 2));
+      var cov = s.coverage && s.coverage["80"];
+      add("80%レンジに収まった割合", cov ? pct(cov.rate, 1) : "—", cov && Math.abs(cov.rate - 0.8) <= 0.05 ? "good" : null);
+      add("確率の精度 (Brierスキル)", s.bss != null ? signed(s.bss * 100, 1, "%") : "—", s.bss > 0 ? "good" : s.bss < 0 ? "bad" : null);
+      if (s.news_effect && s.news_effect.active) add("ニュース補正の効果 (誤差)", signed((1 - s.news_effect.rmse_with_bp / s.news_effect.rmse_without_bp) * 100, 2, "%"));
+      box.appendChild(kv); stats.appendChild(box);
+    });
+    var lead = "サーバーが発行した予測は、対象時刻を過ぎると自動で判定されます。的中率は偶然でも50%前後になるため、95%区間と「ランダムウォーク (予測しない) と比べた誤差」を合わせて見てください。";
+    if (!totalN && tr.pending && tr.pending.length) lead += " 最初の判定は " + jst(tr.pending[0].target) + " 頃です。";
+    $("track-lead").textContent = lead;
+    // timeline chart
+    var metricNames = { 1: "方向の的中率", 2: "誤差の改善率 (RW比)", 3: "80%レンジに収まった割合" };
+    var colors = [t.s1, t.s2, t.s3, t.s4];
+    var ser = [];
+    hs.forEach(function (h, j) {
+      var pts = (tr.timeline[tf] || {})[String(h)] || [];
+      ser.push({ name: tfLabel(tf, h), type: "line", showSymbol: false, data: pts.map(function (q) { return [q[0], q[S.trackMetric]]; }), lineStyle: { width: 2, color: colors[j] }, itemStyle: { color: colors[j] },
+        endLabel: { show: true, formatter: function (prm) { var v = prm.value[1]; return tfLabel(tf, h) + " " + (v == null ? "" : S.trackMetric === 2 ? signed(v * 100, 1, "%") : pct(v)); }, color: t.ink2, fontSize: 10 } });
+    });
+    var ref = S.trackMetric === 1 ? 0.5 : S.trackMetric === 3 ? 0.8 : 0;
+    if (ser.length) ser[0].markLine = { symbol: "none", silent: true, lineStyle: { color: t.axis, type: "solid" }, label: { formatter: S.trackMetric === 1 ? "偶然 50%" : S.trackMetric === 3 ? "目標 80%" : "RWと同じ", color: t.muted, fontSize: 10, position: "insideStartTop" }, data: [{ yAxis: ref }] };
+    if (!trackChart) { trackChart = echarts.init($("track-chart")); if (window.ResizeObserver) new ResizeObserver(function () { trackChart && trackChart.resize(); }).observe($("track-chart")); }
+    var anyPts = ser.some(function (s) { return s.data.length; });
+    trackChart.setOption({
+      animation: false, backgroundColor: "transparent", textStyle: { fontFamily: t.sans, color: t.muted },
+      title: anyPts ? undefined : { text: "判定済みの予測がたまると表示されます", left: "center", top: "middle", textStyle: { color: t.muted, fontSize: 12, fontWeight: 400 } },
+      grid: { left: 44, right: 110, top: 16, bottom: 28 },
+      xAxis: { type: "time", axisLine: { lineStyle: { color: t.axis } }, axisLabel: { color: t.muted, fontSize: 10, formatter: function (v) { return jst(new Date(v).toISOString()).slice(0, 5); } }, splitLine: { show: false } },
+      yAxis: { type: "value", scale: true, axisLabel: { color: t.muted, fontSize: 10, formatter: function (v) { return S.trackMetric === 2 ? (v * 100).toFixed(0) + "%" : (v * 100).toFixed(0) + "%"; } }, splitLine: { lineStyle: { color: t.hair } } },
+      tooltip: { trigger: "axis", backgroundColor: t.surface, borderColor: t.hair, textStyle: { color: t.ink, fontSize: 12 }, valueFormatter: function (v) { return v == null ? "—" : S.trackMetric === 2 ? signed(v * 100, 1, "%") : pct(v, 1); } },
+      series: ser
+    }, true);
+    segment($("seg-track-metric"), [{ label: "的中率", value: 1 }, { label: "誤差改善", value: 2 }, { label: "レンジ", value: 3 }], function () { return S.trackMetric; }, function (v) { S.trackMetric = v; renderTrack(); });
+    // calibration chart
+    var cal = tr.calibration[tf] || [];
+    if (!calibChart) { calibChart = echarts.init($("calib-chart")); if (window.ResizeObserver) new ResizeObserver(function () { calibChart && calibChart.resize(); }).observe($("calib-chart")); }
+    calibChart.setOption({
+      animation: false, backgroundColor: "transparent", textStyle: { fontFamily: t.sans, color: t.muted },
+      title: cal.length ? undefined : { text: "判定済みの予測がたまると表示されます", left: "center", top: "middle", textStyle: { color: t.muted, fontSize: 12, fontWeight: 400 } },
+      grid: { left: 44, right: 16, top: 16, bottom: 36 },
+      xAxis: { type: "value", min: 0, max: 1, name: "予測した上昇確率", nameLocation: "middle", nameGap: 22, nameTextStyle: { fontSize: 10 }, axisLabel: { color: t.muted, fontSize: 10, formatter: function (v) { return (v * 100).toFixed(0) + "%"; } }, splitLine: { lineStyle: { color: t.hair } } },
+      yAxis: { type: "value", min: 0, max: 1, axisLabel: { color: t.muted, fontSize: 10, formatter: function (v) { return (v * 100).toFixed(0) + "%"; } }, splitLine: { lineStyle: { color: t.hair } } },
+      tooltip: { trigger: "item", backgroundColor: t.surface, borderColor: t.hair, textStyle: { color: t.ink, fontSize: 12 }, formatter: function (prm) { var d = prm.data; return "予測 " + pct(d[0], 1) + " → 実際に上昇 " + pct(d[1], 1) + " (" + d[2] + "件)"; } },
+      series: [
+        { type: "line", data: [[0, 0], [1, 1]], symbol: "none", lineStyle: { color: t.axis, width: 1 }, silent: true },
+        { type: "scatter", data: cal.map(function (b) { return [b.p, b.freq, b.n]; }), symbolSize: function (d) { return Math.max(8, Math.min(26, Math.sqrt(d[2]) * 2)); }, itemStyle: { color: t.accent, borderColor: t.surface, borderWidth: 2 } }
+      ]
+    }, true);
+    // recent table
+    var body = clear($("recent-body"));
+    var rec = (tr.recent || []).filter(function (r) { return r.tf === tf && (S.trackPair === "ALL" || r.pair === S.trackPair); }).slice(0, 80);
+    rec.forEach(function (r) {
+      var info = pairInfo(r.pair) || { decimals: 3, label: r.pair }; var d = info.decimals;
+      var row = el("tr");
+      row.appendChild(el("td", "num", jst(r.target))); row.appendChild(el("td", "l", info.label)); row.appendChild(el("td", "l", tfLabel(r.tf, r.h)));
+      row.appendChild(el("td", "num", fmt(r.p0, d))); row.appendChild(el("td", "num", fmt(r.price, d)));
+      row.appendChild(el("td", "num", fmt(r.lo80, d) + " – " + fmt(r.hi80, d))); row.appendChild(el("td", "num", fmt(r.actual, d)));
+      row.appendChild(el("td", "num", signed(r.err_pips, 1)));
+      row.appendChild(el("td", null)).appendChild(r.hit == null ? el("span", "chip flat", "— 変化なし") : el("span", "chip " + (r.hit ? "good" : "bad"), r.hit ? "○ 的中" : "× 外れ"));
+      row.appendChild(el("td", null)).appendChild(el("span", "chip " + (r.inside80 ? "good" : "bad"), r.inside80 ? "○ 範囲内" : "× 範囲外"));
+      body.appendChild(row);
+    });
+    if (!rec.length) { var e = el("tr"); var td = el("td", "l", "まだありません。"); td.colSpan = 10; e.appendChild(td); body.appendChild(e); }
+    $("recent-caption").textContent = "新しい順 · 全体で " + (tr.scored || 0).toLocaleString() + "件判定済み";
+    var pend = clear($("pending-body"));
+    (tr.pending || []).filter(function (r) { return S.trackPair === "ALL" || r.pair === S.trackPair; }).slice(0, 12).forEach(function (r) {
+      var info = pairInfo(r.pair) || { decimals: 3, label: r.pair }; var d = info.decimals;
+      var row = el("tr");
+      row.appendChild(el("td", "num", jst(r.target))); row.appendChild(el("td", "l", info.label)); row.appendChild(el("td", "l", tfLabel(r.tf, r.h)));
+      row.appendChild(el("td", "num", fmt(r.p0, d))); row.appendChild(el("td", "num", fmt(r.price, d))); row.appendChild(el("td", "num", pct(r.p_up)));
+      row.appendChild(el("td", "num", rel(r.target)));
+      pend.appendChild(row);
+    });
+    $("pending-caption").textContent = "判定を待っている予測 " + (tr.pending_count || 0).toLocaleString() + "件 (近い順)";
+    segment($("seg-track-tf"), [{ label: "1時間足", value: "1h" }, { label: "日足", value: "1d" }], function () { return S.trackTf; }, function (v) { S.trackTf = v; renderTrack(); });
+    segment($("seg-track-pair"), [{ label: "全ペア", value: "ALL" }].concat((S.meta.pairs || []).map(function (p) { return { label: p.label, value: p.pair }; })), function () { return S.trackPair; }, function (v) { S.trackPair = v; renderTrack(); });
+  }
+
+  /* ---------------- news ---------------- */
+  function sparkline(points, t) {
+    var ns = "http://www.w3.org/2000/svg"; var svg = document.createElementNS(ns, "svg"); svg.setAttribute("class", "spark"); svg.setAttribute("viewBox", "0 0 100 26"); svg.setAttribute("preserveAspectRatio", "none");
+    var mid = document.createElementNS(ns, "line"); mid.setAttribute("x1", "0"); mid.setAttribute("x2", "100"); mid.setAttribute("y1", "13"); mid.setAttribute("y2", "13"); mid.setAttribute("stroke", t.axis); mid.setAttribute("stroke-width", "0.5"); svg.appendChild(mid);
+    if (points.length > 1) {
+      var pl = document.createElementNS(ns, "polyline");
+      pl.setAttribute("points", points.map(function (p, i) { return (i / (points.length - 1) * 100).toFixed(2) + "," + (13 - Math.max(-1, Math.min(1, p[1])) * 12).toFixed(2); }).join(" "));
+      pl.setAttribute("fill", "none"); pl.setAttribute("stroke", t.accent); pl.setAttribute("stroke-width", "1.5"); pl.setAttribute("vector-effect", "non-scaling-stroke"); svg.appendChild(pl);
+    }
+    return svg;
+  }
+  function renderNews() {
+    var n = S.news; if (!n) return; var t = tokens();
+    var box = clear($("pressures"));
+    Object.keys(n.pressures).forEach(function (c) {
+      var p = n.pressures[c]; balanceRow(box, c, p.p, p.n, t);
+      var sp = el("div", null); sp.style.marginLeft = "52px"; sp.appendChild(sparkline(n.history[c] || [], t)); box.appendChild(sp);
+    });
+    var body = clear($("signals-body"));
+    (S.meta.pairs || []).forEach(function (p) {
+      var v = n.pair_signals[p.pair]; var row = el("tr");
+      row.appendChild(el("td", null, p.label)); row.appendChild(el("td", "num " + dirClass(v), signed(v, 2)));
+      row.appendChild(el("td", "l", Math.abs(v) < 0.05 ? "材料は拮抗" : (v > 0 ? p.label.slice(0, 3) + "高・" + p.label.slice(4) + "安の材料が優勢" : p.label.slice(0, 3) + "安・" + p.label.slice(4) + "高の材料が優勢")));
+      body.appendChild(row);
+    });
+    var cal = clear($("cal-body"));
+    (n.calendar || []).forEach(function (e) {
+      var row = el("tr"); row.appendChild(el("td", "num", jst(e.time))); row.appendChild(el("td", "l", e.cur));
+      var td = el("td", "l"); td.appendChild(el("span", "chip " + (e.impact === "High" ? "warn" : "flat"), e.impact === "High" ? "高" : "中")); row.appendChild(td);
+      row.appendChild(el("td", "l", e.title)); row.appendChild(el("td", "num", e.forecast || "—")); row.appendChild(el("td", "num", e.previous || "—"));
+      cal.appendChild(row);
+    });
+    if (!(n.calendar || []).length) { var r = el("tr"); var c1 = el("td", "l", "予定はありません。"); c1.colSpan = 6; r.appendChild(c1); cal.appendChild(r); }
+    var curs = ["ALL"].concat(Object.keys(n.pressures));
+    segment($("seg-news-cur"), curs.map(function (c) { return { label: c === "ALL" ? "すべて" : c, value: c }; }), function () { return S.newsCur; }, function (v) { S.newsCur = v; renderNewsList(); });
+    renderNewsList();
+    var analyzer = n.analyzer && n.analyzer.indexOf("claude") === 0 ? "Claude (" + n.analyzer.slice(7) + ")" : "キーワード分析";
+    $("news-caption").textContent = "分析方法: " + analyzer + " · " + jst(n.at) + " 時点";
+    $("news-lead").textContent = "Google ニュース (日本語・英語)、各国中央銀行の発表、FXニュースを15分ごとに集め、見出しごとに各通貨への影響 (+は通貨高、−は通貨安) を判定しています。通貨ごとの圧力は新しい見出しほど重く (半減期 約" + Math.round(n.params.tau_hours * Math.log(2)) + "時間) 平均したもので、ペアの信号は「基軸通貨の圧力 − 決済通貨の圧力」です。予測に反映する強さ (ニュース係数) は、実際の成績から学習して決まります。";
+    var src = n.sources || {}; var ok = 0, bad = [];
+    Object.keys(src).forEach(function (k) { if (src[k].error) bad.push(k); else ok++; });
+    $("sources-note").textContent = "取得元 " + ok + "件が正常" + (bad.length ? " · 取得失敗: " + bad.join(", ") : "") + " · 表示は直近48時間の見出し (最大150件)";
+  }
+  function renderNewsList() {
+    var list = clear($("news-list")); var items = (S.news.items || []).filter(function (n) { return S.newsCur === "ALL" || (n.cur && n.cur[S.newsCur] != null); }).slice(0, 60);
+    if (!items.length) list.appendChild(el("div", "empty", "該当する見出しはありません。"));
+    items.forEach(function (n) { list.appendChild(newsItem(n)); });
+  }
+
+  /* ---------------- learning ---------------- */
+  function renderLearning() {
+    var m = S.models; if (!m) return; var t = tokens(); var tf = S.learnTf;
+    var colors = [t.muted, t.s1, t.s2, t.s3, t.s4, t.accent];
+    var body = clear($("learn-body")); var L = (m.learning || {})[tf] || {};
+    Object.keys(L).sort(function (a, b) { return a - b; }).forEach(function (h) {
+      var s = L[h]; var row = el("tr");
+      row.appendChild(el("td", null, tfLabel(tf, Number(h)))); row.appendChild(el("td", "num", String(s.n)));
+      row.appendChild(el("td", "num " + (s.g > 0.05 ? "good" : s.g < -0.05 ? "bad" : ""), fmt(s.g, 3)));
+      row.appendChild(el("td", "num", "×" + fmt(s.k, 3))); row.appendChild(el("td", "num", fmt(s.b, 3)));
+      var td = el("td", "l"); var w = el("div", "weights"); w.setAttribute("role", "img");
+      w.setAttribute("aria-label", s.w.map(function (v, i) { return MODEL_NAMES[MODEL_KEYS[i]] + " " + pct(v); }).join("、"));
+      s.w.forEach(function (v, i) { var seg = el("i"); seg.style.width = (v * 100) + "%"; seg.style.background = colors[i]; seg.title = MODEL_NAMES[MODEL_KEYS[i]] + " " + pct(v, 1); w.appendChild(seg); });
+      td.appendChild(w); row.appendChild(td); body.appendChild(row);
+    });
+    var lg = clear($("weights-legend"));
+    MODEL_KEYS.forEach(function (k, i) { var s = el("span"); var sw = el("i"); sw.style.background = colors[i]; s.appendChild(sw); s.appendChild(document.createTextNode(MODEL_NAMES[k])); lg.appendChild(s); });
+    var prior = (m.priors || {})[tf]; var head = clear($("bt-head")); var bb = clear($("bt-body"));
+    var hr = el("tr"); ["期間", "件数", "方向の的中率", "誤差 (RW比)", "80%レンジ"].forEach(function (x, i) { hr.appendChild(el("th", i ? "num" : null, x)); }); head.appendChild(hr);
+    if (prior) {
+      Object.keys(prior.h).sort(function (a, b) { return a - b; }).forEach(function (h) {
+        var s = prior.h[h]; var row = el("tr");
+        row.appendChild(el("td", null, tfLabel(tf, Number(h)))); row.appendChild(el("td", "num", String(s.n)));
+        row.appendChild(el("td", "num", pct(s.hit, 1))); row.appendChild(el("td", "num " + (s.skill > 0 ? "good" : "bad"), signed(s.skill * 100, 2, "%")));
+        row.appendChild(el("td", "num", pct(s.cover80, 1))); bb.appendChild(row);
+      });
+    }
+    $("bt-caption").textContent = prior ? "各時点までのデータだけで予測した場合の成績 (7ペア合算、均等加重、レンジ補正前) · " + jst(prior.cutoff) + " までのデータ" : "";
+    var dl = clear($("models"));
+    (m.models || []).forEach(function (x) { var d = el("div"); d.appendChild(el("dt", null, x.name)); d.appendChild(el("dd", null, x.description)); dl.appendChild(d); });
+    segment($("seg-learn-tf"), [{ label: "1時間足", value: "1h" }, { label: "日足", value: "1d" }], function () { return S.learnTf; }, function (v) { S.learnTf = v; renderLearning(); });
+  }
+
+  /* ---------------- verification ---------------- */
+  function renderVerify() {
+    var v = S.verify; if (!v) return; var ver = v.verify; var au = v.audit;
+    var box = clear($("verify-stats"));
+    function stat(title, big, cls, lines) {
+      var s = el("div", "stat"); var h = el("h4"); h.appendChild(el("span", null, title)); s.appendChild(h);
+      s.appendChild(el("div", "big " + (cls || ""), big)); lines.forEach(function (l) { s.appendChild(el("div", "small muted", l)); }); box.appendChild(s);
+    }
+    stat("台帳の整合性", ver.ok ? "✔ 問題なし" : "✖ " + ver.n_problems + "件の問題", ver.ok ? "good" : "bad", ["記録 " + ver.records.toLocaleString() + "件 · ハッシュ鎖・データ・時刻・判定漏れを確認", "確認時刻 " + jst(ver.checked_at)]);
+    stat("予測と判定", (ver.counts.predictions || 0).toLocaleString() + "件", null, ["判定済み " + (ver.counts.scored || 0).toLocaleString() + " · 判定待ち " + (ver.counts.pending || 0).toLocaleString() + " · データなし " + (ver.counts.void || 0)]);
+    stat("抜き取り再計算", au ? (au.ok ? "✔ " + au.checked + "件一致" : "✖ 不一致あり") : "未実施", au ? (au.ok ? "good" : "bad") : null, [au ? "当時のデータだけで予測を作り直して比較 · " + jst(au.checked_at) : "次回のサーバー処理で実施されます"]);
+    var hs = el("div", "stat"); var h4 = el("h4"); h4.appendChild(el("span", null, "台帳の先頭ハッシュ")); hs.appendChild(h4);
+    hs.appendChild(el("div", "hash", "#" + ver.head.seq + " " + ver.head.hash));
+    var cp = el("button", "chipbtn", "コピー"); cp.type = "button";
+    cp.addEventListener("click", function () {
+      var txt = ver.head.seq + ":" + ver.head.hash;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { toast("コピーしました"); }, function () { toast(txt); }); else toast(txt);
+    });
+    hs.appendChild(cp); hs.appendChild(el("div", "small muted", "この値を控えておくと、後で aifx verify --expect-head で過去の記録が変わっていないか確かめられます")); box.appendChild(hs);
+    $("verify-caption").textContent = "ルールはすべてプログラムで自動検査しています";
+    var body = clear($("audit-body"));
+    ((au && au.results) || []).forEach(function (r) {
+      var row = el("tr"); row.appendChild(el("td", "num", "#" + r.seq)); row.appendChild(el("td", "l", r.pair)); row.appendChild(el("td", "l", r.tf === "1h" ? "1時間足" : "日足"));
+      row.appendChild(el("td", "l", jst(r.origin))); var td = el("td"); td.appendChild(el("span", "chip " + (r.ok ? "good" : "bad"), r.ok ? "○ 一致" : "× 不一致")); row.appendChild(td);
+      row.appendChild(el("td", "num", fmt(Math.max(r.diffs.m || 0, r.diffs.c || 0), 4))); body.appendChild(row);
+    });
+    if (!au || !(au.results || []).length) { var r = el("tr"); var c = el("td", "l", "まだ実施されていません。"); c.colSpan = 6; r.appendChild(c); body.appendChild(r); }
+    $("audit-caption").textContent = au ? "最新の予測と、ランダムに選んだ過去の予測を再計算 (別バージョンのモデルで作られた予測 " + au.skipped_other_version + "件は対象外)" : "";
+    var pr = $("problems"); clear(pr); pr.hidden = !(ver.problems && ver.problems.length);
+    (ver.problems || []).slice(0, 30).forEach(function (p) { var it = el("div", "item"); it.appendChild(el("div", "t bad", p.msg)); it.appendChild(el("div", "m", p.kind)); pr.appendChild(it); });
+  }
+
+  /* ---------------- loading + polling ---------------- */
+  function loadPair() {
+    return getJSON("pair/" + S.pair + ".json").then(function (d) { S.pairs[S.pair] = d; }).catch(function () {});
+  }
+  function loadAll() {
+    return getJSON("meta.json").then(function (m) {
+      S.meta = m;
+      if (!pairInfo(S.pair) && m.pairs.length) S.pair = m.pairs[0].pair;
+      renderStatus(); renderRail();
+      segment($("seg-tf"), [{ label: "短期 (1時間足)", value: "1h" }, { label: "中期 (日足)", value: "1d" }], function () { return S.tf; }, function (v) { S.tf = v; persist(); renderPairAll(); });
+      return Promise.all([
+        loadPair().then(renderPairAll),
+        getJSON("track.json").then(function (d) { S.track = d; renderTrack(); }).catch(function () {}),
+        getJSON("news.json").then(function (d) { S.news = d; renderNews(); }).catch(function () {}),
+        getJSON("models.json").then(function (d) { S.models = d; renderLearning(); }).catch(function () {}),
+        getJSON("verify.json").then(function (d) { S.verify = d; renderVerify(); }).catch(function () {})
+      ]);
+    }).catch(function () {
+      var b = $("banner"); b.hidden = false; b.className = "notice warn"; b.textContent = "サーバーのデータを読み込めませんでした。しばらくしてから再読み込みしてください。";
+    });
+  }
+  function checkUpdate() {
+    getJSON("meta.json").then(function (m) {
+      if (!S.meta || m.cycle_at !== S.meta.cycle_at) { S.pairs = {}; loadAll(); toast("新しい予測に更新しました"); }
+      else { S.meta = m; renderStatus(); }
+    }).catch(function () {});
+  }
+  function pollStatus() {
+    if (!S.meta || S.meta.mode !== "server") return;
+    fetch("api/status", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (st) {
+      var was = S.status && S.status.running; S.status = st; renderStatus();
+      if (was && !st.running) checkUpdate();
+    }).catch(function () {});
+  }
+  function retheme() { renderToggles(); renderChart(); renderTrack(); renderNews(); renderLearning(); }
+  if (window.matchMedia) { var mq = window.matchMedia("(prefers-color-scheme: dark)"); if (mq.addEventListener) mq.addEventListener("change", retheme); }
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  window.addEventListener("hashchange", function () { var h = (location.hash || "").replace("#", "").toUpperCase(); if (/^[A-Z]{6}$/.test(h) && h !== S.pair && pairInfo(h)) { S.pair = h; renderRail(); loadPair().then(renderPairAll); } });
+  loadAll().then(function () { pollStatus(); });
+  setInterval(checkUpdate, 60000);
+  setInterval(pollStatus, 15000);
+  setInterval(function () { if (S.meta) renderStatus(); }, 30000);
+})();
+</script>

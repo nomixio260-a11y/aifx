@@ -1,31 +1,15 @@
-"""Command line interface: ``aifx forecast | build | serve``."""
+"""Command line: ``aifx cycle | serve | verify | audit | export | status``."""
 
 from __future__ import annotations
 
 import argparse
-import functools
-import http.server
+import json
+import math
 import sys
-import threading
-import time
 import unicodedata
 from pathlib import Path
 
-from .data import PAIRS, get_pair, load_prices, synthetic_prices
-from .forecast import build_bundle, build_report
-from .site import render_fragment, write_site
-
-
-def _width(text: str) -> int:
-    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
-
-
-def _ljust(text: str, width: int) -> str:
-    return text + " " * max(0, width - _width(text))
-
-
-def _rjust(text: str, width: int) -> str:
-    return " " * max(0, width - _width(text)) + text
+from .data import PAIRS, SyntheticMarket, get_pair
 
 
 def _pairs_arg(value: str) -> list[str]:
@@ -34,110 +18,188 @@ def _pairs_arg(value: str) -> list[str]:
     return [get_pair(v).code for v in value.split(",") if v.strip()]
 
 
-def _reports(args) -> list[dict]:
-    reports = []
-    for i, code in enumerate(args.pairs):
-        pair = get_pair(code)
-        if args.synthetic:
-            df, source = synthetic_prices(n=1200, start_price=150.0 if pair.quote == "JPY" else 1.1, seed=i), "synthetic"
-        else:
-            df, source = load_prices(pair, cache_dir=args.cache, offline=args.offline, years=args.years)
-        t0 = time.time()
-        reports.append(build_report(pair, df, source, horizon=args.horizon))
-        print(f"  {pair.label:8s} {len(df):5d} bars  source={source:18s} {time.time() - t0:5.2f}s", file=sys.stderr)
-    return reports
+def _cycle_kwargs(args) -> dict:
+    kw = {"pairs": args.pairs, "collect_news": not args.no_news}
+    if args.synthetic:
+        kw["market"] = SyntheticMarket(seed=1)
+        kw["collect_news"] = False
+    if not args.no_news and not args.synthetic:
+        from . import news_llm
+        if news_llm.enabled():
+            try:
+                kw["analyzer"] = news_llm.ClaudeAnalyzer()
+            except Exception as exc:  # SDK missing or misconfigured: keep the keyword analyzer
+                print(f"Claude analyzer unavailable: {exc}", file=sys.stderr)
+    return kw
 
 
-def cmd_forecast(args) -> int:
-    for r in _reports(args):
-        d = r["decimals"]
-        print(f"\n{r['label']} ({r['name']})  最新 {r['last_close']:.{d}f}  [{r['last_date']}]")
-        print("  " + _ljust("期間", 8) + _rjust("予測", 12) + _rjust("変化(pips)", 12)
-              + _rjust("上昇確率", 10) + "   80%レンジ")
-        for o in r["outlook"]:
-            print(
-                "  " + _ljust(f"{o['h']}日後", 8) + f"{o['price']:>12.{d}f}{o['change_pips']:>+12.1f}"
-                f"{o['p_up'] * 100:>9.0f}%   {o['lo80']:.{d}f} – {o['hi80']:.{d}f}  {o['label']}"
-            )
-        m = r["backtest"]["metrics"]["ensemble"]
-        last = str(r["backtest"]["horizons"][-1])
-        hit = m[last]["hit"]
-        print(
-            f"  検証: {last}日後の方向的中率 {hit * 100:.0f}% / RW比誤差改善 {m[last]['skill'] * 100:+.1f}%"
-            f" ({r['backtest']['origins']}回)"
-        )
-    return 0
+def cmd_cycle(args) -> int:
+    from .api import build_api, write_api
+    from .audit import audit
+    from .pipeline import run_cycle
+    from .site import write_site
 
-
-def cmd_build(args) -> int:
-    bundle = build_bundle(_reports(args), horizon=args.horizon)
-    index = write_site(bundle, args.out)
-    print(f"wrote {index}")
-    if args.fragment:
-        Path(args.fragment).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.fragment).write_text(render_fragment(bundle), encoding="utf-8")
-        print(f"wrote {args.fragment}")
+    report = run_cycle(args.state, **_cycle_kwargs(args))
+    if args.audit:
+        rep = audit(args.state, sample=args.audit)
+        Path(args.state, "cache").mkdir(parents=True, exist_ok=True)
+        Path(args.state, "cache", "audit.json").write_text(json.dumps(rep), encoding="utf-8")
+        print(f"audit: {'OK' if rep['ok'] else 'MISMATCH'} ({rep['checked']} predictions recomputed)")
+        if not rep["ok"]:
+            return 3
+    if args.site:
+        write_site(args.site)
+        write_api(build_api(args.state, mode="static", interval_min=args.interval), args.site)
+        print(f"wrote {args.site}/index.html and {args.site}/api/")
+    if not report.verify["ok"]:
+        for p in report.verify["problems"][:20]:
+            print(f"VERIFY {p['kind']}: {p['msg']}", file=sys.stderr)
+        return 2
     return 0
 
 
 def cmd_serve(args) -> int:
-    cmd_build(args)
+    from .server import serve
 
-    def refresher():
-        while True:
-            time.sleep(args.refresh * 60)
-            try:
-                cmd_build(args)
-            except Exception as exc:  # keep serving the last good build
-                print(f"refresh failed: {exc}", file=sys.stderr)
+    serve(args.state, args.site or "site", host=args.host, port=args.port, interval_min=args.interval,
+          cycle_kwargs=_cycle_kwargs(args))
+    return 0
 
-    if args.refresh > 0:
-        threading.Thread(target=refresher, daemon=True).start()
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(args.out))
-    with http.server.ThreadingHTTPServer((args.host, args.port), handler) as httpd:
-        print(f"serving http://{args.host}:{args.port}/  (Ctrl+C to stop)")
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            pass
+
+def cmd_verify(args) -> int:
+    from .audit import verify
+    from .ledger import Ledger
+
+    rep = verify(args.state)
+    if args.expect_head:
+        seq, _, h = args.expect_head.partition(":")
+        recs = Ledger(args.state).load(check=False).records
+        seq = int(seq)
+        if seq and (len(recs) < seq or recs[seq - 1]["hash"] != h):
+            rep["ok"] = False
+            rep["problems"].insert(0, {"kind": "history", "msg": f"record {seq} changed or disappeared since {h[:12]}"})
+    print(json.dumps({k: rep[k] for k in ("ok", "records", "head", "counts", "n_problems")}, ensure_ascii=False))
+    for p in rep["problems"][:30]:
+        print(f"  {p['kind']}: {p['msg']}")
+    return 0 if rep["ok"] else 2
+
+
+def cmd_head(args) -> int:
+    from .ledger import Ledger
+
+    seq, h = Ledger(args.state).load(check=False).head
+    print(f"{seq}:{h}")
+    return 0
+
+
+def cmd_audit(args) -> int:
+    from .audit import audit, external_check
+
+    rep = audit(args.state, sample=args.sample)
+    for r in rep["results"]:
+        print(f"  seq {r['seq']:>6} {r['pair']} {r['tf']} {r['origin']}  {'OK' if r['ok'] else 'MISMATCH'}  {r['diffs']}")
+    print(f"audit: {'OK' if rep['ok'] else 'MISMATCH'}; recomputed {rep['checked']}, "
+          f"skipped {rep['skipped_other_version']} made by another model version")
+    ok = rep["ok"]
+    if args.external:
+        from .data import YahooMarket
+        ext = external_check(args.state, YahooMarket())
+        Path(args.state, "cache", "external.json").write_text(json.dumps(ext), encoding="utf-8")
+        print(f"external price check: {ext['ok']} ({ext['checked']} bars compared)")
+        ok = ok and ext["ok"] is not False
+    Path(args.state, "cache", "audit.json").write_text(json.dumps(rep), encoding="utf-8")
+    return 0 if ok else 3
+
+
+def cmd_export(args) -> int:
+    from .api import build_api, write_api
+    from .site import write_site
+
+    write_site(args.site)
+    write_api(build_api(args.state, mode=args.mode, interval_min=args.interval), args.site)
+    print(f"wrote {args.site}/index.html and {args.site}/api/")
+    return 0
+
+
+def _w(text: str) -> int:
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+
+def _pad(text: str, width: int) -> str:
+    return text + " " * max(0, width - _w(text))
+
+
+def cmd_status(args) -> int:
+    from .api import build_api
+
+    api = build_api(args.state)
+    meta = api["meta.json"]
+    print(f"cycle {meta['cycle_at']}  ledger {meta['ledger']['records']} records, "
+          f"verify {'OK' if meta['ledger']['ok'] else 'FAILED'}")
+    for s in meta["pairs"]:
+        d = s["decimals"]
+        line = f"{_pad(s['label'], 9)}{s['price']:>12.{d}f}  "
+        for tf, rows in s["outlook"].items():
+            line += "  ".join(f"{r['label']} {r['dir']} {r['p_up'] * 100:.0f}%" for r in rows) + "   "
+        print(line)
+    print("\nlive track record:")
+    for tf, hs in meta["track"].items():
+        for h, st in hs.items():
+            if st["n"]:
+                d = st["direction"] or {}
+                rate = d.get("rate")
+                print(f"  {tf} h={h:>2}: n={st['n']:>5}  direction {rate * 100 if rate is not None else math.nan:5.1f}%"
+                      f"  RW skill {st['skill'] * 100 if st['skill'] is not None else math.nan:+.1f}%")
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="aifx", description="FXチャート予測 (日足・最大20営業日先)")
+    p = argparse.ArgumentParser(prog="aifx", description="FXチャート予測サーバー")
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--pairs", type=_pairs_arg, default=list(PAIRS),
-                        help="通貨ペア (例: USDJPY,EURUSD / all)。既定は全7ペア")
-    common.add_argument("--horizon", type=int, default=20, help="予測する営業日数 (既定 20)")
-    common.add_argument("--years", type=int, default=5, help="取得する履歴の年数 (既定 5)")
-    common.add_argument("--cache", default="data/cache", help="価格キャッシュのディレクトリ")
-    common.add_argument("--offline", action="store_true", help="ネットワークを使わずキャッシュだけで計算")
-    common.add_argument("--synthetic", action="store_true", help="乱数で作った価格で動作確認 (ネット不要)")
+    common.add_argument("--state", default="state", help="台帳とデータの保存先 (既定 state/)")
+    run = argparse.ArgumentParser(add_help=False)
+    run.add_argument("--pairs", type=_pairs_arg, default=list(PAIRS), help="通貨ペア (例: USDJPY,EURUSD / all)")
+    run.add_argument("--no-news", action="store_true", help="ニュースと経済指標カレンダーを取得しない")
+    run.add_argument("--synthetic", action="store_true", help="乱数で作った相場で動作確認 (ネット不要)")
+    run.add_argument("--interval", type=float, default=15, help="更新間隔 (分)")
     sub = p.add_subparsers(dest="command", required=True)
 
-    f = sub.add_parser("forecast", parents=[common], help="予測をターミナルに表示")
-    f.add_argument("pair_codes", nargs="*", help="通貨ペア (省略時は --pairs)")
-    f.set_defaults(func=cmd_forecast)
+    c = sub.add_parser("cycle", parents=[common, run], help="1回分の処理 (取得・判定・学習・予測・検証)")
+    c.add_argument("--site", help="WebページとAPIを書き出すディレクトリ")
+    c.add_argument("--audit", type=int, default=0, help="予測を再計算して監査する件数")
+    c.set_defaults(func=cmd_cycle)
 
-    b = sub.add_parser("build", parents=[common], help="ダッシュボード (HTML) を生成")
-    b.add_argument("--out", default="site", help="出力ディレクトリ (既定 site/)")
-    b.add_argument("--fragment", help="<html>ラッパー無しのHTML断片も書き出すパス")
-    b.set_defaults(func=cmd_build)
-
-    s = sub.add_parser("serve", parents=[common], help="ダッシュボードを生成してローカルで配信")
-    s.add_argument("--out", default="site")
-    s.add_argument("--fragment", default=None)
+    s = sub.add_parser("serve", parents=[common, run], help="サーバーとして常駐し、Webページを配信")
+    s.add_argument("--site", default="site")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
-    s.add_argument("--refresh", type=float, default=0, help="データを再取得する間隔 (分)。0で無効")
-    s.set_defaults(func=cmd_serve)
+    s.set_defaults(func=cmd_serve, interval=5)
+
+    v = sub.add_parser("verify", parents=[common], help="台帳の改ざん・時刻違反・未判定がないか検証")
+    v.add_argument("--expect-head", help="以前の台帳の先頭 SEQ:HASH がそのまま残っているか確認")
+    v.set_defaults(func=cmd_verify)
+
+    hd = sub.add_parser("head", parents=[common], help="台帳の先頭 SEQ:HASH を表示")
+    hd.set_defaults(func=cmd_head)
+
+    a = sub.add_parser("audit", parents=[common], help="過去の予測を同じデータで再計算して一致を確認")
+    a.add_argument("--sample", type=int, default=5)
+    a.add_argument("--external", action="store_true", help="保存した価格を取得し直した価格と照合")
+    a.set_defaults(func=cmd_audit)
+
+    e = sub.add_parser("export", parents=[common], help="保存済みの状態からWebページとAPIを書き出す")
+    e.add_argument("--site", default="site")
+    e.add_argument("--mode", default="static", choices=["static", "server"])
+    e.add_argument("--interval", type=float, default=15)
+    e.set_defaults(func=cmd_export)
+
+    st = sub.add_parser("status", parents=[common], help="最新の予測と実績をターミナルに表示")
+    st.set_defaults(func=cmd_status)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if getattr(args, "pair_codes", None):
-        args.pairs = [get_pair(c).code for c in args.pair_codes]
     return args.func(args)
 
 
