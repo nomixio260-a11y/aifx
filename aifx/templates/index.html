@@ -499,7 +499,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       <p class="lead">判定が済んだ予測の結果だけを使って、4つの値を自動で調整しています。重み: 誤差の小さいモデルを重く使う。信号の採用率: モデルの方向予測にどこまで従うか (実績で有効性が示されるまで0に近い値)。レンジ補正: 80%レンジが実際に約80%当たるよう幅を調整。ニュース係数: ニュース信号で予測をどれだけ動かすか。</p>
       <div class="tablebox"><table><thead><tr><th>期間</th><th class="num">判定済み</th><th class="num">信号の採用率</th><th class="num">レンジ補正</th><th class="num opt">ニュース係数</th><th class="l opt">モデルの重み</th></tr></thead><tbody id="learn-body"></tbody></table></div>
       <div class="legend opt" id="weights-legend"></div>
-      <div class="section-head"><h3>長期の過去データでの検証</h3><p id="rs-caption"></p></div>
+      <div class="section-head"><h3 id="rs-title">長期の過去データでの検証</h3><p id="rs-caption"></p></div>
       <p class="note" id="rs-lead"></p>
       <div class="tablebox"><table><thead id="rs-head"></thead><tbody id="rs-body"></tbody></table></div>
       <div class="tablebox"><table><thead><tr><th>期間</th><th class="num">50%レンジ</th><th class="num">80%レンジ</th><th class="num">95%レンジ</th></tr></thead><tbody id="rs-range"></tbody></table></div>
@@ -510,7 +510,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   </section>
 
   <footer>
-    <p>価格: Yahoo Finance (1時間足・日足)。ニュース: Google ニュース検索、各中央銀行、ForexLive。経済指標: Forex Factory カレンダー。</p>
+    <p>価格: Yahoo Finance (15分足・1時間足・日足)。ニュース: Google ニュース検索、各中央銀行、ForexLive。経済指標: Forex Factory カレンダー。</p>
     <p>予測は統計モデルによる参考値で、将来の値動きを保証するものではありません。投資判断はご自身の責任で行ってください。</p>
     <p id="footer-meta"></p>
   </footer>
@@ -1402,6 +1402,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function renderResearch(res, tf) {
     var R = res && res.tf && res.tf[tf]; var head = clear($("rs-head")); var body = clear($("rs-body")); var rng = clear($("rs-range"));
     var lead = clear($("rs-lead"));
+    $("rs-title").textContent = tf === "15m" ? "過去データでの検証 (直近約60日)" : "長期の過去データでの検証";
     if (!R) { $("rs-caption").textContent = "検証結果はまだありません。"; return; }
     var hs = Object.keys(R.ranges).sort(function (a, b) { return a - b; });
     $("rs-caption").textContent = "調整期間 " + R.tune[0] + "〜" + R.tune[1] + " で設定を決め、検証期間 " + R.test[0] + "〜" + R.test[1] + " で確認";
