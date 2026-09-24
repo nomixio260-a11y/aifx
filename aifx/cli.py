@@ -96,6 +96,7 @@ def cmd_audit(args) -> int:
     from .audit import audit, external_check
 
     rep = audit(args.state, sample=args.sample)
+    Path(args.state, "cache").mkdir(parents=True, exist_ok=True)
     for r in rep["results"]:
         print(f"  seq {r['seq']:>6} {r['pair']} {r['tf']} {r['origin']}  {'OK' if r['ok'] else 'MISMATCH'}  {r['diffs']}")
     print(f"audit: {'OK' if rep['ok'] else 'MISMATCH'}; recomputed {rep['checked']}, "

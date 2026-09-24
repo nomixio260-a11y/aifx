@@ -319,6 +319,8 @@ def external_check(root: Path | str, market, days: int = 20, per_pair: int = 5, 
     cutoff = utcnow()
     for code in ALL:
         stored = com.prices_before(code, "1h", 10 ** 12)
+        if not len(stored):
+            continue
         recent = stored[stored.index >= pd.Timestamp(cutoff - timedelta(days=days))]
         if not len(recent):
             continue

@@ -200,3 +200,20 @@ def test_api_is_rebuilt_from_the_ledger_alone(session):
     assert blk["path"]["steps"] and blk["prediction"]["horizons"]
     assert docs["models.json"]["learning"]["1h"]["1"]["n"] >= 1
     assert (root / ".gitignore").read_text().strip() == "cache/"
+
+
+def test_documented_verification_commands_work_on_a_fresh_checkout(session, monkeypatch):
+    """What a third party runs after cloning the ledger branch (no cache directory)."""
+    import shutil
+
+    from aifx import cli
+    from aifx.data import SyntheticMarket
+    root, _ = session
+    shutil.rmtree(root / "cache")
+    assert cli.main(["verify", "--state", str(root)]) == 0
+    head = Ledger(root).load().head
+    assert cli.main(["verify", "--state", str(root), "--expect-head", f"{head[0]}:{head[1]}"]) == 0
+    assert cli.main(["verify", "--state", str(root), "--expect-head", f"{head[0]}:{'0' * 64}"]) == 2
+    monkeypatch.setattr("aifx.data.YahooMarket", lambda: market())
+    assert cli.main(["audit", "--state", str(root), "--sample", "3", "--external"]) == 0
+    assert (root / "cache" / "external.json").exists()
