@@ -140,7 +140,9 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
     status = state.read_cache("status.json", {}) or {}
     latest = state.read_cache("latest.json", {}) or {}
     audit_rep = state.read_cache("audit.json", None)
-    now = parse_iso(status["at"]) if status.get("at") else utcnow()
+    # The last ledger record is the authoritative time of the last server cycle.
+    cycle_at = status.get("at") or (ledger.records[-1]["at"] if ledger.records else None)
+    now = parse_iso(cycle_at) if cycle_at else utcnow()
     pip_of = {c: p.pip for c, p in PAIRS.items()}
     tr = track.build(preds, outcomes, pip_of)
     rows, _ = track.join(preds, outcomes)
@@ -276,7 +278,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
     first = preds[0]["at"] if preds else None
     out["meta.json"] = {
         "generated_at": iso(utcnow()),
-        "cycle_at": status.get("at"),
+        "cycle_at": cycle_at,
         "mode": mode,
         "interval_min": interval_min,
         "next_update_at": iso(now + timedelta(minutes=interval_min)),

@@ -469,7 +469,9 @@ aifx audit --state state --sample 20 --external</pre>
     var pill = el("span", "pill"); var dot = el("span", "dot");
     var stale = m.cycle_at && (Date.now() - new Date(m.cycle_at).getTime()) > 3 * m.interval_min * 60000 + 30 * 60000;
     var txt;
-    if (m.mode === "server" && S.status) {
+    if (m.mode === "snapshot") {
+      dot.className = "dot warn"; txt = "スナップショット (自動更新されません)";
+    } else if (m.mode === "server" && S.status) {
       if (S.status.running) { dot.className = "dot busy"; txt = "サーバーで更新中…"; }
       else if (S.status.last_error) { dot.className = "dot bad"; txt = "前回の更新でエラー"; }
       else { txt = "サーバー稼働中"; }
@@ -480,7 +482,7 @@ aifx audit --state state --sample 20 --external</pre>
     pill.appendChild(dot); pill.appendChild(el("span", null, txt)); box.appendChild(pill);
     box.appendChild(el("span", null, "最終更新 " + jst(m.cycle_at) + " (" + rel(m.cycle_at) + ")"));
     var next = m.mode === "server" && S.status ? S.status.next_run : m.next_update_at;
-    if (next && !(S.status && S.status.running)) box.appendChild(el("span", null, "次回 " + jst(next)));
+    if (m.mode !== "snapshot" && next && !(S.status && S.status.running)) box.appendChild(el("span", null, "次回 " + jst(next)));
     var v = el("a", null, (m.ledger.ok ? "✔ 台帳検証OK" : "✖ 台帳に問題あり") + " · " + m.ledger.records.toLocaleString() + "件");
     v.href = "#verify"; v.style.color = m.ledger.ok ? "var(--good)" : "var(--bad)"; v.style.fontWeight = "600"; v.style.textDecoration = "none";
     box.appendChild(v);
@@ -494,7 +496,11 @@ aifx audit --state state --sample 20 --external</pre>
       box.appendChild(b);
     }
     var banner = $("banner");
-    if (m.errors && m.errors.length) {
+    if (m.mode === "snapshot") {
+      banner.hidden = false; banner.className = "notice";
+      clear(banner).appendChild(document.createTextNode("この画面は " + jstFull(m.cycle_at) + " 時点のサーバーの状態を写したものです。最新の予測と実績は GitHub Pages 版 (自動更新) で確認できます: "));
+      var a = el("a", null, "nomixio260-a11y.github.io/aifx"); a.href = "https://nomixio260-a11y.github.io/aifx/"; a.target = "_blank"; a.rel = "noopener"; banner.appendChild(a);
+    } else if (m.errors && m.errors.length) {
       banner.hidden = false; banner.className = "notice warn"; banner.textContent = "取得できなかったデータがあります: " + m.errors.slice(0, 3).join(" / ");
     } else banner.hidden = true;
     $("footer-meta").textContent = "サーバー処理: " + jstFull(m.cycle_at) + " · 台帳の先頭 #" + m.ledger.head.seq + " " + m.ledger.head.hash.slice(0, 16) + "…";

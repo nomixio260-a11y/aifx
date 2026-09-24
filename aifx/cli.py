@@ -190,7 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     e = sub.add_parser("export", parents=[common], help="保存済みの状態からWebページとAPIを書き出す")
     e.add_argument("--site", default="site")
-    e.add_argument("--mode", default="static", choices=["static", "server"])
+    e.add_argument("--mode", default="static", choices=["static", "server", "snapshot"])
     e.add_argument("--interval", type=float, default=15)
     e.set_defaults(func=cmd_export)
 
