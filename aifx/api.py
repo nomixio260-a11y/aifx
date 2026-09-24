@@ -5,7 +5,7 @@ computes forecasts itself.
     api/pair/<PAIR>.json   bars, current forecasts, past forecasts vs actual
     api/track.json         live track record
     api/news.json          analysed headlines, currency pressure, calendar
-    api/models.json        learned weights, calibration, walk-forward results
+    api/models.json        learned weights, calibration, walk-forward results, long-history research
     api/verify.json        full verification and audit reports
 """
 
@@ -32,6 +32,37 @@ from .timeutil import iso, london_date, parse_iso, utcnow
 
 HISTORY = {"1h": 240, "1d": 520}
 PAST = {"1h": 96, "1d": 40}
+RESEARCH = Path(__file__).resolve().parent.parent / "research" / "results.json"
+RESEARCH_ROWS = {
+    "1d": [("6モデルの均等平均", "6モデルの均等平均"), ("金利差 (キャリー)", "金利差 (キャリー)"),
+           ("モメンタム (過去60本の値動き)", "モメンタム (過去60日)"), ("新設定 (λ=50)", "本番の方式 (学習ルールを再現)")],
+    "1h": [("6モデルの均等平均", "6モデルの均等平均"), ("時間帯ごとの平均的な値動き", "時間帯ごとの値動きの癖"),
+           ("モメンタム (過去24本の値動き)", "モメンタム (過去24時間)"), ("新設定 (λ=50)", "本番の方式 (学習ルールを再現)")],
+}
+
+
+def research_summary(path: Path = RESEARCH) -> dict | None:
+    """Headline numbers of the long-history research (research/report.md), if present."""
+    try:
+        res = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    out = {"report": "research/report.md", "tf": {}}
+    for tf in ("1d", "1h"):
+        r = res[tf]
+        rows = []
+        for key, label in RESEARCH_ROWS[tf]:
+            src = r["point"].get(key) or r["sim"].get(key)
+            if src is None:
+                continue
+            rows.append({"name": label, "h": {h: {"skill": _r(x["skill"], 5), "hit": _r(x["hit"], 4), "p": _r(x["dm_p"], 4)}
+                                             for h, x in src["test"].items()},
+                         "tune": {h: {"skill": _r(x["skill"], 5), "hit": _r(x["hit"], 4)} for h, x in src["tune"].items()}})
+        ranges = {h: {"before": {k: _r(v, 4) for k, v in r["shape"]["before"][h]["normal"]["cover"].items()},
+                      "after": {k: _r(v, 4) for k, v in r["shape"]["after"][h]["t"]["cover"].items()}}
+                  for h in r["shape"]["before"]}
+        out["tf"][tf] = {"tune": r["tune"], "test": r["test"], "n": r["n"], "direction": rows, "ranges": ranges}
+    return out
 
 
 def _r(v, d):
@@ -264,6 +295,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
         "priors": priors,
         "timeframes": {k: {"label": tf.label, "horizons": list(tf.horizons), "half_life": tf.half_life}
                        for k, tf in TIMEFRAMES.items()},
+        "research": research_summary(),
     }
 
     # track record ----------------------------------------------------------

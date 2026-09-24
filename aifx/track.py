@@ -7,7 +7,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from .engine import BAND_Z, BP, MODEL_KEYS, TIMEFRAMES
+from .engine import BAND_Z, BP, MODEL_KEYS, TIMEFRAMES, band_z
 from .stats import scores
 
 
@@ -27,7 +27,7 @@ def join(predictions: list[dict], outcomes: list[dict]) -> tuple[list[dict], set
             rows.append({
                 "seq": pseq, "pair": p["pair"], "tf": p["tf"], "h": h, "issued": p["at"], "origin": p["origin"],
                 "target": f["t"], "p0": p["p0"], "c": f["c"], "c0": f["c0"], "g": f["g"],
-                "sigma": f["s"] * f["k"], "p": f["p"],
+                "sigma": f["s"] * f["k"], "p": f["p"], "z": band_z(f.get("nu")),
                 "m": f["m"], "x": p["news"]["x"], "actual": actual, "a": a, "bar_end": bar_end, "scored": o["at"],
             })
     rows.sort(key=lambda r: (r["target"], r["seq"], r["h"]))
@@ -43,7 +43,8 @@ def summary(rows: list[dict], tf: str, h: int) -> dict:
     if not sel:
         return {"n": 0}
     lag = max(0, h - 1)
-    out = scores(_arr(sel, "c"), _arr(sel, "a"), _arr(sel, "sigma"), _arr(sel, "p"), lag)
+    z = {name: np.array([r["z"][name] for r in sel]) for name in BAND_Z}
+    out = scores(_arr(sel, "c"), _arr(sel, "a"), _arr(sel, "sigma"), _arr(sel, "p"), lag, z)
     a = _arr(sel, "a")
     m = np.array([r["m"] for r in sel])
     rmse_rw = float(np.sqrt(np.mean(a ** 2)))

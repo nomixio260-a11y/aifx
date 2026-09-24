@@ -33,10 +33,14 @@ PRIOR_N_K = 30.0
 BETA_PRIOR = 0.05
 BETA_LAMBDA = 20.0
 K_BOUNDS = (0.6, 2.5)
-# Gain prior: centred on "no skill" with a spread of about 0.3 (lambda = 1 / 0.3^2).
+# Gain prior: centred on "no skill" with a spread of about 0.14 (lambda = 1 / 0.14^2).
 # Pooled samples from 7 correlated pairs carry far less information than their
 # count suggests, so they are down-weighted to an effective sample share.
-GAIN_LAMBDA = 11.0
+# Replaying this rule over 2002-2026 (daily) and two years of hourly bars, a
+# looser prior (lambda 11) made 10-20 day forecasts slightly worse than "no
+# change"; lambda 50 was better on the tuning period and held up on the test
+# period (research/report.md).
+GAIN_LAMBDA = 50.0
 GAIN_ESS = 0.35
 GAIN_BOUNDS = (-0.5, 1.0)
 BETA_BOUNDS = (-0.5, 0.5)

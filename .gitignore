@@ -8,4 +8,5 @@ dist/
 # local runtime data (the live ledger lives on the `ledger` branch)
 state/
 site/
-data/cache/
+# downloaded price history and research caches (aifx research --download / aifx research)
+data/

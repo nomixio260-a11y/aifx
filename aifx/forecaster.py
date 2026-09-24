@@ -18,7 +18,7 @@ import pandas as pd
 
 from . import news as newsmod
 from .data import Pair
-from .engine import (BAND_Z, BP, MODEL_KEYS, Timeframe, combine, horizon_sigma, model_paths,
+from .engine import (BP, MODEL_KEYS, Timeframe, band_nu, band_z, combine, horizon_sigma, model_paths,
                      sigma_steps, step_ends, target_times)
 from .learning import HorizonState
 from .timeutil import iso
@@ -60,7 +60,7 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, hourly: pd.Da
     paths, analog_idx = model_paths(y, steps)
     ends = step_ends(tf, origin, steps)
     evs = newsmod.events_between(events, (pair.base, pair.quote), origin, ends[-1], origin)
-    var = sigma_steps(tf, bars.iloc[-tf.fit_bars:], origin, steps, evs)
+    var = sigma_steps(tf, bars.iloc[-tf.fit_bars:], origin, steps, evs, hourly=hourly)
     press = newsmod.pressures(news_items, origin)
     x = newsmod.pair_signal(press, pair.base, pair.quote)
     p0, p0_bar = origin_price(hourly, origin)
@@ -70,7 +70,8 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, hourly: pd.Da
     for j, h in enumerate(tf.horizons):
         st = state[h]
         m = {k: float(paths[k][h - 1]) for k in MODEL_KEYS}
-        comb = combine(m, st.weights, sig_h[j], st.k, x, st.beta, st.gain)
+        nu = band_nu(tf.key, h)
+        comb = combine(m, st.weights, sig_h[j], st.k, x, st.beta, st.gain, nu)
         n_ev = sum(1 for e in evs if origin < e["time"] <= targets[j])
         fc.append({
             "h": h,
@@ -81,6 +82,7 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, hourly: pd.Da
             "k": st.k,
             "b": st.beta,
             "g": st.gain,
+            "nu": nu,
             "c0": round(comb["c0"], 4),
             "c": round(comb["c"], 4),
             "p": round(comb["p_up"], 4),
@@ -114,10 +116,11 @@ def chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, an
     for i in range(steps):
         h_ref = next((h for h in hs if h >= i + 1), hs[-1])
         st = state[h_ref]
+        nu = band_nu(tf.key, h_ref)
         m = {k: float(paths[k][i]) for k in MODEL_KEYS}
-        comb = combine(m, st.weights, float(cum[i]), st.k, x, st.beta, st.gain)
+        comb = combine(m, st.weights, float(cum[i]), st.k, x, st.beta, st.gain, nu)
         row = {"t": iso(ends[i]), "c": p0 * float(np.exp(comb["c"] / BP)), "p": comb["p_up"]}
-        for name, z in BAND_Z.items():
+        for name, z in band_z(nu).items():
             row["lo" + name] = p0 * float(np.exp((comb["c"] - z * comb["sigma"]) / BP))
             row["hi" + name] = p0 * float(np.exp((comb["c"] + z * comb["sigma"]) / BP))
         rows.append(row)

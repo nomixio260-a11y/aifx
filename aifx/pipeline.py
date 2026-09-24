@@ -112,9 +112,10 @@ def score_due(state: State, at: datetime) -> list[list]:
     return items
 
 
-def _need_prior(state: State, tf: Timeframe, anchor: datetime) -> bool:
+def _need_prior(state: State, tf: Timeframe, anchor: datetime, version: str) -> bool:
     rec = _latest(state.ledger.records, type="prior", tf=tf.key)
-    return rec is None or rec["cutoff"] < iso(anchor)
+    # recomputed daily, and at once when the forecasting code changes
+    return rec is None or rec["cutoff"] < iso(anchor) or rec.get("v", "") != version
 
 
 def run_cycle(root: Path | str, now: datetime | None = None, market=None, collect_news=True,
@@ -193,10 +194,11 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
     # 5. walk-forward priors (once per UTC day) ----------------------------
     anchor = at.replace(hour=0, minute=0, second=0)
     for tf in tfs:
-        if _need_prior(state, tf, anchor):
+        if _need_prior(state, tf, anchor, version):
             series = {p.code: state.prices.load(p.code, tf.key) for p in pair_objs}
+            hourly = {p.code: state.prices.load(p.code, "1h") for p in pair_objs} if tf.key == "1d" else None
             try:
-                prior, _detail = backtest_prior(tf, series, anchor)
+                prior, _detail = backtest_prior(tf, series, anchor, hourly, version)
             except Exception as exc:
                 report.errors.append(f"prior {tf.key}: {exc}")
                 continue

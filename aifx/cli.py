@@ -1,4 +1,4 @@
-"""Command line: ``aifx cycle | serve | verify | audit | export | status``."""
+"""Command line: ``aifx cycle | serve | verify | audit | export | status | research``."""
 
 from __future__ import annotations
 
@@ -147,6 +147,16 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_research(args) -> int:
+    from . import history, research
+
+    if args.download:
+        history.download()
+        return 0
+    research.run(workers=args.workers)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="aifx", description="FXチャート予測サーバー")
     common = argparse.ArgumentParser(add_help=False)
@@ -189,6 +199,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("status", parents=[common], help="最新の予測と実績をターミナルに表示")
     st.set_defaults(func=cmd_status)
+
+    r = sub.add_parser("research", help="過去データで検証し research/report.md を作成 (台帳とは別)")
+    r.add_argument("--download", action="store_true", help="過去の価格 (Yahoo Finance) と短期金利 (FRED) を data/history/ に取得")
+    r.add_argument("--workers", type=int, default=4)
+    r.set_defaults(func=cmd_research)
     return p
 
 

@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 from .data import PAIRS
-from .engine import MODEL_KEYS, TIMEFRAMES, norm_cdf, target_times
+from .engine import MODEL_KEYS, TIMEFRAMES, prob_up, target_times
 from .forecaster import MAX_ORIGIN_AGE, make_prediction, model_version
 from .learning import learn, samples_from_ledger
 from .ledger import Ledger, chain_problems, data_file_problems
@@ -181,7 +181,7 @@ def verify(root: Path | str) -> dict:
             c0 = sum(w * m for w, m in zip(f["w"], f["m"]))
             sig = f["s"] * f["k"]
             c = f["g"] * f["c0"] + f["b"] * p["news"]["x"] * sig
-            if abs(c0 - f["c0"]) > 2e-3 or abs(c - f["c"]) > 2e-3 or abs(norm_cdf(f["c"] / sig) - f["p"]) > 2e-4:
+            if abs(c0 - f["c0"]) > 2e-3 or abs(c - f["c"]) > 2e-3 or abs(prob_up(f["c"], sig, f.get("nu")) - f["p"]) > 2e-4:
                 add("rule", f"{tag} h={f['h']}: stored numbers are inconsistent")
 
     scored: dict[tuple[int, int], int] = {}
@@ -251,6 +251,8 @@ def _compare(rec: dict, redo: dict) -> dict:
         worst["g"] = max(worst["g"], abs(a["g"] - b["g"]))
         worst["c"] = max(worst["c"], abs(a["c"] - b["c"]))
         worst["p"] = max(worst["p"], abs(a["p"] - b["p"]))
+        if a.get("nu") != b.get("nu"):
+            worst["p"] = max(worst["p"], 1.0)
     diffs.update(worst)
     ok = (diffs["p0"] < 1e-9 and diffs["news_x"] < 1e-6 and worst["m"] < 1e-3 and worst["s"] < 1e-6
           and worst["w"] < 1e-6 and worst["k"] < 1e-6 and worst["b"] < 1e-6 and worst["g"] < 1e-6

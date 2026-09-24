@@ -59,8 +59,13 @@ def diebold_mariano(loss_model: np.ndarray, loss_base: np.ndarray, lag: int = 0)
     return stat, float(2 * norm_sf(abs(stat)))
 
 
-def scores(c: np.ndarray, a: np.ndarray, sigma: np.ndarray, p_up: np.ndarray, lag: int = 0) -> dict:
-    """Headline metrics for forecasts c (bp) against outcomes a (bp)."""
+def scores(c: np.ndarray, a: np.ndarray, sigma: np.ndarray, p_up: np.ndarray, lag: int = 0,
+           band: dict[str, np.ndarray] | None = None) -> dict:
+    """Headline metrics for forecasts c (bp) against outcomes a (bp).
+
+    ``band``: half-width of each range in units of sigma, per forecast
+    (default: normal-distribution bands).
+    """
     n = len(a)
     if n == 0:
         return {"n": 0}
@@ -76,6 +81,8 @@ def scores(c: np.ndarray, a: np.ndarray, sigma: np.ndarray, p_up: np.ndarray, la
     brier = float(np.mean((p_up - up) ** 2))
     cover = {}
     for name, z in (("50", 0.6745), ("80", 1.2816), ("95", 1.96)):
+        if band is not None:
+            z = band[name]
         inside = np.abs(err) <= z * sigma
         k = int(inside.sum())
         cl, ch = wilson(k, n)

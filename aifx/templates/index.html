@@ -358,6 +358,10 @@ footer p { margin: 0; max-width: 95ch; }
     <div class="legend" id="weights-legend"></div>
     <div class="section-head"><h3>過去データでの検証 (シミュレーション)</h3><p id="bt-caption"></p></div>
     <div class="tablebox"><table><thead id="bt-head"></thead><tbody id="bt-body"></tbody></table></div>
+    <div class="section-head"><h3>長期の過去データでの検証</h3><p id="rs-caption"></p></div>
+    <p class="note" id="rs-lead"></p>
+    <div class="tablebox"><table><thead id="rs-head"></thead><tbody id="rs-body"></tbody></table></div>
+    <div class="tablebox"><table><thead><tr><th>期間</th><th class="num">50%レンジの的中率</th><th class="num">80%レンジ</th><th class="num">95%レンジ</th></tr></thead><tbody id="rs-range"></tbody></table></div>
     <dl class="models" id="models"></dl>
   </section>
 
@@ -957,9 +961,40 @@ aifx audit --state state --sample 20 --external</pre>
       });
     }
     $("bt-caption").textContent = prior ? "各時点までのデータだけで予測した場合の成績 (7ペア合算、均等加重、レンジ補正前) · " + jst(prior.cutoff) + " までのデータ" : "";
+    renderResearch(m.research, tf);
     var dl = clear($("models"));
     (m.models || []).forEach(function (x) { var d = el("div"); d.appendChild(el("dt", null, x.name)); d.appendChild(el("dd", null, x.description)); dl.appendChild(d); });
     segment($("seg-learn-tf"), [{ label: "1時間足", value: "1h" }, { label: "日足", value: "1d" }], function () { return S.learnTf; }, function (v) { S.learnTf = v; renderLearning(); });
+  }
+
+  function renderResearch(res, tf) {
+    var R = res && res.tf && res.tf[tf]; var head = clear($("rs-head")); var body = clear($("rs-body")); var rng = clear($("rs-range"));
+    var lead = clear($("rs-lead"));
+    if (!R) { $("rs-caption").textContent = "検証結果はまだありません。"; return; }
+    var hs = Object.keys(R.ranges).sort(function (a, b) { return a - b; });
+    $("rs-caption").textContent = "調整期間 " + R.tune[0] + "〜" + R.tune[1] + " で設定を決め、検証期間 " + R.test[0] + "〜" + R.test[1] + " の成績で確認 (" + R.n.toLocaleString() + "件、7ペア)";
+    lead.appendChild(document.createTextNode("上の表: 検証期間の「誤差の改善率 (変化なし比) / 方向の的中率」。太字は統計的に有意な差 (p<0.05)。下の表: 予測レンジの的中率 (従来の方式 → 現在の方式、名目は50/80/95%)。日足は2002年から、1時間足は約2年分のデータで試しても、方向を「変化なし」より安定して当てる方法は見つかりませんでした。そのため中心値は「変化なし」付近に保ち、予測レンジの精度を高めています。"));
+    if (S.meta && S.meta.repo) {
+      lead.appendChild(document.createTextNode(" "));
+      var a = el("a", null, "詳しいレポート"); a.href = S.meta.repo + "/blob/main/" + res.report; a.target = "_blank"; a.rel = "noopener"; lead.appendChild(a);
+    }
+    var hr = el("tr"); hr.appendChild(el("th", null, "方法"));
+    hs.forEach(function (h) { hr.appendChild(el("th", "num", tfLabel(tf, Number(h)))); }); head.appendChild(hr);
+    R.direction.forEach(function (d) {
+      var row = el("tr"); row.appendChild(el("td", null, d.name));
+      hs.forEach(function (h) {
+        var x = d.h[h] || {}; var sig = x.p != null && x.p < 0.05;
+        var td = el("td", "num " + (sig ? (x.skill > 0 ? "good" : "bad") : ""), signed(x.skill * 100, 2, "%") + " / " + pct(x.hit, 1));
+        if (sig) td.style.fontWeight = "700";
+        row.appendChild(td);
+      });
+      body.appendChild(row);
+    });
+    hs.forEach(function (h) {
+      var x = R.ranges[h]; var row = el("tr"); row.appendChild(el("td", null, tfLabel(tf, Number(h))));
+      ["50", "80", "95"].forEach(function (k) { row.appendChild(el("td", "num", pct(x.before[k], 1) + " → " + pct(x.after[k], 1))); });
+      rng.appendChild(row);
+    });
   }
 
   /* ---------------- verification ---------------- */
