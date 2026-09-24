@@ -117,6 +117,11 @@ class CalendarStore(JsonlStore):
     folder = "calendar"
 
 
+class RatesStore(JsonlStore):
+    """One item a day: the recent history of the short-rate series (see rates.py)."""
+    folder = "rates"
+
+
 def stable_id(*parts: str) -> str:
     return sha256_hex("\x1f".join(parts).encode("utf-8"))[:16]
 

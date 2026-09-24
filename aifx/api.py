@@ -23,9 +23,11 @@ import pandas as pd
 
 from . import analysis, backtest, indicators
 from . import news as newsmod
-from . import track
+from . import track, trade
+from .rates import latest as rates_latest
 from .data import CURRENCIES, PAIRS
-from .engine import BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, dist_cdf, dist_pdf, dist_quantile, fan_z, step_ends
+from .engine import (BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, bars_until, dist_cdf, dist_pdf, dist_quantile, fan_z,
+                     step_ends)
 from .forecaster import model_version
 from .learning import learn, samples_from_ledger
 from .models import default_models
@@ -41,6 +43,72 @@ RESEARCH_ROWS = {
     "1h": [("6モデルの均等平均", "6モデルの均等平均"), ("時間帯ごとの平均的な値動き", "時間帯ごとの値動きの癖"),
            ("モメンタム (過去24本の値動き)", "モメンタム (過去24時間)"), ("新設定 (λ=50)", "本番の方式 (学習ルールを再現)")],
 }
+
+
+TRADE_RESEARCH = RESEARCH.parent / "trade.json"
+TRADE_BT = {"1d": timedelta(days=365), "1h": timedelta(days=90)}
+TRADE_LIST = 40
+
+
+def trade_research(path: Path = TRADE_RESEARCH) -> dict:
+    """Tested numbers of each timeframe's reference rule (research/trade.md)."""
+    try:
+        res = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for tf_key, rule in trade.RULES.items():
+        r = res.get(tf_key, {})
+        fam = r.get("families", {}).get(rule["key"])
+        if not fam or not fam.get("chosen"):
+            continue
+        keep = ("n", "win", "pips", "R", "pf", "t", "maxdd_R", "per_year")
+        out[tf_key] = {"tier": fam.get("tier"), "start": r.get("start"), "split": r.get("split"), "end": r.get("end"),
+                       **{part: {k: _r(fam["chosen"][part].get(k), 4) for k in keep} for part in ("tune", "test")}}
+    return out
+
+
+def _trade_item(tf_key: str, t: dict, dec: int) -> dict:
+    res = t.get("result", t)
+    out = {"origin": t["origin"], "x": _xkey(tf_key, t["origin"]), "dir": t["dir"], "entry": _r(t["entry"], dec),
+           "sl": _r(t["sl"], dec), "tp": _r(t["tp"], dec)}
+    if t.get("until"):
+        out.update({"until": t["until"], "x_until": _xkey(tf_key, t["until"])})
+    if res and res.get("t"):
+        out.update({"exit": _r(res["exit"], dec), "how": res["how"], "t": res["t"], "x_exit": _xkey(tf_key, res["t"]),
+                    "pips": _r(res["pips"], 1)})
+    return out
+
+
+def _trade_block(tf, pair, rec: dict, bars: pd.DataFrame, ref: pd.DataFrame, preds: list[dict], rate_item: dict | None,
+                 now, research: dict) -> dict:
+    """The trade plan of the latest forecast, both-side levels, and how the rule has done."""
+    dec = pair.decimals + 1
+    tr = rec.get("trade")
+    recorded = tr is not None
+    if tr is None:      # made by an earlier version: the same plan, computed for display only
+        tr = trade.plan(tf, pair, bars_until(tf, bars, parse_iso(rec["origin"])).iloc[-tf.fit_bars:],
+                        parse_iso(rec["origin"]), rec["p0"], rate_item)
+    rule = trade.RULES.get(tf.key)
+    out = {"cost_pips": trade.COST_PIPS.get(pair.code), "swap_markup": trade.SWAP_MARKUP,
+           "plan": {"origin": rec["origin"], "p0": rec["p0"], "dir": tr.get("dir", 0), "sl": tr.get("sl"), "tp": tr.get("tp"),
+                    "until": tr.get("until"), "diff": tr.get("diff"), "atr": tr.get("atr"),
+                    "levels": trade.levels(tr, rec["p0"], tf.key, pair.decimals), "recorded": recorded,
+                    "x_origin": _xkey(tf.key, rec["origin"]), "x_until": _xkey(tf.key, tr["until"]) if tr.get("until") else None},
+           "rule": None}
+    if rule is None:
+        return out
+    out["rule"] = {"key": rule["key"], "name": rule["name"], "desc": rule["desc"], "sl": rule["sl"], "tp": rule["tp"],
+                   "hold": rule["hold"], "research": research.get(tf.key)}
+    live = trade.live_trades(preds, ref, TIMEFRAMES[tf.ref].minutes, pair)
+    done = [dict(t["result"], R=t["result"].get("R")) for t in live if t["result"]]
+    out["live"] = {"stats": trade.stats(done), "trades": [_trade_item(tf.key, t, dec) for t in live[-TRADE_LIST:]],
+                   "open": next((_trade_item(tf.key, t, dec) for t in reversed(live) if not t["result"]), None)}
+    window = bars.iloc[-(int(TRADE_BT[tf.key].days * (24 if tf.key == "1h" else 1)) + 400):]
+    bt = trade.backtest(tf, pair, window, rate_item, since=now - TRADE_BT[tf.key])
+    out["bt"] = {"days": TRADE_BT[tf.key].days, "stats": trade.stats(bt),
+                 "trades": [_trade_item(tf.key, t, dec) for t in bt[-TRADE_LIST:]]}
+    return out
 
 
 def research_summary(path: Path = RESEARCH) -> dict | None:
@@ -264,6 +332,11 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
     out: dict[str, dict] = {}
     payloads: dict[str, dict] = {}
     pair_summaries = []
+    rate_item = rates_latest(state.rates.load(since=now - timedelta(days=40)))
+    trade_res = trade_research()
+    preds_by = {}
+    for p in preds:
+        preds_by.setdefault((p["pair"], p["tf"]), []).append(p)
     ranges24: dict[str, dict] = {}
     hourly_all: dict[str, pd.DataFrame] = {}
     daily_all: dict[str, pd.DataFrame] = {}
@@ -306,6 +379,10 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                 summary["outlook"][tf_key] = [{k: h[k] for k in ("h", "label", "price", "p_up", "dir", "change_pips",
                                                                  "lo80", "hi80")}
                                               for h in block["prediction"]["horizons"]]
+                ref_bars = hourly if tf.ref == "1h" else state.prices.load(code, tf.ref)
+                block["trade"] = _trade_block(tf, pair, rec, bars, ref_bars, preds_by.get((code, tf_key), []), rate_item,
+                                              now, trade_res)
+                summary.setdefault("signal", {})[tf_key] = block["trade"]["plan"]["dir"] if block["trade"]["rule"] else None
                 if tf_key == "1h":
                     h24 = block["prediction"]["horizons"][-1]
                     ranges24[code] = {"h": h24["h"], "lo80": h24["lo80"], "hi80": h24["hi80"],

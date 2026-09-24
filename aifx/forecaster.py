@@ -17,14 +17,17 @@ import numpy as np
 import pandas as pd
 
 from . import news as newsmod
+from . import trade
 from .data import Pair
 from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, bar_end, combine, fan_z, horizon_sigma,
                      model_paths, sigma_steps, step_ends, target_times)
 from .learning import HorizonState
+from .rates import latest as rates_latest
+from .store import known_before
 from .timeutil import iso
 
 MAX_ORIGIN_AGE = {"15m": timedelta(minutes=30), "1h": timedelta(hours=2), "1d": timedelta(hours=36)}
-_MODEL_FILES = ("models.py", "engine.py", "volatility.py", "learning.py", "news.py", "forecaster.py")
+_MODEL_FILES = ("models.py", "engine.py", "volatility.py", "learning.py", "news.py", "forecaster.py", "trade.py", "rates.py")
 
 
 def model_version() -> str:
@@ -48,9 +51,20 @@ def origin_price(ref: pd.DataFrame, origin: datetime, minutes: int = 60) -> tupl
     return float(ref["close"].iloc[idx]), iso(ends[idx].to_pydatetime())
 
 
+RATES_MAX_AGE_DAYS = 7
+
+
+def usable_rates(items: list[dict] | None, origin: datetime) -> dict | None:
+    """The latest rates item stored before ``origin``, unless it is more than a week old."""
+    item = rates_latest(known_before(items or [], origin))
+    if item is None or (origin.date() - datetime.strptime(item["date"], "%Y-%m-%d").date()).days > RATES_MAX_AGE_DAYS:
+        return None
+    return item
+
+
 def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataFrame, origin: datetime,
                     news_items: list[dict], events: list[dict], prior_seq: int, learn_seq: int,
-                    state: dict[int, HorizonState], version: str) -> tuple[dict, dict]:
+                    state: dict[int, HorizonState], version: str, rate_items: list[dict] | None = None) -> tuple[dict, dict]:
     """Returns (ledger record without seq/hash/at, chart detail).
 
     ``ref`` are the reference bars of the timeframe (``tf.ref``): the origin
@@ -103,6 +117,8 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
         "models": MODEL_KEYS,
         "v": version,
         "fc": fc,
+        # the trade plan: reference signal, stop, target and time limit (trade.py)
+        "trade": trade.plan(tf, pair, bars.iloc[-tf.fit_bars:], origin, p0, usable_rates(rate_items, origin)),
     }
     chart = chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, analog_idx, press)
     return record, chart

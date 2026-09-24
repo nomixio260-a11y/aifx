@@ -147,6 +147,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .pchip .px { font-size: 16px; font-weight: 500; }
 .pchip .chg { font-size: 11px; white-space: nowrap; }
 .pchip .rng { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.pchip .sig { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pchip .sig.flat { font-weight: 500; color: var(--muted); }
 
 .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; line-height: 1.6; white-space: nowrap; }
 .chip.up { background: color-mix(in srgb, var(--up) 12%, transparent); color: var(--up); }
@@ -214,6 +216,38 @@ details.why > summary::-webkit-details-marker { display: none; }
 details.why > summary::before { content: "▸"; font-size: 11px; }
 details.why[open] > summary::before { content: "▾"; }
 details.why > div { margin-top: 6px; display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+
+/* trade plan */
+.tcard { border-radius: 12px; border: 1px solid var(--hair); background: var(--surface-2); padding: 14px 16px; display: grid; gap: 12px; }
+.tcard.buy { border-color: color-mix(in srgb, var(--up) 45%, var(--hair)); background: color-mix(in srgb, var(--up) 6%, var(--surface)); }
+.tcard.sell { border-color: color-mix(in srgb, var(--down) 45%, var(--hair)); background: color-mix(in srgb, var(--down) 6%, var(--surface)); }
+.trow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 24px; font-weight: 700; line-height: 1; padding: 9px 16px; border-radius: 10px; color: #fff; background: var(--muted); letter-spacing: 0.04em; }
+.badge.buy { background: var(--up); } .badge.sell { background: var(--down); }
+.badge.none { background: var(--surface); color: var(--ink-2); border: 1px solid var(--axis); }
+.trow .ttl { display: grid; gap: 1px; min-width: 0; }
+.trow .ttl b { font-size: 15px; } .trow .ttl span { font-size: 12.5px; color: var(--ink-2); }
+.lvls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.lvls .tile .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 19px; }
+.tile.tp { box-shadow: inset 3px 0 0 var(--good); } .tile.sl { box-shadow: inset 3px 0 0 var(--bad); }
+.tile.en { box-shadow: inset 3px 0 0 var(--ink-2); } .tile.lim { box-shadow: inset 3px 0 0 var(--axis); }
+.tlines { display: grid; gap: 4px; font-size: 13.5px; color: var(--ink-2); }
+.tlines b { color: var(--ink); font-weight: 600; }
+.twarn { font-size: 12.5px; color: var(--muted); }
+.both { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.both .side { background: var(--surface); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; font-size: 13px; }
+.both .side b { font-size: 14px; }
+.both .side .num { font-family: var(--mono); }
+.tstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.tstats .tile { background: var(--surface-2); }
+.lot { display: grid; gap: 10px; }
+.lot label { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.lot .inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lot input { font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--axis); background: var(--surface); color: var(--ink); width: 100%; font-family: var(--mono); }
+.lot .out { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lot .out .tile { background: var(--surface-2); }
+.chart-foot1 { display: grid; gap: 8px; }
+td .chip { font-size: 11.5px; }
 
 /* chart */
 .chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 8px 16px; }
@@ -337,9 +371,10 @@ footer p { margin: 0; max-width: 95ch; }
   .answer { grid-template-columns: 1fr; padding: 12px; gap: 8px; }
   .chart-foot { grid-template-columns: 1fr; }
   .panel.main > .chart-head { order: 10; }
-  .panel.main > .chart-foot { order: 11; }
+  .panel.main > .chart-foot1 { order: 11; }
   .pchip { min-width: 0; padding: 6px 10px; }
   .pchip .rng { display: none; }
+  .pchip .sig { font-size: 11.5px; }
   .pchip .px { font-size: 15px; }
   .phead { align-items: baseline; }
   .pquote { display: contents; }
@@ -348,6 +383,9 @@ footer p { margin: 0; max-width: 95ch; }
   .phead .pairname h2 { font-size: 19px; }
   .seg.big button { min-height: 46px; }
   .tile .d .opt2 { display: none; }
+  .lvls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .badge { font-size: 21px; padding: 8px 12px; }
+  .both { grid-template-columns: 1fr; }
   .answer .range { font-size: 24px; }
   .rtable { min-width: 0; width: 100%; }
   .tile .v { font-size: 16px; }
@@ -381,23 +419,35 @@ footer p { margin: 0; max-width: 95ch; }
         <div class="pairname"><h2 id="p-label">読み込み中…</h2><span id="p-name"></span></div>
         <div class="pquote"><span class="price" id="p-price">—</span><span class="meta" id="p-meta"></span></div>
       </div>
-      <div class="ctlbar">
-        <div class="ctl"><span class="ctl-label" id="lbl-tf">時間足</span><div class="seg big" id="seg-tf" role="group" aria-labelledby="lbl-tf"></div></div>
-        <div class="ctl"><span class="ctl-label" id="lbl-h">予想する時点</span><div class="seg big" id="seg-h" role="group" aria-labelledby="lbl-h"></div></div>
-      </div>
-      <div class="answer" id="answer" aria-live="polite"></div>
+      <div class="ctl"><span class="ctl-label" id="lbl-tf">時間足</span><div class="seg big" id="seg-tf" role="group" aria-labelledby="lbl-tf"></div></div>
+      <div class="tcard" id="tcard" aria-live="polite"></div>
       <div class="chart-head">
         <div class="legend-row" id="chart-legend"></div>
         <div class="ctl"><span class="ctl-label" id="lbl-range">表示期間</span><div class="seg" id="seg-range" role="group" aria-labelledby="lbl-range"></div></div>
       </div>
-      <div class="chart" id="chart" role="img" aria-label="ローソク足と予測レンジ"></div>
-      <div class="chart-foot">
-        <div class="rbox" id="rbox"></div>
-        <div class="stack">
-          <div class="toggles" id="toggles"></div>
-          <p class="note" id="chart-note"></p>
-        </div>
+      <div class="chart" id="chart" role="img" aria-label="ローソク足と売買プラン"></div>
+      <div class="chart-foot1">
+        <div class="toggles" id="toggles"></div>
+        <p class="note" id="chart-note"></p>
       </div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="section-head"><h3>これまでのシグナルと結果</h3><span class="seg" id="seg-sig-src"></span></div>
+        <div class="tstats" id="sig-stats"></div>
+        <div class="tablebox tall"><table><thead><tr><th>エントリー</th><th class="l">売買</th><th class="num">価格</th><th class="num opt">決済</th><th class="l">結果</th><th class="num">損益 (pips)</th></tr></thead><tbody id="sig-body"></tbody></table></div>
+        <p class="note" id="sig-note"></p>
+      </div>
+      <div class="panel">
+        <div class="section-head"><h3>取引数量の目安</h3><p>損切りに達したときの損失から逆算</p></div>
+        <div class="lot" id="lot"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="section-head"><h3>値動きの予測レンジ (参考)</h3><p>売買プランの損切り・利確の幅の目安に使えます</p></div>
+      <div class="ctl"><span class="ctl-label" id="lbl-h">予想する時点</span><div class="seg big" id="seg-h" role="group" aria-labelledby="lbl-h"></div></div>
+      <div class="answer" id="answer"></div>
+      <div class="chart-foot"><div class="rbox" id="rbox"></div><div></div></div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -586,13 +636,13 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     view: "forecast", pair: "USDJPY", tf: "1h",
     range: { "15m": 32, "1h": 48, "1d": 40 },
     h: { "15m": 4, "1h": 24, "1d": 5 },
-    show: { ma: false, rsi: false }, pastSrc: "auto",
+    show: { ma: false, rsi: false, fan: false, trade: true }, pastSrc: "auto", sigSrc: "auto", lot: { balance: 1000000, risk: 1 },
     trackTf: "1h", trackPair: "ALL", trackMetric: 1, newsCur: "ALL", learnTf: "1h", strengthWin: "24h",
     meta: null, pairs: {}, track: null, news: null, models: null, verify: null, market: null, status: null, rendered: {}
   };
   try {
     var saved = JSON.parse(localStorage.getItem("aifx-view3") || "null");
-    if (saved) { if (saved.show) Object.assign(S.show, saved.show); if (saved.tf) S.tf = saved.tf; if (saved.pair) S.pair = saved.pair; if (saved.h) Object.assign(S.h, saved.h); }
+    if (saved) { if (saved.show) Object.assign(S.show, saved.show); if (saved.tf) S.tf = saved.tf; if (saved.pair) S.pair = saved.pair; if (saved.h) Object.assign(S.h, saved.h); if (saved.lot) Object.assign(S.lot, saved.lot); }
   } catch (e) {}
   function readHash() {
     var h = (location.hash || "").replace("#", "");
@@ -601,7 +651,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     if (/^(USD|EUR|GBP|AUD)(JPY|USD)$/i.test(h)) { S.pair = h.toUpperCase(); S.view = "forecast"; }
   }
   readHash();
-  function persist() { try { localStorage.setItem("aifx-view3", JSON.stringify({ show: S.show, tf: S.tf, pair: S.pair, h: S.h })); } catch (e) {} }
+  function persist() { try { localStorage.setItem("aifx-view3", JSON.stringify({ show: S.show, tf: S.tf, pair: S.pair, h: S.h, lot: S.lot })); } catch (e) {} }
 
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -760,8 +810,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       var b = el("button", "pchip"); b.type = "button"; b.setAttribute("aria-pressed", String(p.pair === S.pair));
       var r1 = el("span", "code"); r1.appendChild(el("span", null, p.label)); r1.appendChild(el("span", "chg num " + dirClass(p.change_24h_pct), signed(p.change_24h_pct, 2, "%")));
       b.appendChild(r1); b.appendChild(el("span", "px num", fmt(p.price, p.decimals)));
-      var o = (p.outlook && p.outlook["1h"]) ? p.outlook["1h"][p.outlook["1h"].length - 1] : null;
-      b.appendChild(el("span", "rng", o && o.hi80 != null ? "24時間 ±" + fmt((o.hi80 - o.lo80) / 2 / p.pip, 0) + " pips" : "予測準備中"));
+      var sg = p.signal ? p.signal[S.tf] : null;
+      b.appendChild(el("span", "sig " + (sg > 0 ? "up" : sg < 0 ? "down" : "flat"), sg > 0 ? "▲ 買い" : sg < 0 ? "▼ 売り" : sg === 0 ? "見送り" : "—"));
       b.setAttribute("aria-label", p.label + " " + fmt(p.price, p.decimals));
       b.addEventListener("click", function () { S.pair = p.pair; persist(); try { history.replaceState(null, "", "#" + p.pair); } catch (e) {} renderRail(); loadPair().then(renderPairAll); });
       rail.appendChild(b);
@@ -884,12 +934,14 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   }
 
   var TOGGLES = [
+    { key: "trade", label: "売買プラン" },
+    { key: "fan", label: "予測レンジ" },
     { key: "ma", label: "移動平均 (20・75本)" },
     { key: "rsi", label: "RSI" }
   ];
   function renderToggles() {
     var t = tokens(); var host = clear($("toggles"));
-    host.appendChild(el("span", "ctl-label", "追加で表示"));
+    host.appendChild(el("span", "ctl-label", "チャートに表示"));
     TOGGLES.forEach(function (g) {
       var b = el("button", "tog"); b.type = "button"; b.setAttribute("aria-pressed", String(!!S.show[g.key]));
       b.appendChild(el("span", "box", S.show[g.key] ? "✓" : "")); b.appendChild(el("span", null, g.label));
@@ -898,12 +950,170 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     });
     var lg = clear($("chart-legend"));
     function key(cls, style, label) { var s = el("span"); var k = el("i", cls); if (style) k.setAttribute("style", style); s.appendChild(k); s.appendChild(el("span", null, label)); lg.appendChild(s); }
-    key("key box", "background:" + bandSwatch(t, "50"), "50%");
-    key("key box", "background:" + bandSwatch(t, "80"), "80%");
-    key("key box", "background:" + bandSwatch(t, "95"), "95%の確率で入る範囲");
-    key("key dash", "border-color:" + t.accent, "予想の中心");
+    var TB = curBlock() && curBlock().trade;
+    if (S.show.trade && TB && (TB.rule || activeTrade(TB))) {
+      key("key box", "background:" + alpha(t.good, 0.25), "利確ゾーン");
+      key("key box", "background:" + alpha(t.bad, 0.22), "損切りゾーン");
+      key("key", "border-color:" + t.up + ";border-top-width:0;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid " + t.up, "買い");
+      key("key", "border-color:" + t.down + ";border-top-width:0;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:10px solid " + t.down, "売り");
+      key("key dotk", "background:" + t.good, "利確");
+      key("key diak", "background:" + t.bad, "損切り");
+    }
+    if (S.show.fan) {
+      key("key box", "background:" + bandSwatch(t, "80"), "80%の範囲");
+      key("key dash", "border-color:" + t.accent, "予想の中心");
+    }
     key("key", "border-color:" + t.ink2, "現在値");
     if (S.show.ma) { key("key", "border-color:" + t.ma20, "20本平均"); key("key", "border-color:" + t.ma75, "75本平均"); }
+  }
+
+  /* ---------------- trade plan ---------------- */
+  var TF_NAME = { "15m": "15分足", "1h": "1時間足", "1d": "日足" };
+  function sigList(T) {
+    var live = (T.live && T.live.trades) || [], bt = (T.bt && T.bt.trades) || [];
+    var src = S.sigSrc === "auto" ? (live.filter(function (x) { return x.how; }).length >= 10 ? "live" : "bt") : S.sigSrc;
+    return { src: src, list: src === "live" ? live : bt, stats: src === "live" ? (T.live || {}).stats : (T.bt || {}).stats };
+  }
+  function pipYen(p) {   // yen value of one pip for one unit of the pair
+    if (p.pair.slice(3) === "JPY") return p.pip;
+    var uj = pairInfo("USDJPY"); return p.pip * (uj && uj.price ? uj.price : 150);
+  }
+  function activeTrade(T) {   // an open recorded position, else the current signal
+    if (T.live && T.live.open) return Object.assign({ open: true }, T.live.open, { until: T.live.open.until || T.plan.until });
+    if (T.plan.dir && T.plan.sl != null) return { open: false, dir: T.plan.dir, entry: T.plan.p0, sl: T.plan.sl, tp: T.plan.tp, until: T.plan.until, origin: T.plan.origin, x: null };
+    return null;
+  }
+  function renderTrade() {
+    var p = curPair(); var blk = curBlock(); var box = clear($("tcard")); box.className = "tcard";
+    if (!p || !blk || !blk.trade) { box.appendChild(el("div", "k", "この時間足の売買プランはまだありません。次のサーバー処理で作成されます。")); return; }
+    var T = blk.trade, P = T.plan, R = T.rule, d = p.decimals, cur = p.quote && p.quote.price ? p.quote.price : P.p0;
+    var A = activeTrade(T);
+    var dir = A ? A.dir : 0;
+    box.className = "tcard" + (dir > 0 ? " buy" : dir < 0 ? " sell" : "");
+    var row = el("div", "trow");
+    var badge = el("span", "badge " + (dir > 0 ? "buy" : dir < 0 ? "sell" : "none"), dir > 0 ? "▲ 買い" : dir < 0 ? "▼ 売り" : R ? "見送り" : "シグナルなし");
+    row.appendChild(badge);
+    var ttl = el("div", "ttl");
+    ttl.appendChild(el("b", null, R ? TF_NAME[S.tf] + "「" + R.name + "」ルール" + (A && A.open ? " · 保有中" : "") : TF_NAME[S.tf] + "の売買ルールはありません"));
+    if (!R) ttl.appendChild(el("span", null, "15分足は検証に使える期間が短いため、売買シグナルは出していません。下の水準は損切り・利確の目安です。"));
+    row.appendChild(ttl);
+    if (R && R.research) row.appendChild(el("span", "chip " + (R.research.tier === "strong" ? "good" : "warn"), R.research.tier === "strong" ? "検証済み" : "参考シグナル · 信頼度 弱"));
+    box.appendChild(row);
+    function pipsOf(v) { return pips(v, p); }
+    if (A) {
+      var lv = el("div", "lvls");
+      function tile(cls, l, v, dd) { var x = el("div", "tile " + cls); x.appendChild(el("span", "l", l)); x.appendChild(el("span", "v", v)); if (dd) x.appendChild(el("span", "d", dd)); lv.appendChild(x); }
+      tile("en", A.open ? "エントリー (" + jstShort(A.origin) + ")" : "エントリー", fmt(A.entry, d), A.open ? "現在 " + signed(dir * pipsOf(cur - A.entry), 1) + " pips" : "今の価格 " + fmt(cur, d));
+      tile("tp", "利確", fmt(A.tp, d), signed(dir * pipsOf(A.tp - A.entry), 0) + " pips");
+      tile("sl", "損切り", fmt(A.sl, d), signed(dir * pipsOf(A.sl - A.entry), 0) + " pips");
+      tile("lim", "期限 (決済)", A.until ? (TF_MIN[S.tf] ? jstShort(A.until) : jstShort(A.until).split(" ")[0]) : "—", R ? "最長 " + R.hold + (S.tf === "1d" ? "営業日" : "時間") : "");
+      box.appendChild(lv);
+      var up = Math.abs(pipsOf(A.tp - A.entry)), dn = Math.abs(pipsOf(A.sl - A.entry));
+    } else {
+      var why = el("div", "tlines");
+      if (R) why.appendChild(el("div", null, "今はルールの条件を満たしていません: " + ruleReason(R, P, blk, p) + "。"));
+      box.appendChild(why);
+      var L = P.levels;
+      if (L && L.buy) {
+        var both = el("div", "both");
+        [["buy", "買う場合"], ["sell", "売る場合"]].forEach(function (k) {
+          var x = L[k[0]]; var sd = el("div", "side"); sd.appendChild(el("b", k[0] === "buy" ? "up" : "down", (k[0] === "buy" ? "▲ " : "▼ ") + k[1]));
+          sd.appendChild(el("span", "num", "利確 " + fmt(x.tp, d) + " (" + signed((k[0] === "buy" ? 1 : -1) * pipsOf(x.tp - P.p0), 0) + ")"));
+          sd.appendChild(el("span", "num", "損切り " + fmt(x.sl, d) + " (" + signed((k[0] === "buy" ? 1 : -1) * pipsOf(x.sl - P.p0), 0) + ")"));
+          both.appendChild(sd);
+        });
+        box.appendChild(both);
+        box.appendChild(el("div", "twarn", "ATR (最近の平均的な値幅) の " + L.sl_mult + " 倍で損切り、" + L.tp_mult + " 倍で利確、最長 " + L.hold + " 本で決済する目安です。方向を当てる根拠はないため、この水準だけで売買しても期待値はほぼ「0 − 取引コスト」です。"));
+      }
+    }
+    if (R) {
+      var rs = R.research; var bt = T.bt && T.bt.stats; var lv2 = T.live && T.live.stats;
+      if (rs && rs.test) {
+        var one = el("div", "tlines");
+        one.appendChild(el("div", null, "検証の成績: 勝率 " + pct(rs.test.win) + "、1回平均 " + signed(rs.test.pips, 1) + " pips (コスト込み・" + Math.round(rs.test.n).toLocaleString() + "回)" +
+          (bt && bt.n ? " · 直近" + T.bt.days + "日: 勝率 " + pct(bt.win) + "、平均 " + signed(bt.avg_pips, 1) + " pips" : "")));
+        box.appendChild(one);
+      }
+      var det = el("details", "why"); det.appendChild(el("summary", null, "ルールの中身・成績・注意点")); var st = el("div");
+      st.appendChild(el("div", null, "ルール: " + R.desc + "。損切りは ATR (最近の平均的な値幅) の " + R.sl + " 倍、利確は " + R.tp + " 倍、最長 " + R.hold + (S.tf === "1d" ? " 営業日" : " 時間") + "保有します。"));
+      if (A) st.appendChild(el("div", null, "利確までの幅 " + fmt(up, 0) + " pips、損切りまでの幅 " + fmt(dn, 0) + " pips (損益比 1 : " + fmt(up / dn, 2) + ")。期限までにどちらにも届かなければ、期限の時点で決済します。"));
+      if (A && !A.open && !P.recorded) st.appendChild(el("div", null, "このプランは以前の版で作られた予測に対して表示用に計算したもので、台帳にはまだ記録されていません。次の予測から台帳に記録します。"));
+      if (rs && rs.test) st.appendChild(el("div", null, "長期の検証 (" + String(rs.split).slice(0, 7).replace("-", "/") + "〜" + String(rs.end).slice(0, 7).replace("-", "/") + "、7ペア): " + Math.round(rs.test.n).toLocaleString() + "回、勝率 " + pct(rs.test.win) + "、1回平均 " + signed(rs.test.pips, 1) + " pips (コスト・スワップ込み)"));
+      if (bt && bt.n) st.appendChild(el("div", null, "直近" + T.bt.days + "日 (" + p.label + "): " + bt.n + "回、勝率 " + pct(bt.win) + "、1回平均 " + signed(bt.avg_pips, 1) + " pips、合計 " + signed(bt.total_pips, 0) + " pips"));
+      st.appendChild(el("div", null, "台帳に記録したシグナル: " + (lv2 && lv2.n ? lv2.n + "回、勝率 " + pct(lv2.win) + "、合計 " + signed(lv2.total_pips, 0) + " pips" : "まだ決済されたものはありません")));
+      st.appendChild(el("div", null, "参考シグナル: 検証ではコスト込みでも小さなプラスでしたが、統計的に確かと言えるほどではなく、急な円高などで損切りが続く時期もあります。スワップやスプレッドは業者によって違います。"));
+      if (S.meta && S.meta.repo) { var lk = el("a", null, "売買ルールの検証レポート"); lk.href = S.meta.repo + "/blob/HEAD/research/trade.md"; lk.target = "_blank"; lk.rel = "noopener"; var dl = el("div"); dl.appendChild(lk); st.appendChild(dl); }
+      det.appendChild(st); box.appendChild(det);
+    }
+  }
+  function ruleReason(R, P, blk, p) {
+    var parts = [];
+    var cur2 = p.pair.slice(0, 3), q = p.pair.slice(3);
+    if (P.diff == null) parts.push("金利データがまだありません");
+    else parts.push("金利差 (" + cur2 + " − " + q + ") " + signed(P.diff, 2, "%") + " (条件は ±" + (R.key === "carry" ? "2" : "1") + "% 以上)");
+    if (R.key === "carry_mom") {
+      var c = blk.bars.ohlc; var n = c.length;
+      if (n > 121) { var m = c[n - 1][1] / c[n - 121][1] - 1; parts.push("過去120時間の値動き " + signed(m * 100, 2, "%") + (P.diff != null && Math.abs(P.diff) >= 1 && (m > 0) !== (P.diff > 0) ? " (金利差と逆向き)" : "")); }
+    }
+    return parts.join("、");
+  }
+  function renderSignals() {
+    var p = curPair(); var blk = curBlock(); var body = clear($("sig-body")); var stbox = clear($("sig-stats"));
+    var T = blk && blk.trade;
+    if (!T || !T.rule) { $("sig-note").textContent = "この時間足には売買ルールがありません。"; segment($("seg-sig-src"), [], function () {}, function () {}); return; }
+    var info = sigList(T); var d = p.decimals;
+    segment($("seg-sig-src"), [{ label: "自動", value: "auto" }, { label: "台帳の記録", value: "live" }, { label: "バックテスト", value: "bt" }], function () { return S.sigSrc; }, function (v) { S.sigSrc = v; renderSignals(); renderChart(); });
+    var sst = info.stats || { n: 0 };
+    function tile(l, v, cls) { var x = el("div", "tile"); x.appendChild(el("span", "l", l)); x.appendChild(el("span", "v" + (cls ? " " + cls : ""), v)); stbox.appendChild(x); }
+    tile("決済した回数", String(sst.n || 0));
+    tile("勝率", sst.n ? pct(sst.win) : "—");
+    tile("1回平均", sst.n ? signed(sst.avg_pips, 1) + " pips" : "—", sst.avg_pips > 0 ? "good" : sst.avg_pips < 0 ? "bad" : "");
+    tile("合計", sst.n ? signed(sst.total_pips, 0) + " pips" : "—", sst.total_pips > 0 ? "good" : sst.total_pips < 0 ? "bad" : "");
+    var HOW = { tp: ["利確", "good"], sl: ["損切り", "bad"], time: ["期限", "flat"] };
+    info.list.slice().reverse().forEach(function (x) {
+      var tr = el("tr");
+      tr.appendChild(el("td", "num", TF_MIN[S.tf] ? jstShort(x.origin) : dayShort(x.x)));
+      var c1 = el("td", "l"); c1.appendChild(el("span", "chip " + (x.dir > 0 ? "up" : "down"), x.dir > 0 ? "▲ 買い" : "▼ 売り")); tr.appendChild(c1);
+      tr.appendChild(el("td", "num", fmt(x.entry, d)));
+      tr.appendChild(el("td", "num opt", x.exit != null ? fmt(x.exit, d) : "—"));
+      var c2 = el("td", "l"); var hw = HOW[x.how] || ["保有中", "accent"]; c2.appendChild(el("span", "chip " + hw[1], hw[0])); tr.appendChild(c2);
+      tr.appendChild(el("td", "num " + (x.pips > 0 ? "good" : x.pips < 0 ? "bad" : ""), x.pips != null ? signed(x.pips, 1) : "—"));
+      body.appendChild(tr);
+    });
+    if (!info.list.length) { var r = el("tr"); var c = el("td", "l", info.src === "live" ? "台帳に記録したシグナルはまだありません。" : "この期間にシグナルはありませんでした。"); c.colSpan = 6; r.appendChild(c); body.appendChild(r); }
+    $("sig-note").textContent = (info.src === "live" ? "結果が出る前に台帳へ記録したシグナルを、保存済みの価格で判定しています。" :
+      "保存済みの過去データでルールをそのまま再現したバックテストです (直近" + T.bt.days + "日)。") +
+      "損益はスプレッド " + T.cost_pips + " pips とスワップ (金利差 − " + T.swap_markup + "%) を含みます。1本の足の中で利確と損切りの両方に届いたときは損切りとしています。";
+  }
+  function renderLot() {
+    var p = curPair(); var blk = curBlock(); var host = clear($("lot"));
+    if (!p || !blk || !blk.trade) return;
+    var T = blk.trade; var A = activeTrade(T); var L = T.plan.levels || {};
+    var entry = A ? A.entry : T.plan.p0; var sl = A ? A.sl : (L.buy ? L.buy.sl : null); var tp = A ? A.tp : (L.buy ? L.buy.tp : null);
+    if (sl == null) { host.appendChild(el("div", "muted small", "損切りの水準がまだありません。")); return; }
+    var ins = el("div", "inputs");
+    function input(label, key, step) {
+      var lab = el("label"); lab.appendChild(el("span", null, label)); var i = el("input"); i.type = "number"; i.inputMode = "decimal"; i.step = step; i.min = "0"; i.value = S.lot[key];
+      i.addEventListener("input", function () { var v = parseFloat(i.value); if (isFinite(v) && v >= 0) { S.lot[key] = v; persist(); out(); } });
+      lab.appendChild(i); ins.appendChild(lab);
+    }
+    input("口座の資金 (円)", "balance", "10000"); input("1回で許せる損失 (%)", "risk", "0.1");
+    host.appendChild(ins);
+    var o = el("div", "out"); host.appendChild(o);
+    var note = el("p", "note"); host.appendChild(note);
+    function out() {
+      clear(o);
+      var slp = Math.abs(pips(entry - sl, p)); var py = pipYen(p);
+      var units = Math.floor(S.lot.balance * S.lot.risk / 100 / (slp * py) / 1000) * 1000;
+      var price = p.pair.slice(3) === "JPY" ? entry : entry * (pairInfo("USDJPY") || { price: 150 }).price;
+      function tile(l, v, dd) { var x = el("div", "tile"); x.appendChild(el("span", "l", l)); x.appendChild(el("span", "v", v)); if (dd) x.appendChild(el("span", "d", dd)); o.appendChild(x); }
+      tile("数量の目安", units.toLocaleString() + " 通貨", (units / 10000).toFixed(1) + " 万通貨");
+      tile("損切り時の損失", "約 " + Math.round(units * slp * py).toLocaleString() + " 円", fmt(slp, 0) + " pips");
+      tile("利確時の利益", tp != null ? "約 " + Math.round(units * Math.abs(pips(tp - entry, p)) * py).toLocaleString() + " 円" : "—", tp != null ? fmt(Math.abs(pips(tp - entry, p)), 0) + " pips" : "");
+      tile("必要な証拠金 (25倍)", "約 " + Math.round(units * price / 25).toLocaleString() + " 円");
+      note.textContent = (A ? "今の" + (A.dir > 0 ? "買い" : "売り") + "プラン" : "買う場合の水準") + "の損切り幅 (" + fmt(slp, 0) + " pips) から計算。" + (p.pair.slice(3) === "JPY" ? "" : "米ドル建ての損益は USD/JPY " + fmt((pairInfo("USDJPY") || {}).price, 2) + " で円に換算。") + "スプレッド・スワップ・滑りは含みません。";
+    }
+    out();
   }
 
   function pastList(blk, h) {
@@ -936,14 +1146,14 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     }
     var series = [];
     var marks = [{ yAxis: cur, lineStyle: { color: t.ink2, width: 1, type: "solid" }, label: { position: "end", formatter: fmt(cur, p.decimals), color: t.surface, backgroundColor: t.ink2 } }];
-    if (steps.length) marks.push({ xAxis: xs[hIdx], lineStyle: { color: t.accent, width: 1.5, type: "solid" }, label: { position: "insideEndTop", formatter: H ? H.label : "", color: t.accent, fontSize: 11.5, fontWeight: 600, backgroundColor: "transparent" } });
+    if (steps.length && S.show.fan) marks.push({ xAxis: xs[hIdx], lineStyle: { color: t.accent, width: 1.5, type: "solid" }, label: { position: "insideEndTop", formatter: H ? H.label : "", color: t.accent, fontSize: 11.5, fontWeight: 600, backgroundColor: "transparent" } });
     (blk.path && blk.path.events || []).filter(function (e) { return e.x && idxOf[e.x] != null; }).slice(0, 6).forEach(function (e) {
       marks.push({ xAxis: e.x, lineStyle: { color: t.warn, width: 1, type: [4, 4] }, label: { position: "insideStartTop", formatter: "指標 " + e.cur, color: t.warn, fontSize: 10.5, backgroundColor: "transparent" } });
     });
     series.push({
       name: "ローソク足", type: "candlestick", data: bars.ohlc.concat(new Array(steps.length).fill("-")), barMaxWidth: 10,
       itemStyle: { color: t.up, color0: t.down, borderColor: t.up, borderColor0: t.down },
-      markArea: steps.length ? { silent: true, itemStyle: { color: t.future }, label: { show: true, position: "insideTopLeft", color: t.muted, fontSize: 11.5, formatter: "予想", offset: [6, 0] }, data: [[{ xAxis: xs[nH] }, { xAxis: xs[N - 1] }]] } : undefined,
+      markArea: steps.length ? { silent: true, itemStyle: { color: t.future }, label: { show: true, position: "insideBottomLeft", color: t.muted, fontSize: 11.5, formatter: "これから", offset: [6, 0] }, data: [[{ xAxis: xs[nH] }, { xAxis: xs[N - 1] }]] } : undefined,
       markLine: { symbol: "none", silent: true, label: { color: t.ink, fontFamily: t.mono, fontSize: 11, padding: [2, 5], borderRadius: 3 }, data: marks }
     });
     if (S.show.ma) {
@@ -951,7 +1161,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series.push({ name: "75本平均", type: "line", data: pad(blk.ind.sma75), symbol: "none", lineStyle: { width: 1.5, color: t.ma75 }, silent: true, z: 2 });
     }
     // forecast fan: full strength up to the selected time, faint after it
-    if (steps.length) {
+    if (steps.length && S.show.fan) {
       [[lastIdx, hIdx, 1], [hIdx, N - 1, 0.4]].forEach(function (part, pi) {
         if (part[1] <= part[0]) return;
         BANDS.forEach(function (b) {
@@ -974,6 +1184,41 @@ aifx audit --state state --sample 20 --external</pre></div></details>
           labelLayout: { moveOverlap: "shiftY" } });
       }
     }
+    // trade plan: take-profit and stop zones up to the time limit, and past signals with their results
+    var T = blk.trade; var sigAt = {};
+    if (S.show.trade && T) {
+      var A = activeTrade(T);
+      if (A) {
+        var x0 = A.open && A.x && idxOf[A.x] != null ? A.x : (T.plan.x_origin && idxOf[T.plan.x_origin] != null ? T.plan.x_origin : xs[lastIdx]);
+        var xu = A.open ? A.x_until : T.plan.x_until; var x1 = xu && idxOf[xu] != null ? xu : xs[N - 1];
+        function lvl(y, color, text, type) {
+          return [{ coord: [x0, y], lineStyle: { color: color, width: 1.5, type: type || "solid" },
+                    label: { show: true, position: "insideEndTop", formatter: text, color: t.ink, backgroundColor: alpha(t.surface, 0.9), padding: [2, 4], borderRadius: 3, fontFamily: t.mono, fontSize: 11 } },
+                  { coord: [x1, y] }];
+        }
+        series.push({ name: "売買プラン", type: "line", data: [], silent: true, z: 5,
+          markArea: { silent: true, data: [
+            [{ xAxis: x0, yAxis: A.entry, itemStyle: { color: alpha(t.good, 0.16) } }, { xAxis: x1, yAxis: A.tp }],
+            [{ xAxis: x0, yAxis: A.entry, itemStyle: { color: alpha(t.bad, 0.13) } }, { xAxis: x1, yAxis: A.sl }]] },
+          markLine: { symbol: "none", silent: true, data: [
+            lvl(A.tp, t.good, "利確 " + fmt(A.tp, p.decimals)), lvl(A.sl, t.bad, "損切り " + fmt(A.sl, p.decimals)),
+            lvl(A.entry, t.ink2, (A.dir > 0 ? "買い " : "売り ") + fmt(A.entry, p.decimals), [5, 4])] } });
+      }
+      var sl2 = sigList(T); var marks2 = [], links = [];
+      sl2.list.forEach(function (x) {
+        var i0 = idxOf[x.x]; if (i0 == null) return;
+        marks2.push({ value: [i0, x.entry], symbol: "triangle", symbolRotate: x.dir > 0 ? 0 : 180, symbolSize: 11, itemStyle: { color: x.dir > 0 ? t.up : t.down, borderColor: t.surface, borderWidth: 1.5 } });
+        (sigAt[i0] = sigAt[i0] || []).push((x.dir > 0 ? "▲ 買い " : "▼ 売り ") + fmt(x.entry, d) + (x.how ? "" : " (保有中)"));
+        var i1 = x.x_exit != null ? idxOf[x.x_exit] : null;
+        if (i1 != null && x.exit != null) {
+          var col = x.how === "tp" ? t.good : x.how === "sl" ? t.bad : t.muted;
+          marks2.push({ value: [i1, x.exit], symbol: x.how === "tp" ? "circle" : x.how === "sl" ? "diamond" : "rect", symbolSize: x.how === "sl" ? 11 : 9, itemStyle: { color: col, borderColor: t.surface, borderWidth: 1.5 } });
+          links.push([{ coord: [i0, x.entry], lineStyle: { color: x.pips >= 0 ? t.good : t.bad, width: 1.2, type: [3, 3] } }, { coord: [i1, x.exit] }]);
+          (sigAt[i1] = sigAt[i1] || []).push({ tp: "利確", sl: "損切り", time: "期限で決済" }[x.how] + " " + fmt(x.exit, d) + " (" + signed(x.pips, 1) + " pips)");
+        }
+      });
+      if (marks2.length) series.push({ name: "シグナル", type: "scatter", data: marks2, z: 9, silent: true, markLine: { symbol: "none", silent: true, label: { show: false }, data: links } });
+    }
     var withRsi = !!S.show.rsi;
     if (withRsi) {
       series.push({ name: "RSI", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pad(blk.ind.rsi14), symbol: "none", lineStyle: { width: 1.5, color: t.ink2 }, silent: true,
@@ -991,6 +1236,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       if (i < nH) {
         var c = bars.ohlc[i]; row("始値", fmt(c[0], d)); row("高値", fmt(c[3], d)); row("安値", fmt(c[2], d)); row("終値", fmt(c[1], d));
         if (S.show.rsi && blk.ind.rsi14[i] != null) row("RSI(14)", fmt(blk.ind.rsi14[i], 1));
+        (sigAt[i] || []).forEach(function (txt) { row("シグナル", txt); });
       } else {
         var s = steps[i - nH];
         row("予想の中心", fmt(s.c, d), t.accent);
@@ -1005,7 +1251,11 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var right = narrow ? 62 : 76;   // room for the latest-price label (7 digits)
     var grids = withRsi ? [{ left: 8, right: right, top: 26, bottom: "26%" }, { left: 8, right: right, top: "79%", bottom: 28 }] : [{ left: 8, right: right, top: 26, bottom: 28 }];
     var xAxes = [{ type: "category", data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { show: !withRsi, color: t.muted, fontSize: 11, hideOverlap: true, formatter: xlabel }, splitLine: { show: false } }];
-    var yAxes = [{ scale: true, position: "right", splitNumber: narrow ? 5 : 7, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 11, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } }];
+    var planLo = null, planHi = null;
+    if (S.show.trade && T) { var A2 = activeTrade(T); if (A2) { planLo = Math.min(A2.sl, A2.tp, A2.entry); planHi = Math.max(A2.sl, A2.tp, A2.entry); } }
+    function padLo(v) { var lo = planLo != null ? Math.min(v.min, planLo) : v.min; var hi = planHi != null ? Math.max(v.max, planHi) : v.max; return lo - (hi - lo) * 0.04; }
+    function padHi(v) { var lo = planLo != null ? Math.min(v.min, planLo) : v.min; var hi = planHi != null ? Math.max(v.max, planHi) : v.max; return hi + (hi - lo) * 0.04; }
+    var yAxes = [{ scale: true, min: padLo, max: padHi, position: "right", splitNumber: narrow ? 5 : 7, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 11, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } }];
     if (withRsi) {
       xAxes.push({ type: "category", gridIndex: 1, data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 11, hideOverlap: true, formatter: xlabel } });
       yAxes.push({ gridIndex: 1, min: 0, max: 100, interval: 50, position: "right", axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10 } });
@@ -1020,8 +1270,9 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series: series
     };
     chartOn("chart").setOption(option, true);
-    $("chart-note").textContent = (blk.path && blk.path.coarse ? "(この予測は以前のバージョンで作られたため、予想時点の間を直線でつないでいます) " : "") +
-      "紫の縦線が選んだ時点で、そこまでの範囲を濃く表示しています。" + (steps.some(function () { return true; }) && (blk.path.events || []).length ? "橙の点線は重要指標の発表時刻。" : "") +
+    $("chart-note").textContent = (S.show.fan && blk.path && blk.path.coarse ? "(この予測は以前のバージョンで作られたため、予想時点の間を直線でつないでいます) " : "") +
+      (S.show.trade ? "緑の帯が利確、赤の帯が損切りまでの範囲で、右端が決済の期限です。▲▼は過去のシグナル、●は利確、◆は損切り、■は期限での決済。" : "") +
+      (S.show.fan ? "紫の網掛けは予測レンジ (" + (H ? H.label : "") + "まで濃く表示)。" : "") + ((blk.path && blk.path.events || []).length ? "橙の点線は重要指標の発表時刻。" : "") +
       (coarseMQ.matches ? "期間はボタンで切り替えます。" : "ドラッグで移動、Ctrl+ホイールで拡大できます。");
   }
 
@@ -1205,7 +1456,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
 
   function renderPairAll() {
     if (S.view !== "forecast") return;
-    renderHead(); renderToggles(); renderChart(); renderCheck(); renderDist(); renderPathTable(); renderDrivers();
+    if (S.meta) renderRail();
+    renderHead(); renderTrade(); renderToggles(); renderChart(); renderSignals(); renderLot(); renderCheck(); renderDist(); renderPathTable(); renderDrivers();
   }
 
   /* ---------------- market analysis ---------------- */

@@ -38,6 +38,7 @@ from .learning import learn, samples_from_ledger
 from .ledger import Ledger, chain_problems, data_file_problems
 from .store import PriceStore, parse_price_lines
 from .timeutil import iso, parse_iso, utcnow
+from .trade import exits as trade_exits
 
 
 class _Committed:
@@ -113,7 +114,7 @@ def verify(root: Path | str) -> dict:
 
     # Headlines and calendar events: fetched_at must equal the committing batch time.
     for path in sorted(com.commits):
-        if path.startswith(("news/", "calendar/")):
+        if path.startswith(("news/", "calendar/", "rates/")):
             owners = com.line_batches(path)
             for i, line in enumerate(com.lines(path), start=1):
                 if not line.strip():
@@ -186,6 +187,15 @@ def verify(root: Path | str) -> dict:
             c = f["g"] * f["c0"] + f["b"] * p["news"]["x"] * sig
             if abs(c0 - f["c0"]) > 2e-3 or abs(c - f["c"]) > 2e-3 or abs(prob_up(f["c"], sig, f.get("nu")) - f["p"]) > 2e-4:
                 add("rule", f"{tag} h={f['h']}: stored numbers are inconsistent")
+        tr = p.get("trade")
+        if tr is not None:
+            ex = trade_exits(p["tf"])
+            if tr.get("dir") not in (-1, 0, 1) or tr["until"] != iso(target_times(tf, origin, (ex["hold"],))[0]):
+                add("rule", f"{tag}: trade plan time limit or direction breaks the rules")
+            elif tr["dir"]:
+                d = tr["dir"]
+                if tr.get("rule") is None or not (d * (p["p0"] - tr["sl"]) > 0 and d * (tr["tp"] - p["p0"]) > 0):
+                    add("rule", f"{tag}: trade plan stop/target on the wrong side of the entry")
 
     scored: dict[tuple[int, int], int] = {}
     n_void = 0
@@ -257,7 +267,10 @@ def _compare(rec: dict, redo: dict) -> dict:
         if a.get("nu") != b.get("nu"):
             worst["p"] = max(worst["p"], 1.0)
     diffs.update(worst)
-    ok = (diffs["p0"] < 1e-9 and diffs["news_x"] < 1e-6 and worst["m"] < 1e-3 and worst["s"] < 1e-6
+    # the trade plan must be what the same inputs give
+    diffs["trade"] = 0.0 if (rec.get("trade") or {}) == (redo.get("trade") or {}) else 1.0
+    worst["trade"] = diffs["trade"]
+    ok = worst["trade"] == 0.0 and (diffs["p0"] < 1e-9 and diffs["news_x"] < 1e-6 and worst["m"] < 1e-3 and worst["s"] < 1e-6
           and worst["w"] < 1e-6 and worst["k"] < 1e-6 and worst["b"] < 1e-6 and worst["g"] < 1e-6
           and worst["c"] < 2e-3 and worst["p"] < 2e-4)
     return {"ok": ok, "diffs": {k: float(f"{v:.3g}") for k, v in diffs.items()}}
@@ -272,11 +285,12 @@ def reconstruct(ledger: Ledger, com: "_Committed", p: dict, pred_map: dict, outc
     ref = com.prices_before(pair.code, tf.ref, p["seq"])
     news_items = com.items_before("news", p["seq"])
     events = com.items_before("calendar", p["seq"])
+    rate_items = com.items_before("rates", p["seq"])
     prior_rec = ledger.by_seq(p["prior"])
     earlier = {s: q for s, q in pred_map.items() if s < p["seq"]}
     samples = samples_from_ledger(earlier, outcomes, tf.key, upto_seq=p["learn"])
     st = learn(prior_rec, samples, tf.horizons, tf.half_life)
-    return make_prediction(tf, pair, bars, ref, origin, news_items, events, p["prior"], p["learn"], st, p["v"])
+    return make_prediction(tf, pair, bars, ref, origin, news_items, events, p["prior"], p["learn"], st, p["v"], rate_items)
 
 
 def audit(root: Path | str, sample: int = 4, seed: str | None = None) -> dict:

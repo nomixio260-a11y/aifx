@@ -62,6 +62,20 @@ def fake_calendar():
     ], None
 
 
+def fake_rates(at):
+    """A rates item like rates.collect_rates makes: USD 4 %, JPY 0.5 %, EUR 2 %, GBP 4.5 %, AUD 4 %."""
+    from aifx.history import RATE_SERIES
+    level = {"USD": 4.0, "JPY": 0.5, "EUR": 2.0, "GBP": 4.5, "AUD": 4.0}
+    series = {}
+    for cur, items in RATE_SERIES.items():
+        for sid, freq in items:
+            step = timedelta(days=1 if freq == "d" else 30)
+            n = 460 if freq == "d" else 30
+            series[sid] = [[(at - step * k).strftime("%Y-%m-%d"), level[cur]] for k in range(n, 0, -1)]
+    day = at.strftime("%Y-%m-%d")
+    return {"id": f"rates-{day}", "date": day, "series": series}, None
+
+
 def run_session(root, cycles=12, step_minutes=30, start=START, **kw):
     from aifx.pipeline import run_cycle
 
@@ -70,6 +84,7 @@ def run_session(root, cycles=12, step_minutes=30, start=START, **kw):
     reports = []
     for i in range(cycles):
         at = start + timedelta(minutes=step_minutes * i)
+        kw.setdefault("rates_fetch", fake_rates)
         reports.append(run_cycle(root, now=at, market=mk, news_fetch=fake_news, calendar_fetch=fake_calendar,
                                  pairs=["USDJPY", "EURUSD"], log=None, **kw))
     return reports

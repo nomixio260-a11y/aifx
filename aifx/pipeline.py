@@ -18,13 +18,14 @@ from pathlib import Path
 import pandas as pd
 
 from . import backtest
+from . import rates as ratesmod
 from . import news as newsmod
 from .data import PAIRS, SETTLE, Pair, YahooMarket
 from .engine import TIMEFRAMES, Timeframe, backtest_prior, target_times
 from .forecaster import MAX_ORIGIN_AGE, make_prediction, model_version, origin_of
 from .learning import learn, samples_from_ledger
 from .ledger import DataFiles, Ledger
-from .store import CalendarStore, NewsStore, PriceStore
+from .store import CalendarStore, NewsStore, PriceStore, RatesStore
 from .timeutil import add_business_days, iso, london_day_end, parse_iso, utcnow
 
 
@@ -36,6 +37,7 @@ class State:
     prices: PriceStore
     news: NewsStore
     calendar: CalendarStore
+    rates: RatesStore
 
     @classmethod
     def open(cls, root: Path | str) -> "State":
@@ -46,7 +48,7 @@ class State:
             ignore.write_text("cache/\n", encoding="utf-8")
         ledger = Ledger(root).load()
         files = DataFiles(root, ledger)
-        return cls(root, ledger, files, PriceStore(files), NewsStore(files), CalendarStore(files))
+        return cls(root, ledger, files, PriceStore(files), NewsStore(files), CalendarStore(files), RatesStore(files))
 
     def cache_path(self, name: str) -> Path:
         p = self.root / "cache" / name
@@ -123,7 +125,7 @@ def _need_prior(state: State, tf: Timeframe, anchor: datetime, version: str) -> 
 
 
 def run_cycle(root: Path | str, now: datetime | None = None, market=None, collect_news=True,
-              news_fetch=None, calendar_fetch=None, pairs: list[str] | None = None,
+              news_fetch=None, calendar_fetch=None, rates_fetch=None, pairs: list[str] | None = None,
               timeframes=None, log=print, backtest_budget: int | None = None) -> CycleReport:
     """Run one cycle against the state directory ``root``."""
     state = State.open(root)
@@ -197,6 +199,13 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
         for err in [e["error"] for e in src_report.values() if e.get("error")] + [cal_err]:
             if err:
                 report.errors.append(err)
+        # short rates for the carry rules: once a day
+        if not any(it["date"] == at.strftime("%Y-%m-%d") for it in state.rates.load(since=at - timedelta(days=2))):
+            item, rate_err = (rates_fetch or ratesmod.collect_rates)(at)
+            if item is not None:
+                state.rates.append([item], at)
+            if rate_err:
+                report.errors.append(rate_err)
 
     # 3. commit inputs -----------------------------------------------------
     state.files.commit(at, {"cycle": {"version": version, "git": os.environ.get("GITHUB_SHA", "")[:12],
@@ -229,6 +238,7 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
     learn_seq = outcome_recs[-1]["seq"] if outcome_recs else 0
     news_items = state.news.load(since=at - timedelta(days=4))
     events = state.calendar.load(since=at - timedelta(days=40))
+    rate_items = state.rates.load(since=at - timedelta(days=40))
     latest = state.read_cache("latest.json", {})
     for tf in tfs:
         prior_rec = _latest(state.ledger.records, type="prior", tf=tf.key)
@@ -249,7 +259,7 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
                 continue    # the next bar has already closed: a forecast for it would not be ahead of time
             try:
                 rec, chart = make_prediction(tf, pair, bars, ref, origin, news_items, events,
-                                             prior_rec["seq"], learn_seq, st, version)
+                                             prior_rec["seq"], learn_seq, st, version, rate_items)
             except Exception as exc:
                 report.errors.append(f"{pair.code} {tf.key} forecast: {exc}")
                 traceback.print_exc()

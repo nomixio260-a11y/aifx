@@ -148,10 +148,13 @@ def cmd_status(args) -> int:
 
 
 def cmd_research(args) -> int:
-    from . import history, research, research_intraday
+    from . import history, research, research_intraday, research_trade
 
     if args.download:
         history.download()
+        return 0
+    if args.trade:
+        research_trade.run()
         return 0
     if args.intraday:
         research_intraday.run(workers=args.workers)
@@ -220,6 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("research", help="過去データで検証し research/report.md を作成 (台帳とは別)")
     r.add_argument("--download", action="store_true", help="過去の価格 (Yahoo Finance) と短期金利 (FRED) を data/history/ に取得")
     r.add_argument("--intraday", action="store_true", help="15分足・5分足 (直近約60日) の検証 (research/intraday.md)")
+    r.add_argument("--trade", action="store_true", help="売買ルールの検証 (コスト込み、research/trade.md)")
     r.add_argument("--workers", type=int, default=4)
     r.set_defaults(func=cmd_research)
 
