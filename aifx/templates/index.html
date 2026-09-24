@@ -976,7 +976,7 @@ aifx audit --state state --sample 20 --external</pre>
     lead.appendChild(document.createTextNode("上の表: 検証期間の「誤差の改善率 (変化なし比) / 方向の的中率」。太字は統計的に有意な差 (p<0.05)。下の表: 予測レンジの的中率 (従来の方式 → 現在の方式、名目は50/80/95%)。日足は2002年から、1時間足は約2年分のデータで試しても、方向を「変化なし」より安定して当てる方法は見つかりませんでした。そのため中心値は「変化なし」付近に保ち、予測レンジの精度を高めています。"));
     if (S.meta && S.meta.repo) {
       lead.appendChild(document.createTextNode(" "));
-      var a = el("a", null, "詳しいレポート"); a.href = S.meta.repo + "/blob/main/" + res.report; a.target = "_blank"; a.rel = "noopener"; lead.appendChild(a);
+      var a = el("a", null, "詳しいレポート"); a.href = S.meta.repo + "/blob/HEAD/" + res.report; a.target = "_blank"; a.rel = "noopener"; lead.appendChild(a);
     }
     var hr = el("tr"); hr.appendChild(el("th", null, "方法"));
     hs.forEach(function (h) { hr.appendChild(el("th", "num", tfLabel(tf, Number(h)))); }); head.appendChild(hr);
