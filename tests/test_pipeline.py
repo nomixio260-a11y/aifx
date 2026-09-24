@@ -159,6 +159,14 @@ def test_api_documents_are_strict_json(session, tmp_path):
     assert meta["ledger"]["ok"] and meta["pairs"] and meta["pairs"][0]["outlook"]["1h"]
     pair = json.loads((site / "api" / "pair" / "USDJPY.json").read_text())
     assert pair["tf"]["1h"]["path"]["steps"] and pair["tf"]["1h"]["prediction"]["horizons"]
+    h = pair["tf"]["1h"]["prediction"]["horizons"][-1]
+    assert h["lo95"] < h["lo80"] < h["lo50"] < h["hi50"] < h["hi80"] < h["hi95"]
+    assert h["dist"]["levels"] and h["dist"]["curve"]
+    market = json.loads((site / "api" / "market.json").read_text())
+    assert market["pairs"] and all(x["volatility"] is None or 0 <= x["volatility"]["percentile"] <= 1
+                                   for x in market["pairs"])
+    if len(market["pairs"]) >= 3:        # relative strength needs enough pairs to be identified
+        assert set(market["strength"]["24h"]) == {"USD", "JPY", "EUR", "GBP", "AUD"}
     html = (site / "index.html").read_text()
     assert html.startswith("<!doctype html>") and "meta.json" in html and "<title>AIFX 為替予測</title>" in html
 

@@ -31,7 +31,7 @@ from .data import CURRENCIES, http_get
 from .store import stable_id
 from .timeutil import UTC, iso, parse_iso
 
-ANALYZER = "lexicon-v1"
+ANALYZER = "lexicon-v2"
 TAU_HOURS = 12.0
 LOOKBACK_HOURS = 48.0
 SHRINK = 3.0
@@ -188,13 +188,21 @@ EN_YIELD_DOWN = r"\b(?:treasury|u\.?s\.?|us|10-year|bond) yields? (?:fall|falls|
 EN_RISK_OFF = r"\b(?:war|attacks?|missiles?|airstrikes?|conflict|invasion|sanctions|crisis|turmoil|sell-?off|crash|panic|safe[- ]haven|geopolitic\w*|tensions|escalat\w*|trade war|shutdown|default)\b"
 EN_RISK_ON = r"\b(?:stocks? rally|risk appetite|risk-on|ceasefire|truce|trade deal|deal reached)\b"
 EN_INTERVENE = r"\b(?:interven\w+|rate checks?)\b"
+EN_VERBAL = r"\bwarns? (?:against|over|about)\b|\b(?:excessive|rapid|speculative|one-sided) (?:yen |currency |fx )?moves?\b|\bclosely watching\b"
+# Words that turn a policy cue around: "no rush to cut", "unlikely to hike", "pare bets on cuts", "cut bets fade".
+EN_REVERSE_BEFORE = re.compile(r"\b(?:no rush to|not (?:in a )?(?:hurry|rush) to|unlikely to|won't|will not|no plans? to|rules? out|ruled out|"
+                               r"push(?:es|ed)? back (?:on|against)|dismiss\w*|reject\w*|paus\w*|halt\w*|end(?:s|ed|ing)?|done with|"
+                               r"scal\w* back|par(?:e|es|ed|ing)|trim\w*|dial\w* back|unwind\w*|fewer|less likely)\s+(?:[\w\-]+\s+){0,3}$")
+EN_REVERSE_AFTER = re.compile(r"[\s\-]*(?:[\w\-]+\s+){0,2}(?:bets?|expectations?|hopes?|odds|pricing|fears?)?\s*"
+                              r"(?:fade[sd]?|recede[sd]?|wane[sd]?|dwindl\w*|diminish\w*|evaporat\w*|pared|trimmed|scaled back|unwound|"
+                              r"off the table|priced out|ruled out)")
 EN_POLITICS = r"\b(?:election|snap poll|resign\w*|no-confidence|political (?:crisis|turmoil|uncertainty)|government collapse|impeach\w*)\b"
 
 JA_ENT = {
     "USD": ["米ドル", "米国", "米連邦", "FRB", "FOMC", "パウエル", "米金利", "米長期金利", "米国債", "米雇用", "米CPI",
             "米消費者物価", "米経済", "トランプ", "米財務", "米GDP", "米小売", "米"],
     "JPY": ["円相場", "円安", "円高", "円買い", "円売り", "円急落", "円急伸", "円急騰", "円反発", "円反落", "円続落",
-            "円続伸", "円上昇", "円下落", "円キャリー", "日銀", "日本銀行", "植田", "為替介入", "財務省", "財務官",
+            "円続伸", "円上昇", "円下落", "円キャリー", "日銀", "日本銀行", "植田", "為替介入", "財務省", "財務官", "財務相",
             "日本国債", "高市", "日本経済"],
     "EUR": ["ユーロ", "ECB", "欧州中銀", "欧州中央銀行", "ラガルド", "ユーロ圏", "ドイツ", "欧州"],
     "GBP": ["ポンド", "英国", "英中銀", "イングランド銀行", "BOE", "ベイリー", "英"],
@@ -204,6 +212,8 @@ JA_MOVES = [  # longest first; (text, {currency: value})
     ("円安修正", {"JPY": 1}), ("円安是正", {"JPY": 1}), ("円安一服", {"JPY": 0.5}),
     ("円高修正", {"JPY": -1}), ("円高一服", {"JPY": -0.5}),
     ("ドル高一服", {"USD": -0.5}), ("ドル安一服", {"USD": 0.5}),
+    ("豪ドル買い", {"AUD": 1}), ("豪ドル売り", {"AUD": -1}), ("ユーロ買い", {"EUR": 1}), ("ユーロ売り", {"EUR": -1}),
+    ("ポンド買い", {"GBP": 1}), ("ポンド売り", {"GBP": -1}), ("ドル買い", {"USD": 1}), ("ドル売り", {"USD": -1}),
     ("豪ドル高", {"AUD": 1}), ("豪ドル安", {"AUD": -1}),
     ("ユーロ高", {"EUR": 1}), ("ユーロ安", {"EUR": -1}),
     ("ポンド高", {"GBP": 1}), ("ポンド安", {"GBP": -1}),
@@ -220,17 +230,24 @@ JA_PAIRS = [("豪ドル円", "AUD", "JPY"), ("ユーロ円", "EUR", "JPY"), ("�
 JA_CUR_MOVE = re.compile(r"(豪ドル|ユーロ|ポンド|ドル|円)(?:相場)?(?:は|が|も)\s?"
                          r"(?:(?P<down>急落|続落|下落|反落|軟調|売られ|弱含)|(?P<up>急伸|急騰|続伸|上昇|反発|堅調|買われ|強含))")
 JA_CUR_CODE = {"豪ドル": "AUD", "ユーロ": "EUR", "ポンド": "GBP", "ドル": "USD", "円": "JPY"}
+# "円相場、1ドル=160円台に下落": the yen rate moved, even with words in between.
+JA_YEN_RATE = re.compile(r"円相場[^。]{0,16}?(?:(?P<down>急落|続落|下落|反落)|(?P<up>急伸|急騰|続伸|上昇|反発))")
+JA_NOT_MOVE = re.compile(r"(?:に|へ|と|は)?(?:つながらず|つながらない|ならず|ならない|至らず|限定的|見込めず|進まず)")
 JA_PAIR_UP = re.compile(r"^(?:相場)?(?:が|は)?\s?(?:上昇|続伸|急伸|反発|高|上伸)")
 JA_PAIR_DOWN = re.compile(r"^(?:相場)?(?:が|は)?\s?(?:下落|続落|急落|反落|安|下押し)")
 JA_HAWK = r"利上げ|引き締め|タカ派|インフレ加速|物価上昇|物価高"
 JA_DOVE = r"利下げ|金融緩和|緩和|ハト派|景気後退|景気減速|減速|物価下落"
-JA_BEAT = r"予想(?:を)?上回|上振れ|好調|改善"
-JA_MISS = r"予想(?:を)?下回|下振れ|悪化|低迷"
+JA_BEAT = r"予想(?:を)?(?:大幅に|大きく|やや|わずかに)?上回|上振れ|好調|改善"
+JA_MISS = r"予想(?:を)?(?:大幅に|大きく|やや|わずかに)?下回|下振れ|悪化|低迷"
+# A policy cue followed by one of these means the opposite: "利上げ観測が後退", "利下げを急がず", "利上げ見送り".
+JA_REVERSE = re.compile(r"(?:観測|期待|予想|見通し|機運|織り込み|姿勢)?(?:の|が|は|を|も)?\s?"
+                        r"(?:後退|遠の|剥落|はく落|見送|急が|慎重|否定|打ち消|織り込み過ぎ|せず|しない|休止|停止|終了|縮小|解除|出口|修正)")
 JA_YIELD_UP = r"米(?:国)?の?(?:長期)?金利(?:が|は)?[^、。]{0,6}(?:上昇|高水準|最高)|米国債利回り(?:が|は)?[^、。]{0,4}上昇"
 JA_YIELD_DOWN = r"米(?:国)?の?(?:長期)?金利(?:が|は)?[^、。]{0,6}(?:低下|下落)|米国債利回り(?:が|は)?[^、。]{0,4}低下"
 JA_RISK_OFF = r"地政学|紛争|戦争|攻撃|ミサイル|暴落|リスクオフ|有事|緊張|制裁(?!金)|関税"
 JA_RISK_ON = r"株高|最高値|リスクオン|停戦|合意"
 JA_INTERVENE = r"為替介入|介入|レートチェック"
+JA_VERBAL = r"けん制|牽制|過度な変動|投機的な動き|憂慮"
 JA_POLITICS = r"解散|総選挙|辞任|政局|不信任"
 
 RISK_OFF_EFFECT = {"JPY": 0.4, "USD": 0.15, "AUD": -0.4}
@@ -303,8 +320,9 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
         masked = t
         for word, eff in JA_MOVES:
             while (i := masked.find(word)) >= 0:
-                for cur, v in eff.items():
-                    add(cur, v, "fx_move")
+                if not JA_NOT_MOVE.match(t, i + len(word)):      # "円高につながらず" is not a yen rise
+                    for cur, v in eff.items():
+                        add(cur, v, "fx_move")
                 masked = masked[:i] + "＿" * len(word) + masked[i + len(word):]
         # Pair names ("ドル円") are scored as pairs below, not as their component currencies.
         single = masked
@@ -315,6 +333,8 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
             if cur == "USD" and m.start() > 0 and single[m.start() - 1] in "豪米加":
                 cur = "USD" if single[m.start() - 1] == "米" else None
             add(cur, 1 if m.group("up") else -1, "fx_move")
+        for m in JA_YEN_RATE.finditer(single):
+            add("JPY", 1 if m.group("up") else -1, "fx_move")
         for word, base, quote in JA_PAIRS:
             start = 0
             while (i := t.find(word, start)) >= 0:
@@ -327,7 +347,10 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
         cues = [(JA_HAWK, 0.8, "policy"), (JA_DOVE, -0.8, "policy"), (JA_BEAT, 0.6, "data"),
                 (JA_MISS, -0.6, "data"), (JA_POLITICS, -0.3, "politics")]
         yield_up, yield_down = JA_YIELD_UP, JA_YIELD_DOWN
-        risk_off, risk_on, intervene = JA_RISK_OFF, JA_RISK_ON, JA_INTERVENE
+        risk_off, risk_on, intervene, verbal = JA_RISK_OFF, JA_RISK_ON, JA_INTERVENE, JA_VERBAL
+
+        def reversed_at(m):
+            return bool(JA_REVERSE.match(t, m.end()))
     else:
         t = title.lower()
         pairs = list(EN_PAIR.finditer(t))
@@ -366,12 +389,19 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
         cues = [(EN_HAWK, 0.8, "policy"), (EN_DOVE, -0.8, "policy"), (EN_BEAT, 0.6, "data"),
                 (EN_MISS, -0.6, "data"), (EN_POLITICS, -0.4, "politics")]
         yield_up, yield_down = EN_YIELD_UP, EN_YIELD_DOWN
-        risk_off, risk_on, intervene = EN_RISK_OFF, EN_RISK_ON, EN_INTERVENE
+        risk_off, risk_on, intervene, verbal = EN_RISK_OFF, EN_RISK_ON, EN_INTERVENE, EN_VERBAL
+
+        def reversed_at(m):
+            return bool(EN_REVERSE_BEFORE.search(t[max(0, m.start() - 40):m.start()]) or EN_REVERSE_AFTER.match(t, m.end()))
 
     for pattern, value, topic in cues:
         for m in re.finditer(pattern, t):
             cur = _nearest(ents, m.start()) or default_cur
-            add(cur, value, topic)
+            if topic == "policy" and reversed_at(m):
+                value_m = -value
+            else:
+                value_m = value
+            add(cur, value_m, topic)
     if re.search(yield_up, t):
         add("USD", 0.6, "yields")
     if re.search(yield_down, t):
@@ -386,6 +416,8 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
     # An intervention mention supports the yen unless the headline already says how the yen moved.
     if re.search(intervene, t) and "JPY" in mentioned and "fx_move" not in topics:
         add("JPY", 0.8, "intervention")
+    elif re.search(verbal, t) and "JPY" in mentioned and "fx_move" not in topics:
+        add("JPY", 0.5, "intervention")    # verbal warnings against a weak yen
     scores = {c: round(math.tanh(v / 1.5), 3) for c, v in sorted(effects.items()) if abs(v) > 1e-9}
     return {"by": ANALYZER, "cur": scores, "men": mentioned, "top": sorted(topics)}
 
@@ -458,18 +490,64 @@ def eligible(items: list[dict], cutoff: datetime) -> list[dict]:
     return [it for it in items if it["fetched_at"] < c and lo <= it["published_at"] <= c]
 
 
+_SUFFIX = re.compile(r"(?:執筆[：:]\s*\S+|[（(][^）)]{1,20}[）)]|[-|｜].{1,30})\s*$")
+STORY_WINDOW = timedelta(hours=12)
+STORY_SIMILARITY = 0.6
+
+
+def _shingles(title: str) -> frozenset:
+    t = _SUFFIX.sub("", title)
+    t = re.sub(r"[\W_]+", "", t.lower())
+    return frozenset(t[i:i + 3] for i in range(max(1, len(t) - 2)))
+
+
+def stories(items: list[dict]) -> dict[str, int]:
+    """Group near-identical headlines (the same article syndicated on several sites) into stories.
+
+    Returns item id -> story number. Deterministic for a given set of items.
+    """
+    out: dict[str, int] = {}
+    reps: list[tuple[datetime, frozenset, int]] = []
+    for it in sorted(items, key=lambda x: (x["published_at"], x["id"])):
+        when = parse_iso(it["published_at"])
+        sh = _shingles(it["title"])
+        found = None
+        for t0, sh0, sid in reversed(reps):
+            if when - t0 > STORY_WINDOW:
+                break
+            if len(sh & sh0) / max(1, len(sh | sh0)) >= STORY_SIMILARITY:
+                found = sid
+                break
+        if found is None:
+            found = len(reps)
+            reps.append((when, sh, found))
+        out[it["id"]] = found
+    return out
+
+
 def pressures(items: list[dict], cutoff: datetime) -> dict[str, dict]:
+    """News pressure per currency: recency- and source-weighted mean score, shrunk toward 0.
+
+    Copies of the same story share one story's weight, so an article
+    syndicated on five sites does not count five times.
+    """
     num = {c: 0.0 for c in CURRENCIES}
     den = {c: 0.0 for c in CURRENCIES}
-    cnt = {c: 0 for c in CURRENCIES}
-    for it in eligible(items, cutoff):
+    cnt = {c: set() for c in CURRENCIES}
+    elig = eligible(items, cutoff)
+    story = stories(elig)
+    copies: dict[int, int] = {}
+    for sid in story.values():
+        copies[sid] = copies.get(sid, 0) + 1
+    for it in elig:
         age_h = (cutoff - parse_iso(it["published_at"])).total_seconds() / 3600.0
-        d = SOURCE_WEIGHT.get(it["src"], 0.8) * math.exp(-age_h / TAU_HOURS)
+        sid = story[it["id"]]
+        d = SOURCE_WEIGHT.get(it["src"], 0.8) * math.exp(-age_h / TAU_HOURS) / copies[sid]
         for cur, score in it["an"]["cur"].items():
             num[cur] += d * score
             den[cur] += d
-            cnt[cur] += 1
-    return {c: {"p": round(num[c] / (SHRINK + den[c]), 6), "w": round(den[c], 4), "n": cnt[c]} for c in CURRENCIES}
+            cnt[cur].add(sid)
+    return {c: {"p": round(num[c] / (SHRINK + den[c]), 6), "w": round(den[c], 4), "n": len(cnt[c])} for c in CURRENCIES}
 
 
 def pair_signal(press: dict[str, dict], base: str, quote: str) -> float:

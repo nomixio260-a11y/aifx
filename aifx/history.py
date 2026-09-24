@@ -70,11 +70,20 @@ def download(root: Path | None = None, log=print) -> None:
         for sid, _freq in series:
             fetch_fred(sid).to_csv(_path(f"rate_{sid}.csv", root), index_label="date")
             log(f"rate {cur} {sid}")
+    fetch_fred("VIXCLS").to_csv(_path("rate_VIXCLS.csv", root), index_label="date")
+    log("VIX (VIXCLS)")
 
 
 def load_daily(code: str, root: Path | None = None) -> pd.DataFrame:
     df = pd.read_csv(_path(f"{code}_1d.csv", root), index_col="date", parse_dates=["date"])
     return _clean_daily(df)
+
+
+def load_vix(root: Path | None = None) -> pd.Series:
+    """VIX close by date, shifted two days for FRED's publication delay."""
+    s = pd.read_csv(_path("rate_VIXCLS.csv", root), index_col="date", parse_dates=["date"]).iloc[:, 0]
+    s.index = s.index + pd.Timedelta(days=2)
+    return s[~s.index.duplicated(keep="last")]
 
 
 def load_hourly(code: str, root: Path | None = None) -> pd.DataFrame:

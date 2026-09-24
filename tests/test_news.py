@@ -42,9 +42,30 @@ def test_parses_rss_atom_and_rdf():
     ("ドル円は反落、米雇用統計が予想を下回る", "ja", {"USD": -1, "JPY": 1}),
     ("Googleに4億ユーロのEU制裁金", "ja", {}),
     ("九州で豪雨 単独事故も", "ja", {}),
+    # policy expectations turned around
+    ("利上げ観測が後退、ドル売り優勢", "ja", {"USD": -1}),
+    ("利下げ観測後退でドル買い", "ja", {"USD": 1}),
+    ("FRB、利下げを急がず", "ja", {"USD": 1}),
+    ("日銀、利上げ見送り", "ja", {"JPY": -1}),
+    ("ECB、利下げ見送り", "ja", {"EUR": 1}),
+    ("日銀、金融緩和を縮小", "ja", {"JPY": 1}),
+    ("Fed signals no rush to cut rates", "en", {"USD": 1}),
+    ("Traders pare bets on Fed rate cuts after strong jobs data", "en", {"USD": 1}),
+    ("Rate cut bets fade as US inflation stays hot", "en", {"USD": 1}),
+    ("BOJ unlikely to hike this year", "en", {"JPY": -1}),
+    ("ECB rules out further rate hikes", "en", {"EUR": -1}),
+    ("Fed ends rate hikes", "en", {"USD": -1}),
+    # flows, data, yen rate and verbal intervention
+    ("ドル買い優勢、ドル円は158円に迫る 原油安は円高につながらず", "ja", {"USD": 1}),
+    ("米雇用統計、予想を大幅に上回る", "ja", {"USD": 1}),
+    ("円相場、一時158円台前半まで下落 米利上げ観測でレートチェック効果を相殺", "ja", {"JPY": -1, "USD": 1}),
+    ("片山財務相、為替の過度な変動をけん制", "ja", {"JPY": 1}),
+    ("Japan warns against rapid yen moves", "en", {"JPY": 1}),
 ])
 def test_keyword_analysis_directions(title, lang, expect):
     got = news.analyze_lexicon(title, lang)["cur"]
+    if "円高につながらず" in title:
+        assert "JPY" not in got
     assert set(got) >= set(expect)
     for cur, sign in expect.items():
         assert got[cur] * sign > 0, (cur, got)
@@ -87,3 +108,18 @@ def test_calendar_keeps_tracked_high_and_medium_events():
     ]
     evs = news.parse_calendar(payload)
     assert [e["title"] for e in evs] == ["CPI"] and evs[0]["time"] == "2026-09-24T12:30:00Z"
+
+
+def test_syndicated_copies_count_as_one_story():
+    base = NOW - timedelta(hours=2)
+    copies = [item(t, base + timedelta(minutes=i), base + timedelta(minutes=i + 1), {"USD": 1.0})
+              for i, t in enumerate(["東京為替：ドル・円は底堅い、円買いは一服 執筆： Fisco",
+                                     "東京為替：ドル・円は底堅い、円買いは一服",
+                                     "東京為替：ドル・円は底堅い、円買いは一服(フィスコ)"])]
+    other = item("Fed signals no rush to cut rates", base, base, {"USD": 1.0})
+    st = news.stories(copies + [other])
+    assert len({st[c["id"]] for c in copies}) == 1 and st[other["id"]] != st[copies[0]["id"]]
+    three = news.pressures(copies + [other], NOW)["USD"]
+    one = news.pressures(copies[:1] + [other], NOW)["USD"]
+    assert three["n"] == one["n"] == 2
+    assert three["w"] == pytest.approx(one["w"], rel=0.05)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from functools import lru_cache
+from statistics import NormalDist
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -162,6 +163,33 @@ def prob_up(c: float, sigma: float, nu: int | None) -> float:
         return norm_cdf(c / sigma)
     x, cdf, scale = _t_table(nu)
     return float(np.interp(c / sigma / scale, x, cdf))
+
+
+def dist_quantile(tau: float, nu: int | None) -> float:
+    """Quantile of a forecast error in units of sigma (0.9 -> 1.2816 for every shape)."""
+    if nu is None:
+        return NormalDist().inv_cdf(tau)
+    x, cdf, scale = _t_table(nu)
+    return float(np.interp(tau, cdf, x)) * scale
+
+
+def dist_cdf(z: float, nu: int | None) -> float:
+    """P(error <= z sigma)."""
+    if nu is None:
+        return NormalDist().cdf(z)
+    x, cdf, scale = _t_table(nu)
+    return float(np.interp(z / scale, x, cdf))
+
+
+def dist_pdf(z: np.ndarray, nu: int | None) -> np.ndarray:
+    """Density of a forecast error at z sigma (per unit of sigma)."""
+    z = np.asarray(z, dtype=float)
+    if nu is None:
+        return np.exp(-0.5 * z * z) / math.sqrt(2 * math.pi)
+    _, _, scale = _t_table(nu)
+    u = z / scale
+    const = math.exp(math.lgamma((nu + 1) / 2) - math.lgamma(nu / 2)) / math.sqrt(nu * math.pi)
+    return const * (1 + u * u / nu) ** (-(nu + 1) / 2) / scale
 
 
 def combine(model_bp: dict[str, float], weights: list[float], sigma_raw: float, k: float,

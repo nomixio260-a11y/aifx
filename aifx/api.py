@@ -6,6 +6,7 @@ computes forecasts itself.
     api/track.json         live track record
     api/news.json          analysed headlines, currency pressure, calendar
     api/models.json        learned weights, calibration, walk-forward results, long-history research
+    api/market.json        market analysis: currency strength, volatility, trend, upcoming events
     api/verify.json        full verification and audit reports
 """
 
@@ -19,11 +20,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import indicators
+from . import analysis, indicators
 from . import news as newsmod
 from . import track
 from .data import CURRENCIES, PAIRS
-from .engine import BAND_Z, BP, MODEL_KEYS, TIMEFRAMES
+from .engine import BAND_Z, BP, MODEL_KEYS, TIMEFRAMES, band_z, dist_cdf, dist_pdf, dist_quantile, step_ends
 from .forecaster import model_version
 from .learning import learn, samples_from_ledger
 from .models import default_models
@@ -98,25 +99,78 @@ def _indicators(df: pd.DataFrame, n: int, dec: int) -> dict:
             ("sma20", "sma75", "bb_upper", "bb_lower", "rsi14")}
 
 
+QUANTILES = (0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975)
+LEVEL_STEPS_PIPS = (5, 10, 20, 25, 50, 100, 200, 250, 500, 1000)
+
+
+def distribution(p0: float, c: float, sig: float, nu, pair) -> dict:
+    """The forecast as a price distribution: quantiles, a density curve and the chance of
+    finishing above round price levels. Everything is computed here, on the server."""
+    dec = pair.decimals + 1
+
+    def price(z):
+        return p0 * math.exp((c + z * sig) / BP)
+
+    q = {f"{t:g}": _r(price(dist_quantile(t, nu)), dec) for t in QUANTILES}
+    zs = np.linspace(dist_quantile(0.004, nu), dist_quantile(0.996, nu), 73)
+    prices = np.array([price(z) for z in zs])
+    dens = dist_pdf(zs, nu) / (prices * sig / BP)          # per unit of price
+    dens = dens / dens.max()
+    curve = [[_r(pv, dec), _r(dv, 4), _r(1 - dist_cdf(float(z), nu), 4)] for pv, dv, z in zip(prices, dens, zs)]
+    lo, hi = price(dist_quantile(0.025, nu)), price(dist_quantile(0.975, nu))
+    span_pips = (hi - lo) / pair.pip
+    step = next((s for s in LEVEL_STEPS_PIPS if span_pips / s <= 9), LEVEL_STEPS_PIPS[-1]) * pair.pip
+    levels = []
+    lv = math.ceil(lo / step) * step
+    while lv <= hi + 1e-12:
+        z = (math.log(lv / p0) * BP - c) / sig if sig > 0 else 0.0
+        levels.append({"price": _r(lv, pair.decimals), "p_above": _r(1 - dist_cdf(z, nu), 4)})
+        lv += step
+    return {"q": q, "curve": curve, "levels": levels[::-1], "step_pips": _r(step / pair.pip, 1)}
+
+
 def _horizons(rec: dict, pair) -> list[dict]:
     out = []
     p0 = rec["p0"]
     for f in rec["fc"]:
         sig = f["s"] * f["k"]
         price = p0 * math.exp(f["c"] / BP)
+        z = band_z(f.get("nu"))
         out.append({
             "h": f["h"], "label": TIMEFRAMES[rec["tf"]].horizon_label(f["h"]), "t": f["t"], "x": _xkey(rec["tf"], f["t"]),
             "price": _r(price, pair.decimals + 1),
             "change_pips": _r((price - p0) / pair.pip, 1),
             "change_pct": _r((math.exp(f["c"] / BP) - 1) * 100, 3),
             "p_up": _r(f["p"], 4), "dir": _label(f["p"]),
-            "lo80": _r(p0 * math.exp((f["c"] - BAND_Z["80"] * sig) / BP), pair.decimals + 1),
-            "hi80": _r(p0 * math.exp((f["c"] + BAND_Z["80"] * sig) / BP), pair.decimals + 1),
+            **{f"{side}{lv}": _r(p0 * math.exp((f["c"] + sgn * z[lv] * sig) / BP), pair.decimals + 1)
+               for lv in ("50", "80", "95") for side, sgn in (("lo", -1), ("hi", 1))},
+            "dist": distribution(p0, f["c"], sig, f.get("nu"), pair),
             "models_up": sum(1 for v in f["m"][1:] if v > 0), "models_total": len(f["m"]) - 1,
             "news_pips": _r(p0 * (math.exp(f["c"] / BP) - math.exp(f["g"] * f["c0"] / BP)) / pair.pip, 2),
             "events": f["ev"], "k": f["k"], "beta": f["b"], "gain": f["g"],
         })
     return out
+
+
+def _coarse_path(rec: dict, horizons: list[dict], tf_key: str, dec: int) -> dict:
+    """Chart path when the per-step detail cannot be rebuilt (the forecasting code changed
+    since the prediction): the recorded horizons, joined by straight lines for display."""
+    tf = TIMEFRAMES[tf_key]
+    origin = parse_iso(rec["origin"])
+    ends = step_ends(tf, origin, max(tf.steps, max(tf.horizons)))
+    keys = ["c"] + [f"{side}{lv}" for lv in ("50", "80", "95") for side in ("lo", "hi")]
+    anchors = [(0, {k: rec["p0"] for k in keys} | {"p": 0.5})]
+    for h in horizons:
+        anchors.append((h["h"], {"c": h["price"], "p": h["p_up"], **{k: h[k] for k in keys[1:]}}))
+    steps = []
+    for i, end in enumerate(ends, start=1):
+        a = max((x for x in anchors if x[0] <= i), key=lambda x: x[0])
+        b = min((x for x in anchors if x[0] >= i), key=lambda x: x[0], default=a)
+        w = 0.0 if b[0] == a[0] else (i - a[0]) / (b[0] - a[0])
+        row = {k: _r(a[1][k] + w * (b[1][k] - a[1][k]), dec) for k in keys}
+        row["p"] = _r(a[1]["p"] + w * (b[1]["p"] - a[1]["p"]), 4)
+        steps.append({"t": iso(end), "x": _xkey(tf_key, iso(end)), **row})
+    return {"steps": steps, "models": {}, "events": [], "news": None, "analogs": [], "coarse": True}
 
 
 def _past(rows: list[dict], pair: str, tf: str, n: int, dec: int) -> list[dict]:
@@ -186,12 +240,16 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
     out: dict[str, dict] = {}
     payloads: dict[str, dict] = {}
     pair_summaries = []
+    ranges24: dict[str, dict] = {}
+    hourly_all: dict[str, pd.DataFrame] = {}
+    daily_all: dict[str, pd.DataFrame] = {}
     for code, pair in PAIRS.items():
         dec = pair.decimals + 1
         hourly = state.prices.load(code, "1h")
         daily = state.prices.load(code, "1d")
         if not len(hourly):
             continue
+        hourly_all[code], daily_all[code] = hourly, daily
         quote = status.get("quotes", {}).get(code) or {}
         last_close = float(hourly["close"].iloc[-1])
         price = float(quote.get("price") or last_close)
@@ -221,8 +279,13 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
             if rec is not None:
                 block["prediction"] = {"seq": rec["seq"], "issued": rec["at"], "origin": rec["origin"], "p0": rec["p0"],
                                        "news_x": rec["news"]["x"], "horizons": _horizons(rec, pair)}
-                summary["outlook"][tf_key] = [{k: h[k] for k in ("h", "label", "price", "p_up", "dir", "change_pips")}
+                summary["outlook"][tf_key] = [{k: h[k] for k in ("h", "label", "price", "p_up", "dir", "change_pips",
+                                                                 "lo80", "hi80")}
                                               for h in block["prediction"]["horizons"]]
+                if tf_key == "1h":
+                    h24 = block["prediction"]["horizons"][-1]
+                    ranges24[code] = {"h": h24["h"], "lo80": h24["lo80"], "hi80": h24["hi80"],
+                                      "half80_pips": _r((h24["hi80"] - h24["lo80"]) / 2 / pair.pip, 1)}
             if chart is not None and rec is not None and chart.get("seq") == rec["seq"]:
                 steps = [{"t": st["t"], "x": _xkey(tf_key, st["t"]), "p": _r(st["p"], 4),
                           **{k: _r(v, dec) for k, v in st.items() if k not in ("t", "p")}} for st in chart["steps"]]
@@ -235,6 +298,8 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                     "models": {k: [_r(v, dec) for v in vals] for k, vals in chart["models"].items()},
                     "events": evs, "news": chart["news"], "analogs": chart["analogs"],
                 }
+            elif rec is not None:
+                block["path"] = _coarse_path(rec, block["prediction"]["horizons"], tf_key, dec)
             if tf_key == "1d" and len(daily) > 80:
                 block["technical"] = indicators.technical_summary(daily, indicators.compute_all(daily))
             payload["tf"][tf_key] = block
@@ -271,6 +336,10 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
         out[f"pair/{code}.json"] = payload
     cal = sorted([e for e in events if iso(now) <= e["time"] <= iso(now + timedelta(days=7))],
                  key=lambda e: e["time"])
+    story_of = newsmod.stories(recent_items)
+    copies: dict[int, int] = {}
+    for sid in story_of.values():
+        copies[sid] = copies.get(sid, 0) + 1
     out["news.json"] = {
         "at": iso(now),
         "analyzer": newsmod.ANALYZER,
@@ -278,12 +347,16 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
         "pair_signals": {c: newsmod.pair_signal(press_now, p.base, p.quote) for c, p in PAIRS.items()},
         "history": history,
         "items": [{k: it.get(k) for k in ("id", "title", "publisher", "link", "published_at", "fetched_at", "lang", "src")}
-                  | {"cur": it["an"]["cur"], "top": it["an"]["top"], "by": it["an"]["by"], "ja": it["an"].get("ja")}
+                  | {"cur": it["an"]["cur"], "top": it["an"]["top"], "by": it["an"]["by"], "ja": it["an"].get("ja"),
+                     "story": story_of.get(it["id"]), "copies": copies.get(story_of.get(it["id"]), 1)}
                   for it in recent_items],
         "calendar": cal,
         "sources": (status.get("news") or {}).get("sources", {}),
         "params": {"tau_hours": newsmod.TAU_HOURS, "lookback_hours": newsmod.LOOKBACK_HOURS, "shrink": newsmod.SHRINK},
     }
+
+    # market analysis (descriptive) -----------------------------------------
+    out["market.json"] = analysis.build(hourly_all, daily_all, events, press_now, ranges24, now)
 
     # models and learning -------------------------------------------------
     priors = {}

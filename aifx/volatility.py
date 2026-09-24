@@ -114,10 +114,11 @@ def daily_variance_inputs(daily: pd.DataFrame, hourly: pd.DataFrame | None,
     return (None, DAILY_LAM) if sq is None else (sq, DAILY_RV_LAM)
 
 
-def hour_profile(times, sq: np.ndarray, window: int = 1500) -> np.ndarray:
+def hour_profile(times, sq: np.ndarray, window: int = 1500, smooth: float = 0.25) -> np.ndarray:
     """Relative variance by UTC hour of day (24 values, mean 1 over the sample).
 
     ``sq`` is the per-bar variance proxy (squared returns), aligned with ``times``.
+    ``smooth`` is the weight given to each neighbouring hour.
     """
     hours = np.asarray([t.hour for t in times[-window:]])
     ss = sq[-window:]
@@ -127,7 +128,7 @@ def hour_profile(times, sq: np.ndarray, window: int = 1500) -> np.ndarray:
         if len(sel) >= 5:
             prof[h] = np.mean(sel)
     # Smooth over neighbouring hours (circular) to damp sampling noise.
-    prof = 0.25 * np.roll(prof, 1) + 0.5 * prof + 0.25 * np.roll(prof, -1)
+    prof = smooth * np.roll(prof, 1) + (1 - 2 * smooth) * prof + smooth * np.roll(prof, -1)
     counts = np.bincount(hours, minlength=24).astype(float)
     mean = float(np.sum(prof * counts) / max(counts.sum(), 1))
     return prof / mean if mean > 0 else np.ones(24)
@@ -136,7 +137,8 @@ def hour_profile(times, sq: np.ndarray, window: int = 1500) -> np.ndarray:
 def hourly_variance_path(times, y: np.ndarray, origin: datetime, steps: int,
                          events: list[dict] | None = None, lam: float = 0.97,
                          reversion: float = 0.985, seasonal: bool = True,
-                         sq: np.ndarray | None = None) -> tuple[np.ndarray, list[datetime]]:
+                         sq: np.ndarray | None = None, profile_window: int = 1500,
+                         smooth: float = 0.25) -> tuple[np.ndarray, list[datetime]]:
     """Per-step variance for the next ``steps`` open-market hours after ``origin``.
 
     ``times`` are bar open times aligned with ``y`` (log closes), all ending at or
@@ -146,7 +148,7 @@ def hourly_variance_path(times, y: np.ndarray, origin: datetime, steps: int,
     r = np.diff(y)
     sq = r * r if sq is None else sq
     t_r = list(times[1:])
-    prof = hour_profile(t_r, sq) if seasonal else np.ones(24)
+    prof = hour_profile(t_r, sq, profile_window, smooth) if seasonal else np.ones(24)
     u2 = sq / prof[[t.hour for t in t_r]]
     long_var = float(np.mean(u2[-1500:]))
     ewma = float(np.mean(u2[:20]))

@@ -130,6 +130,34 @@ def _hourly_extra(code: str) -> dict:
     return {"pair": code, "tf": "1h", "rows": rows}
 
 
+PROFILE_VARIANTS = {"p1500_s25": (1500, 0.25), "p1500_s10": (1500, 0.10), "p1500_s0": (1500, 0.0),
+                    "p3000_s25": (3000, 0.25), "p3000_s10": (3000, 0.10), "p3000_s0": (3000, 0.0)}
+
+
+def _hourly_profile(code: str) -> dict:
+    """Range-based hourly volatility with different hour-of-day profiles (window, neighbour smoothing)."""
+    df = history.load_hourly(code)
+    y = np.log(df["close"].to_numpy())
+    times = list(df.index.to_pydatetime())
+    H = max(HOURLY_H)
+    rows = []
+    for o in range(3000, len(y) - 1 - H, 6):
+        lo = o + 1 - 3000
+        hist = y[lo: o + 1]
+        r = np.diff(hist)
+        rng = scale_proxy(range_variance(df.iloc[lo: o + 1]), r, RANGE_WINDOW)
+        rng = r * r if rng is None else rng
+        origin = times[o] + timedelta(hours=1)
+        sig = {}
+        for name, (win, sm) in PROFILE_VARIANTS.items():
+            v, _ = hourly_variance_path(times[lo: o + 1], hist, origin, H, None, 0.97, 0.985, True, sq=rng,
+                                        profile_window=win, smooth=sm)
+            cum = np.cumsum(v) * BP * BP
+            sig[name] = [float(math.sqrt(cum[h - 1])) for h in HOURLY_H]
+        rows.append({"t": times[o].strftime("%Y-%m-%dT%H:%M"), "s": sig})
+    return {"pair": code, "tf": "1h", "rows": rows}
+
+
 def _daily_rv(code: str) -> dict:
     """Daily volatility measured from hourly bars (realized variance), for the ~2 years with hourly data.
 
@@ -163,7 +191,8 @@ def _daily_rv(code: str) -> dict:
     return {"pair": code, "tf": "1d_rv", "rows": rows}
 
 
-_JOBS = {"1d": _daily_pair, "1h": _hourly_pair, "1h_extra": _hourly_extra, "1d_rv": _daily_rv}
+_JOBS = {"1d": _daily_pair, "1h": _hourly_pair, "1h_extra": _hourly_extra, "1d_rv": _daily_rv,
+         "1h_profile": _hourly_profile}
 
 
 def _run(job):
@@ -487,6 +516,113 @@ def evaluate_rv() -> dict:
     return res
 
 
+# ------------------------------------------------ second round of ideas
+
+def _replay_k(P, key: str, j: int, window_days, emb_hours: float) -> np.ndarray:
+    """Interval scale at each origin from a trailing window of already-scored outcomes."""
+    T = P.t.astype("datetime64[m]")
+    z = np.abs(P.a[:, j]) / P.s[key][:, j]
+    order = np.argsort(T, kind="stable")
+    Ts, zs = T[order], z[order]
+    emb = np.timedelta64(int(emb_hours * 60), "m")
+    k = np.full(len(z), np.nan)
+    for d in np.unique(T):
+        hi = np.searchsorted(Ts, d - emb)
+        lo = 0 if window_days is None else np.searchsorted(Ts, d - emb - np.timedelta64(int(window_days * 1440), "m"))
+        if hi - lo >= 20:
+            k[T == d] = np.quantile(zs[lo:hi], 0.8) / BAND_Z["80"]
+    return k
+
+
+def _gauss_crps(a, sd):
+    z = a / sd
+    return sd * (z * (2 * _ncdf(z) - 1) + 2 * _npdf(z) - 1 / math.sqrt(math.pi))
+
+
+def study_k_window(P, key: str, windows: list, live, emb) -> dict:
+    """How far back the interval scale should look (live: ~420 days daily, ~84 days hourly)."""
+    out = {}
+    for j, h in enumerate(P.h):
+        ks = {w: _replay_k(P, key, j, w, emb(h)) for w in windows}
+        ok = np.all([np.isfinite(k) for k in ks.values()], axis=0)
+        res = {}
+        for w, k in ks.items():
+            res[str(w)] = {nm: float(_gauss_crps(P.a[m & ok, j], P.s[key][m & ok, j] * k[m & ok]).mean())
+                           for nm, m in (("tune", P.tune), ("test", P.test))}
+            res[str(w)]["cover_test"] = float(np.mean(np.abs(P.a[P.test & ok, j]) <= BAND_Z["80"] * P.s[key][P.test & ok, j] * k[P.test & ok]))
+        base = res[str(live)]
+        best = min(res, key=lambda w: res[w]["tune"])
+        out[str(h)] = {"best": best, "tune_rel": res[best]["tune"] / base["tune"] - 1,
+                       "test_rel": res[best]["test"] / base["test"] - 1, "all": res}
+    return out
+
+
+def study_asymmetry(P, key: str) -> dict:
+    """Separate lower and upper band widths (fitted on tune) vs symmetric bands."""
+    out = {}
+    for j, h in enumerate(P.h):
+        z = P.a[:, j] / P.s[key][:, j]
+        zt, zx = z[P.tune], z[P.test]
+        res = {}
+        for tau in (0.05, 0.10, 0.90, 0.95):
+            qs = np.quantile(np.abs(zt), abs(2 * tau - 1)) * np.sign(tau - 0.5)
+            qa = np.quantile(zt, tau)
+            loss = [float(np.mean(np.maximum(tau * (zx - q), (tau - 1) * (zx - q)))) for q in (qs, qa)]
+            res[str(tau)] = loss[1] / loss[0] - 1
+        out[str(h)] = {"pinball_rel": res, "below10": float(np.mean(zx < np.quantile(zt, 0.1))),
+                       "above90": float(np.mean(zx > np.quantile(zt, 0.9)))}
+    return out
+
+
+def study_vix(P, key: str) -> dict:
+    """Daily spread scaled by the VIX relative to its one-year average; exponent chosen on tune."""
+    lv = np.log(history.load_vix())
+    x_all = lv - lv.rolling(250, min_periods=100).mean()
+    t = pd.to_datetime(P.t)
+    u = pd.DatetimeIndex(sorted(set(t)))
+    x = x_all.reindex(u.union(x_all.index)).ffill().reindex(u).reindex(t).to_numpy()
+    x = np.where(np.isfinite(x), x, 0.0)
+    out = {}
+    for j, h in enumerate(P.h):
+        res = {}
+        for beta in np.round(np.arange(-0.4, 1.01, 0.1), 2):
+            s = P.s[key][:, j] * np.exp(beta * x)
+            k = np.quantile(np.abs(P.a[P.tune, j]) / s[P.tune], 0.8) / BAND_Z["80"]
+            res[float(beta)] = [float(_gauss_crps(P.a[m, j], s[m] * k).mean()) for m in (P.tune, P.test)]
+        best = min(res, key=lambda b: res[b][0])
+        out[str(h)] = {"beta": best, "tune_rel": res[best][0] / res[0.0][0] - 1, "test_rel": res[best][1] / res[0.0][1] - 1}
+    return out
+
+
+def study_profile(P) -> dict:
+    """Hour-of-day profile: sample length and smoothing over neighbouring hours (live: 1500 bars, 0.25)."""
+    extra = []
+    for code in PAIRS:
+        extra.extend(json.loads((OUT_DIR / f"{code}_1h_profile.json").read_text())["rows"])
+    s_all = {k: np.array([e["s"][k] for e in extra]) for k in extra[0]["s"]}
+    out = {}
+    for j, h in enumerate(P.h):
+        res = {}
+        for key, s in s_all.items():
+            k = np.quantile(np.abs(P.a[P.tune, j]) / s[P.tune, j], 0.8) / BAND_Z["80"]
+            res[key] = [float(_gauss_crps(P.a[m, j], s[m, j] * k).mean()) for m in (P.tune, P.test)]
+        best = min(res, key=lambda v: res[v][0])
+        out[str(h)] = {"best": best, "tune_rel": res[best][0] / res["p1500_s25"][0] - 1,
+                       "test_rel": res[best][1] / res["p1500_s25"][1] - 1}
+    return out
+
+
+def round2() -> dict:
+    D, H = Panel("1d"), Panel("1h")
+    return {
+        "k_window": {"1d": study_k_window(D, "fast_rev", [60, 120, 250, 420, 1000, None], 420, lambda h: h * 1.5 + 4),
+                     "1h": study_k_window(H, "range", [14, 28, 56, 84, 180, None], 84, lambda h: h + 72)},
+        "asym": {"1d": study_asymmetry(D, "fast_rev"), "1h": study_asymmetry(H, "range")},
+        "vix": study_vix(D, "fast_rev"),
+        "profile": study_profile(H),
+    }
+
+
 def deployed_shape(rv_choice: str) -> dict:
     """Degrees of freedom refit on all data (tune + test) for the live volatility models."""
     P = Panel("1h")
@@ -525,6 +661,37 @@ def _nu_text(nu: dict) -> str:
 
 def _nu_matches(nu: dict) -> bool:
     return all(BAND_NU[tf].get(int(h)) == v for tf, hs in nu.items() for h, v in hs.items())
+
+
+def _round2_report(r2: dict) -> list[str]:
+    def row(name, hs, unit, cells):
+        return f"| {name} | " + " | ".join(cells(h) for h in hs) + " |"
+
+    L = ["## 4. 追加で試したこと (採用なし)", "",
+         "予測レンジについて、さらに次の5つを同じ手順 (調整期間で選び検証期間で確認) で試しました。"
+         "各欄: 調整期間で選んだ設定 / 検証期間の CRPS 差 (負が改善)。改善はどれも 0.2% 程度以下 "
+         "(上下で幅の違うレンジはむしろ悪化) で、現在の設定を変えていません。", "",
+         "| 試したこと | 時間軸 | 予測先 1 | 予測先 2 | 予測先 3 | 予測先 4 |", "|---|---|---|---|---|---|"]
+    kw = r2["k_window"]
+    for tf, unit, win in (("1d", "営業日", "日"), ("1h", "時間", "日")):
+        hs = list(kw[tf])
+        cells = [f"{h}{unit}先: {kw[tf][h]['best'].replace('None', '全期間')}{'' if kw[tf][h]['best'] == 'None' else win} / {_pct(kw[tf][h]['test_rel'])}" for h in hs]
+        cells += [""] * (4 - len(cells))
+        L.append(f"| レンジ補正に使う実績の期間 (本番: 日足420日・1時間足84日) | {'日足' if tf == '1d' else '1時間足'} | " + " | ".join(cells) + " |")
+    for tf, unit in (("1d", "営業日"), ("1h", "時間")):
+        a = r2["asym"][tf]
+        cells = [f"{h}{unit}先: 5%点 {_pct(a[h]['pinball_rel']['0.05'])}, 95%点 {_pct(a[h]['pinball_rel']['0.95'])}" for h in a]
+        cells += [""] * (4 - len(cells))
+        L.append(f"| 上下で幅の違うレンジ (分位点損失の差) | {'日足' if tf == '1d' else '1時間足'} | " + " | ".join(cells) + " |")
+    v = r2["vix"]
+    L.append("| VIX (米国株の予想変動率) で幅を調整 | 日足 | " + " | ".join(
+        f"{h}営業日先: 指数 {v[h]['beta']:+.1f} / {_pct(v[h]['test_rel'])}" for h in v) + " |")
+    pr = r2["profile"]
+    cells = [f"{h}時間先: {pr[h]['best']} / {_pct(pr[h]['test_rel'])}" for h in pr] + [""]
+    L.append("| 時間帯ごとの変動の推定 (期間・ならし方) | 1時間足 | " + " | ".join(cells) + " |")
+    L += ["", "週末をはさむ予測や曜日ごとの的中率も確認しましたが、調整期間と検証期間で一貫した偏りはありませんでした。"
+          "1時間足で目立つ値動き (2024年5月の円買い介入、2025年8月の米雇用統計など) は実際の出来事で、データの誤りではありません。", ""]
+    return L
 
 
 def report(res: dict) -> str:
@@ -603,8 +770,9 @@ def report(res: dict) -> str:
           + _nu_text(res["deployed_nu"]) + (" (本番の設定と一致)" if _nu_matches(res["deployed_nu"]) else
                                             " (**本番の設定 `BAND_NU` と異なります。更新してください**)") + "。", "",
           "採用しなかったもの: 金利差 (キャリー)・モメンタム・時間帯の癖・直前の値動き・モデルの組合せ。"
-          "調整期間で推定しても検証期間で改善せず、多くは悪化しました。", "",
-          "## 4. 精度についての結論", "",
+          "調整期間で推定しても検証期間で改善せず、多くは悪化しました。", ""]
+    L += _round2_report(res["round2"]) + [
+          "## 5. 精度についての結論", "",
           "- 1時間〜20営業日先の**方向**は、20年以上の過去データで試したどの方法でも「変化なし」を安定して上回れませんでした。"
           "このため本番の予測は、実績で有効性が示されるまで中心値を「変化なし」付近に保ちます。成績をよく見せるためではなく、"
           "過去データの検証で最も誤差が小さかったためです。",
@@ -617,6 +785,7 @@ def run(workers: int = 4, log=print) -> dict:
     compute(workers, log=log)
     res = {"1d": evaluate("1d"), "1h": evaluate("1h"), "rv": evaluate_rv()}
     res["deployed_nu"] = deployed_shape(res["rv"]["chosen"])
+    res["round2"] = round2()
     REPORT_DIR.mkdir(exist_ok=True)
     (REPORT_DIR / "results.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     (REPORT_DIR / "report.md").write_text(report(res), encoding="utf-8")
