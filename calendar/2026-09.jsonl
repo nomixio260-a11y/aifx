@@ -1,0 +1,16 @@
+{"cur":"EUR","fetched_at":"2026-09-24T06:14:21Z","forecast":"","id":"434713444d404b57","impact":"Medium","previous":"","time":"2026-09-21T15:00:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"AUD","fetched_at":"2026-09-24T06:14:21Z","forecast":"","id":"58d14a3daf4b577b","impact":"High","previous":"","time":"2026-09-22T03:10:00Z","title":"RBA Gov Bullock Speaks"}
+{"cur":"EUR","fetched_at":"2026-09-24T06:14:21Z","forecast":"","id":"0903af5c3ef232de","impact":"Medium","previous":"","time":"2026-09-22T11:00:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-09-24T06:14:21Z","forecast":"","id":"c2ab8ceaee56ac4e","impact":"Medium","previous":"","time":"2026-09-22T13:55:00Z","title":"President Trump Speaks"}
+{"cur":"EUR","fetched_at":"2026-09-24T06:14:21Z","forecast":"50.9","id":"c23a03d55bd294ea","impact":"Medium","previous":"51.5","time":"2026-09-23T07:15:00Z","title":"French Flash Manufacturing PMI"}
+{"cur":"EUR","fetched_at":"2026-09-24T06:14:21Z","forecast":"48.3","id":"6b258aa7d45b911b","impact":"Medium","previous":"48.4","time":"2026-09-23T07:15:00Z","title":"French Flash Services PMI"}
+{"cur":"EUR","fetched_at":"2026-09-24T06:14:21Z","forecast":"54.1","id":"64cc156a8eba2a94","impact":"Medium","previous":"54.1","time":"2026-09-23T07:30:00Z","title":"German Flash Manufacturing PMI"}
+{"cur":"EUR","fetched_at":"2026-09-24T06:14:21Z","forecast":"49.9","id":"2c18acc8d3b6063a","impact":"Medium","previous":"48.5","time":"2026-09-23T07:30:00Z","title":"German Flash Services PMI"}
+{"cur":"GBP","fetched_at":"2026-09-24T06:14:21Z","forecast":"51.5","id":"789ec0992f7f8426","impact":"Medium","previous":"51.5","time":"2026-09-23T08:30:00Z","title":"Flash Manufacturing PMI"}
+{"cur":"GBP","fetched_at":"2026-09-24T06:14:21Z","forecast":"52.0","id":"900a16a187a7ff19","impact":"Medium","previous":"52.8","time":"2026-09-23T08:30:00Z","title":"Flash Services PMI"}
+{"cur":"AUD","fetched_at":"2026-09-24T06:14:21Z","forecast":"21.5K","id":"d93f7ed0f108f72d","impact":"High","previous":"-15.8K","time":"2026-09-24T01:30:00Z","title":"Employment Change"}
+{"cur":"AUD","fetched_at":"2026-09-24T06:14:21Z","forecast":"4.5%","id":"d583d479e852d7ce","impact":"High","previous":"4.5%","time":"2026-09-24T01:30:00Z","title":"Unemployment Rate"}
+{"cur":"USD","fetched_at":"2026-09-24T06:14:21Z","forecast":"201K","id":"84bce5f81bd547d1","impact":"Medium","previous":"196K","time":"2026-09-24T12:30:00Z","title":"Unemployment Claims"}
+{"cur":"GBP","fetched_at":"2026-09-24T06:14:21Z","forecast":"","id":"31520beaeeeb8bed","impact":"High","previous":"","time":"2026-09-25T09:15:00Z","title":"BOE Gov Bailey Speaks"}
+{"cur":"USD","fetched_at":"2026-09-24T06:14:21Z","forecast":"47.4","id":"0ac166ffb25e882d","impact":"Medium","previous":"47.8","time":"2026-09-25T14:00:00Z","title":"Revised UoM Consumer Sentiment"}
+{"cur":"USD","fetched_at":"2026-09-24T06:14:21Z","forecast":"","id":"1ab4c64cdd223a97","impact":"Medium","previous":"4.6%","time":"2026-09-25T14:00:00Z","title":"Revised UoM Inflation Expectations"}
