@@ -739,7 +739,7 @@ def report(res: dict) -> str:
             L.append(f"| {VOL_NAMES.get(key, key)} | " + " | ".join(
                 f"{_pct(m[str(x)]['tune_rel'])} / {_pct(m[str(x)]['test_rel'])} (p={_p(m[str(x)]['p'])})" for x in hs) + " |")
         L.append("")
-    L += [f"#### 日足: 1時間足から測る日々の変動 (実現ボラティリティ)", "",
+    L += ["#### 日足: 1時間足から測る日々の変動 (実現ボラティリティ)", "",
           f"1時間足がある期間だけの検証です (調整期間 {rv['tune'][0]}〜{rv['tune'][1]}, 検証期間 {rv['test'][0]}〜{rv['test'][1]}, 毎営業日, {rv['n']:,}件)。"
           "調整期間の成績順に上位6件。rv = 1時間足の変化の2乗和、blend = それと日足の変化の2乗の平均。"
           "数字は EWMA の減衰率と平常水準へ戻る速さ。", "",

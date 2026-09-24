@@ -17,9 +17,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import backtest
 from . import news as newsmod
 from .data import PAIRS, SETTLE, Pair, YahooMarket
-from .engine import TIMEFRAMES, Timeframe, backtest_prior
+from .engine import TIMEFRAMES, Timeframe, backtest_prior, target_times
 from .forecaster import MAX_ORIGIN_AGE, make_prediction, model_version, origin_of
 from .learning import learn, samples_from_ledger
 from .ledger import DataFiles, Ledger
@@ -73,6 +74,7 @@ class CycleReport:
     errors: list = field(default_factory=list)
     quotes: dict = field(default_factory=dict)
     verify: dict = field(default_factory=dict)
+    backtest: dict = field(default_factory=dict)
 
 
 def _latest(records: list[dict], **match) -> dict | None:
@@ -84,20 +86,22 @@ def _latest(records: list[dict], **match) -> dict | None:
 
 def score_due(state: State, at: datetime) -> list[list]:
     """Outcome items for every forecast horizon whose target time has passed and
-    for which the hourly data now extends past the target."""
+    for which the reference bars of its timeframe now extend past the target."""
     scored = {(s, h) for rec in state.ledger.of_type("outcome") for s, h, *_ in rec["items"]}
     items = []
-    hourly_cache: dict[str, pd.DataFrame] = {}
+    ref_cache: dict[tuple[str, str], pd.DataFrame] = {}
     for p in state.ledger.of_type("prediction"):
         pending = [f for f in p["fc"] if (p["seq"], f["h"]) not in scored]
         if not pending:
             continue
-        if p["pair"] not in hourly_cache:
-            hourly_cache[p["pair"]] = state.prices.load(p["pair"], "1h")
-        hourly = hourly_cache[p["pair"]]
-        if not len(hourly):
+        ref_tf = TIMEFRAMES[p["tf"]].ref
+        key = (p["pair"], ref_tf)
+        if key not in ref_cache:
+            ref_cache[key] = state.prices.load(p["pair"], ref_tf)
+        ref = ref_cache[key]
+        if not len(ref):
             continue
-        ends = hourly.index + pd.Timedelta(hours=1)
+        ends = ref.index + pd.Timedelta(minutes=TIMEFRAMES[ref_tf].minutes)
         last_end = ends[-1].to_pydatetime()
         origin = parse_iso(p["origin"])
         for f in pending:
@@ -106,7 +110,7 @@ def score_due(state: State, at: datetime) -> list[list]:
                 continue
             idx = int(ends.searchsorted(pd.Timestamp(t), side="right")) - 1
             if idx >= 0 and ends[idx].to_pydatetime() > origin:
-                items.append([p["seq"], f["h"], float(hourly["close"].iloc[idx]), iso(ends[idx].to_pydatetime())])
+                items.append([p["seq"], f["h"], float(ref["close"].iloc[idx]), iso(ends[idx].to_pydatetime())])
             else:
                 items.append([p["seq"], f["h"], None, None])  # no data between origin and target: void
     return items
@@ -120,7 +124,7 @@ def _need_prior(state: State, tf: Timeframe, anchor: datetime, version: str) -> 
 
 def run_cycle(root: Path | str, now: datetime | None = None, market=None, collect_news=True,
               news_fetch=None, calendar_fetch=None, pairs: list[str] | None = None,
-              timeframes=None, log=print) -> CycleReport:
+              timeframes=None, log=print, backtest_budget: int | None = None) -> CycleReport:
     """Run one cycle against the state directory ``root``."""
     state = State.open(root)
     at = (now or utcnow()).replace(microsecond=0)
@@ -134,7 +138,7 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
 
     # 1. market data ------------------------------------------------------
     def fetch(pair: Pair):
-        out = {"pair": pair.code, "hourly": None, "daily": None, "live": None, "errors": []}
+        out = {"pair": pair.code, "hourly": None, "daily": None, "live": None, "intraday": {}, "errors": []}
         have_h = state.prices.load(pair.code, "1h")
         # Once history is stored, only the most recent bars need downloading.
         gap = (at - have_h.index[-1].to_pydatetime()) if len(have_h) else None
@@ -143,6 +147,17 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
             out["hourly"], out["live"] = market.hourly(pair, at, range_)
         except Exception as exc:
             out["errors"].append(f"{pair.code} 1h: {exc}")
+        for tf in tfs:
+            if tf.minutes and tf.key != "1h":
+                have = state.prices.load(pair.code, tf.key)
+                gap = (at - have.index[-1].to_pydatetime()) if len(have) else None
+                # Yahoo keeps about 60 days of 15-minute bars.
+                rng = "5d" if gap is not None and gap < timedelta(days=4) else "1mo" if gap is not None and gap < timedelta(days=25) else "60d"
+                try:
+                    out["intraday"][tf.key], live = market.intraday(pair, at, tf.minutes, rng)
+                    out["live"] = out["live"] or live
+                except Exception as exc:
+                    out["errors"].append(f"{pair.code} {tf.key}: {exc}")
         if any(tf.key == "1d" for tf in tfs):
             have = state.prices.load(pair.code, "1d")
             # Only ask for daily bars once the next business day could have completed.
@@ -162,6 +177,8 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
             report.appended[f"{f['pair']}_1h"] = state.prices.append_new(f["pair"], "1h", f["hourly"])
         if f["daily"] is not None:
             report.appended[f"{f['pair']}_1d"] = state.prices.append_new(f["pair"], "1d", f["daily"])
+        for key, bars in f["intraday"].items():
+            report.appended[f"{f['pair']}_{key}"] = state.prices.append_new(f["pair"], key, bars)
         if f["live"] and f["live"].get("price"):
             report.quotes[f["pair"]] = f["live"]
 
@@ -222,14 +239,16 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
         issued = {(p["pair"], p["origin"]) for p in predictions.values() if p["tf"] == tf.key}
         for pair in pair_objs:
             bars = state.prices.load(pair.code, tf.key)
-            hourly = state.prices.load(pair.code, "1h")
-            if len(bars) < 400 or not len(hourly):
+            ref = state.prices.load(pair.code, tf.ref)
+            if len(bars) < 400 or not len(ref):
                 continue
             origin = origin_of(tf, bars)
             if (pair.code, iso(origin)) in issued or at - origin > MAX_ORIGIN_AGE[tf.key] or origin > at:
                 continue
+            if target_times(tf, origin, tf.horizons[:1])[0] <= at:
+                continue    # the next bar has already closed: a forecast for it would not be ahead of time
             try:
-                rec, chart = make_prediction(tf, pair, bars, hourly, origin, news_items, events,
+                rec, chart = make_prediction(tf, pair, bars, ref, origin, news_items, events,
                                              prior_rec["seq"], learn_seq, st, version)
             except Exception as exc:
                 report.errors.append(f"{pair.code} {tf.key} forecast: {exc}")
@@ -241,13 +260,22 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
             report.predictions += 1
     state.write_cache("latest.json", latest)
 
-    # 8. verify everything written so far -----------------------------------
+    # 8. rolling backtest on the stored history (derived; never part of the ledger)
+    budget = backtest.BUDGET if backtest_budget is None else backtest_budget
+    if budget:
+        try:
+            report.backtest = backtest.update(state, tfs, [p.code for p in pair_objs], at, budget=budget)
+        except Exception as exc:
+            report.errors.append(f"backtest: {exc}")
+            traceback.print_exc()
+
+    # 9. verify everything written so far -----------------------------------
     from .audit import verify
     report.verify = verify(state.root)
     status = {
         "at": report.at, "quotes": report.quotes, "errors": report.errors[:50], "news": report.news,
         "appended": report.appended, "predictions": report.predictions, "outcomes": report.outcomes,
-        "priors": report.priors, "verify_ok": report.verify["ok"],
+        "priors": report.priors, "verify_ok": report.verify["ok"], "backtest": report.backtest.get("added"),
     }
     state.write_cache("status.json", status)
     if log:

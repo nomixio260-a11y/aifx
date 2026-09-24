@@ -219,6 +219,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .chart.small { height: 260px; }
 .chart.dist { height: 210px; }
 .note { font-size: 12px; color: var(--muted); margin: 0; }
+.check { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: var(--ink-2); }
 details.more > summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; }
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "▸"; font-size: 11px; color: var(--muted); }
@@ -354,6 +355,7 @@ footer p { margin: 0; max-width: 95ch; }
       <div class="panel">
         <div class="section-head"><h3>チャートと予測レンジ</h3><span class="seg" id="seg-range"></span></div>
         <div class="chart" id="chart" role="img" aria-label="ローソク足と予測レンジ"></div>
+        <div class="small check" id="chart-check"></div>
         <details class="more"><summary>表示の切り替え・見方</summary><div><div class="toggles" id="toggles"></div><p class="note" id="chart-note"></p></div></details>
       </div>
       <div class="panel">
@@ -377,7 +379,7 @@ footer p { margin: 0; max-width: 95ch; }
     </div>
     <details class="panel more"><summary>時刻ごとの予測 (表)</summary><div>
       <p class="note" id="path-caption"></p>
-      <div class="tablebox tall"><table><thead><tr><th>時刻</th><th class="num">予測</th><th class="num">変化 (pips)</th><th class="num">80%レンジ</th><th class="num opt">上昇確率</th></tr></thead><tbody id="path-body"></tbody></table></div>
+      <div class="tablebox tall"><table><thead><tr><th>時刻</th><th class="num">中心</th><th class="num">変化 (pips)</th><th class="num opt">50%レンジ</th><th class="num">80%レンジ</th><th class="num opt">95%レンジ</th><th class="num opt">上昇確率</th></tr></thead><tbody id="path-body"></tbody></table></div>
     </div></details>
   </section>
 
@@ -415,7 +417,14 @@ footer p { margin: 0; max-width: 95ch; }
       </div>
       <div><span class="seg" id="seg-track-pair"></span></div>
       <p class="lead" id="track-lead"></p>
+      <div class="section-head"><h3>実際に発行した予測 (台帳)</h3><p>結果が出る前に記録した予測だけを判定</p></div>
       <div class="stats" id="track-stats"></div>
+      <div class="section-head"><h3>バックテスト (保存済みの過去データ)</h3><p id="bt2-caption"></p></div>
+      <p class="note">各時点までのデータだけを使い、今のモデルで予測を作り直して実際の値動きと比べた結果です。中心やレンジ幅の学習も本番と同じ規則で時系列順に再現し、その時点で結果が出ていた予測だけから学習させています。毎回の処理で新しい時点を加えて更新します (ニュースは使いません)。結果が出る前に記録した上の成績とは別物で、参考値です。</p>
+      <div class="stats" id="bt2-stats"></div>
+      <div class="section-head"><h3>バックテストの推移</h3><span class="seg" id="seg-bt2-metric"></span></div>
+      <p class="note" id="bt2-roll"></p>
+      <div class="chart small" id="bt2-chart" role="img" aria-label="バックテストの的中率の推移"></div>
       <div class="grid2">
         <div class="stack">
           <div class="section-head"><h3>累積の推移</h3><span class="seg" id="seg-track-metric"></span></div>
@@ -526,9 +535,10 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     { id: "verify", label: "検証", icon: '<path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>' }
   ];
   var S = {
-    view: "forecast", pair: "USDJPY", tf: "1h", range: { "1h": narrowMQ.matches ? 48 : 120, "1d": narrowMQ.matches ? 65 : 130 },
-    h: { "1h": 24, "1d": 5 },
-    show: { band: true, ma: true, past: true, models: false, rsi: !narrowMQ.matches },
+    view: "forecast", pair: "USDJPY", tf: "1h",
+    range: { "15m": narrowMQ.matches ? 48 : 96, "1h": narrowMQ.matches ? 48 : 120, "1d": narrowMQ.matches ? 65 : 130 },
+    h: { "15m": 4, "1h": 24, "1d": 5 },
+    show: { band: true, ma: true, past: true, models: false, rsi: !narrowMQ.matches }, pastSrc: "auto",
     trackTf: "1h", trackPair: "ALL", trackMetric: 1, newsCur: "ALL", learnTf: "1h", strengthWin: "24h",
     meta: null, pairs: {}, track: null, news: null, models: null, verify: null, market: null, status: null, rendered: {}
   };
@@ -568,7 +578,14 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var txt = m < 1 ? "1分未満" : m < 60 ? m + "分" : m < 60 * 48 ? Math.round(m / 60) + "時間" : Math.round(m / 1440) + "日";
     return ms >= 0 ? "あと" + txt : txt + "前";
   }
-  function tfLabel(tf, h) { if (tf === "1h") return h + "時間後"; return h === 1 ? "翌営業日" : h + "営業日後"; }
+  var TF_MIN = { "15m": 15, "1h": 60 };
+  var TF_ITEMS = [{ label: "15分足", value: "15m" }, { label: "1時間足", value: "1h" }, { label: "日足", value: "1d" }];
+  function tfLabel(tf, h) {
+    var m = TF_MIN[tf];
+    if (m) { var t = h * m; return t < 60 ? t + "分後" : (t % 60 ? Math.floor(t / 60) + "時間" + (t % 60) + "分後" : t / 60 + "時間後"); }
+    return h === 1 ? "翌営業日" : h + "営業日後";
+  }
+  function timeKey(tf, iso) { return TF_MIN[tf] ? jst(iso) : iso; }
   function pairInfo(code) { var list = (S.meta && S.meta.pairs) || []; for (var i = 0; i < list.length; i++) if (list[i].pair === code) return list[i]; return null; }
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(function () { t.hidden = true; }, 3500); }
   function pips(diff, info) { return diff / info.pip; }
@@ -708,6 +725,11 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     for (var i = 0; i < hs.length; i++) if (hs[i].h === want) return hs[i];
     return hs[hs.length - 1];
   }
+  function btWindowName(tf, recent) {
+    var b = S.backtest && S.backtest.tf && S.backtest.tf[tf]; if (!b) return "";
+    if (recent) { var hr = b.recent_hours; return hr >= 48 ? Math.round(hr / 24) + "日" : hr + "時間"; }
+    return b.window_days + "日";
+  }
   function probText(p) {
     if (p >= 0.6) return "上がる可能性が高め";
     if (p >= 0.53) return "やや上がりやすい";
@@ -730,7 +752,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     // plain-language summary
     sum.appendChild(el("div", "k", H.label + " (" + jst(H.t) + ") の予想 · 80%の確率でこの範囲"));
     var rg = el("div", "range"); rg.appendChild(document.createTextNode(fmt(H.lo80, d) + " 〜 " + fmt(H.hi80, d)));
-    rg.appendChild(el("small", null, "現在から " + signed(pips(H.lo80 - pr.p0, p), 0) + " 〜 " + signed(pips(H.hi80 - pr.p0, p), 0) + " pips")); sum.appendChild(rg);
+    var cur = p.quote && p.quote.price ? p.quote.price : pr.p0;
+    rg.appendChild(el("small", null, "現在値から " + signed(pips(H.lo80 - cur, p), 0) + " 〜 " + signed(pips(H.hi80 - cur, p), 0) + " pips")); sum.appendChild(rg);
     sum.appendChild(el("div", "prob", probText(H.p_up) + " (上昇確率 " + pct(H.p_up) + ")"));
     var pb = el("div", "pbar"); pb.setAttribute("role", "img"); pb.setAttribute("aria-label", "上昇 " + pct(H.p_up) + "、下落 " + pct(1 - H.p_up));
     var iu = el("i"); iu.style.width = (H.p_up * 100).toFixed(1) + "%"; iu.style.background = t.up;
@@ -741,6 +764,17 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     if (H.events) why.push("この間に重要指標の発表が " + H.events + " 件あり、レンジを広げています。");
     if (Math.abs(H.news_pips) >= 0.5) why.push("ニュースの材料で中心を " + signed(H.news_pips, 1, " pips") + " 動かしています。");
     if (why.length) sum.appendChild(el("div", "why", why.join(" ")));
+    var BT = S.backtest && S.backtest.tf && S.backtest.tf[S.tf]; var btm = BT && BT.by_h[String(H.h)];
+    if (btm && btm.all && btm.all.n) {
+      var bb = btm.all; var rr = btm.recent || { n: 0 }; var mine = (((BT.by_pair || {})[S.pair] || {})[String(H.h)] || {}).all || { n: 0 };
+      var line = el("div", "why");
+      line.appendChild(el("b", null, "バックテスト (直近" + btWindowName(S.tf, false) + "・全ペア" + bb.n.toLocaleString() + "件): "));
+      line.appendChild(document.createTextNode("この予測先の80%レンジに実際の値が入った割合 " + pct(bb.cover["80"]) + "、95%レンジ " + pct(bb.cover["95"]) +
+        (bb.hit != null ? "、方向の的中 " + pct(bb.hit) : "") + "。" +
+        (rr.n >= 30 ? "直近" + btWindowName(S.tf, true) + "では80%レンジ " + pct(rr.cover["80"]) + (mine.n >= 30 ? "、" : "。") : "") +
+        (mine.n >= 30 ? p.label + "だけでは " + pct(mine.cover["80"]) + "。" : "") + "毎回の処理で最新のデータを加えて更新しています。"));
+      sum.appendChild(line);
+    }
     // horizon cards on a shared scale
     var maxHalf = 0; pr.horizons.forEach(function (h) { maxHalf = Math.max(maxHalf, Math.abs(h.hi95 - pr.p0), Math.abs(pr.p0 - h.lo95)); });
     function posOf(v) { return 50 + (v - pr.p0) / (maxHalf || 1) * 48; }
@@ -753,7 +787,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         var s = el("div", "b"); var l = posOf(h["lo" + b[0]]), r = posOf(h["hi" + b[0]]);
         s.style.left = l + "%"; s.style.width = Math.max(1, r - l) + "%"; s.style.background = alpha(t.accent, b[1]); bar.appendChild(s);
       });
-      var now = el("div", "now"); now.style.left = "50%"; bar.appendChild(now);
+      var now = el("div", "now"); now.style.left = Math.max(0, Math.min(100, posOf(cur))) + "%"; bar.appendChild(now);
       var ctr = el("div", "ctr"); ctr.style.left = posOf(h.price) + "%"; bar.appendChild(ctr);
       c.appendChild(bar);
       c.appendChild(el("div", "sub", fmt(h.lo80, d) + "–" + fmt(h.hi80, d)));
@@ -761,12 +795,12 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       c.addEventListener("click", function () { S.h[S.tf] = h.h; persist(); renderHead(); renderDist(); renderChart(); });
       cards.appendChild(c);
     });
-    issued.textContent = "カードの帯は予測レンジ (濃い順に50%・80%・95%)、縦線が現在値、○が予測の中心。起点 " + jst(pr.origin) + " の " + fmt(pr.p0, d) + " から予測 · 発行 " + jst(pr.issued) + " · 記録 #" + pr.seq;
+    issued.textContent = "カードの帯は予測レンジ (濃い順に50%・80%・95%)、縦線が現在値、○が予測の中心。起点 " + jst(pr.origin) + " の " + fmt(pr.p0, d) + " から予測" + (Math.abs(cur - pr.p0) >= p.pip / 2 ? " (その後 " + signed(pips(cur - pr.p0, p), 1) + " pips 動いています)" : "") + " · 発行 " + jst(pr.issued) + " · 記録 #" + pr.seq;
   }
 
   var TOGGLES = [
     { key: "band", label: "予測レンジ", cls: "key box", style: function (t) { return "background:" + alpha(t.accent, 0.3); } },
-    { key: "past", label: "過去の予測 (答え合わせ)", cls: "key dotk", style: function (t) { return "background:" + t.good; } },
+    { key: "past", label: "答え合わせ (過去の予測と実際)", cls: "key dotk", style: function (t) { return "background:" + t.good; } },
     { key: "ma", label: "移動平均 20/75", cls: "key", style: function (t) { return "border-color:" + t.ma20; } },
     { key: "rsi", label: "RSI", cls: "key", style: function (t) { return "border-color:" + t.ink2; } },
     { key: "models", label: "各モデルの予測", cls: "key", style: function (t) { return "border-color:" + alpha(t.ink2, 0.5); } }
@@ -783,9 +817,18 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     });
   }
 
+  function pastList(blk, h) {
+    // past forecasts of horizon h with their outcome: the live record, or the backtest
+    var live = (blk.past && blk.past[String(h)]) || [];
+    var bt = (blk.bt_past && blk.bt_past[String(h)]) || [];
+    var src = S.pastSrc === "auto" ? (live.length >= 12 ? "live" : bt.length ? "bt" : "live") : S.pastSrc;
+    var list = src === "bt" ? bt.map(function (q) { return { x: q.x, t: q.t, origin: q.origin, price: q.c, lo50: q.lo50, hi50: q.hi50, lo80: q.lo80, hi80: q.hi80, lo95: q.lo95, hi95: q.hi95, actual: q.actual, inside80: q.in80 }; }) : live;
+    return { src: src, list: list, nLive: live.length, nBt: bt.length };
+  }
+
   function renderChart() {
     var p = curPair(); var blk = curBlock(); if (!p || !blk || !$("chart").offsetParent) return;
-    var t = tokens(); var d = p.decimals + 1; var tf = S.tf; var narrow = narrowMQ.matches;
+    var t = tokens(); var d = p.decimals + 1; var tf = S.tf; var narrow = narrowMQ.matches; var intraday = !!TF_MIN[tf];
     var bars = blk.bars; var nH = bars.t.length;
     var steps = blk.path ? blk.path.steps : [];
     var xs = bars.t.concat(steps.map(function (s) { return s.x; }));
@@ -793,7 +836,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var idxOf = {}; xs.forEach(function (x, i) { idxOf[x] = i; });
     var H = curHorizon();
     function pad(arr) { return arr.concat(new Array(steps.length).fill(null)); }
-    function fut(key) { var o = new Array(N).fill(null); if (!steps.length) return o; o[lastIdx] = (blk.prediction ? blk.prediction.p0 : last); steps.forEach(function (s, i) { o[nH + i] = s[key]; }); return o; }
+    function fut(key) { var o = new Array(N).fill(null); if (!steps.length) return o; o[lastIdx] = (blk.prediction ? blk.prediction.p0 : last); steps.forEach(function (s, i) { o[nH + i] = s[key] != null ? s[key] : null; }); return o; }
     var series = [];
     var marks = [{ yAxis: last, label: { position: "end", formatter: fmt(last, p.decimals) } }];
     if (H && idxOf[H.x] != null) marks.push({ xAxis: H.x, lineStyle: { color: t.accent, width: 1, type: "solid" }, label: { position: "insideEndTop", formatter: H.label, color: t.accent, fontSize: 10.5, backgroundColor: "transparent" } });
@@ -811,37 +854,57 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series.push({ name: "移動平均20", type: "line", data: pad(blk.ind.sma20), symbol: "none", lineStyle: { width: 1.5, color: t.ma20 }, silent: true, z: 2 });
       series.push({ name: "移動平均75", type: "line", data: pad(blk.ind.sma75), symbol: "none", lineStyle: { width: 1.5, color: t.ma75 }, silent: true, z: 2 });
     }
+    // fan: nested central ranges, 95 % outermost; overlapping shades darken toward the centre
+    var FAN = [["95", 0.07], ["80", 0.09], ["60", 0.11], ["40", 0.13], ["20", 0.16]];
     if (S.show.band && steps.length) {
-      [["95", 0.12], ["80", 0.18], ["50", 0.26]].forEach(function (b) {
+      FAN.forEach(function (b) {
+        if (steps[0]["lo" + b[0]] == null) return;
         var lo = fut("lo" + b[0]); var hi = fut("hi" + b[0]);
         series.push({ name: "b" + b[0] + "lo", type: "line", stack: "b" + b[0], data: lo.map(function (v) { return v == null ? "-" : v; }), symbol: "none", lineStyle: { opacity: 0 }, silent: true, z: 3 });
         series.push({ name: "b" + b[0], type: "line", stack: "b" + b[0], data: hi.map(function (v, i) { return v == null || lo[i] == null ? "-" : v - lo[i]; }), symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: alpha(t.accent, b[1]), opacity: 1 }, silent: true, z: 3 });
       });
-      series.push({ name: "80%上限", type: "line", data: fut("hi80"), symbol: "none", lineStyle: { width: 1, color: alpha(t.accent, 0.6) }, silent: true, z: 4,
-        endLabel: { show: !narrow, formatter: function () { return fmt(steps[steps.length - 1].hi80, p.decimals); }, color: t.accent, fontFamily: t.mono, fontSize: 10.5 } });
-      series.push({ name: "80%下限", type: "line", data: fut("lo80"), symbol: "none", lineStyle: { width: 1, color: alpha(t.accent, 0.6) }, silent: true, z: 4,
-        endLabel: { show: !narrow, formatter: function () { return fmt(steps[steps.length - 1].lo80, p.decimals); }, color: t.accent, fontFamily: t.mono, fontSize: 10.5 } });
+      ["80", "95"].forEach(function (lv) {
+        ["hi", "lo"].forEach(function (side) {
+          series.push({ name: lv + side, type: "line", data: fut(side + lv), symbol: "none", silent: true, z: 4,
+            lineStyle: { width: lv === "80" ? 1.2 : 0.8, color: alpha(t.accent, lv === "80" ? 0.75 : 0.45) } });
+        });
+      });
+      // labelled prices at the selected horizon
+      if (H && idxOf[H.x] != null) {
+        var pts = [["hi95", "95%上限"], ["hi80", "80%上限"], ["c", "中心"], ["lo80", "80%下限"], ["lo95", "95%下限"]].filter(function (k) { return H[k[0] === "c" ? "price" : k[0]] != null; });
+        series.push({ name: "horizon", type: "scatter", z: 7, silent: true, symbolSize: 7,
+          itemStyle: { color: t.surface, borderColor: t.accent, borderWidth: 1.5 },
+          data: pts.map(function (k) { var v = H[k[0] === "c" ? "price" : k[0]]; return { value: [idxOf[H.x], v], name: k[1] }; }),
+          label: { show: !narrow || true, position: "left", distance: 6, color: t.ink, fontFamily: t.mono, fontSize: 10.5, backgroundColor: alpha(t.surface, 0.85), padding: [1, 3], borderRadius: 3,
+            formatter: function (prm) { return (narrow ? "" : prm.name + " ") + fmt(prm.value[1], p.decimals); } },
+          labelLayout: { hideOverlap: true } });
+      }
     }
-    if (S.show.models && blk.path) {
+    if (S.show.models && blk.path && blk.path.models) {
       MODEL_KEYS.forEach(function (k) {
         var o = new Array(N).fill(null); o[lastIdx] = blk.prediction.p0; (blk.path.models[k] || []).forEach(function (v, i) { o[nH + i] = v; });
         series.push({ name: MODEL_NAMES[k], type: "line", data: o, symbol: "none", lineStyle: { width: 1, color: alpha(t.ink2, 0.5) }, silent: true, z: 4 });
       });
     }
-    var pastByIdx = {};
-    if (S.show.past && blk.past && blk.past.length) {
-      var pdata = [];
-      blk.past.forEach(function (q) { var i = idxOf[q.x]; if (i == null) return; pastByIdx[i] = q; pdata.push([i, q.lo80, q.hi80, q.price, q.hit === true ? 1 : q.hit === false ? -1 : 0]); });
-      series.push({
-        name: "過去の予測", type: "custom", z: 5, data: pdata, encode: { x: 0, y: [1, 2, 3] }, silent: true,
-        renderItem: function (params, api) {
-          var x = api.value(0); var lo = api.coord([x, api.value(1)]); var hi = api.coord([x, api.value(2)]); var c = api.coord([x, api.value(3)]);
-          var col = api.value(4) === 1 ? t.good : api.value(4) === -1 ? t.bad : t.muted;
-          return { type: "group", children: [
-            { type: "line", shape: { x1: lo[0], y1: lo[1], x2: hi[0], y2: hi[1] }, style: { stroke: alpha(col, 0.55), lineWidth: 1.5 } },
-            { type: "circle", shape: { cx: c[0], cy: c[1], r: 3.5 }, style: { fill: col, stroke: t.surface, lineWidth: 1.5 } }] };
-        }
+    // answer check: the ranges that past forecasts of the selected horizon gave for each time,
+    // drawn as a corridor behind the candles, with the actual price marked where it fell outside
+    var pastByIdx = {}; var pinfo = { list: [] };
+    if (S.show.past && H) {
+      pinfo = pastList(blk, H.h);
+      var c80lo = new Array(N).fill(null), c80hi = new Array(N).fill(null), c50lo = new Array(N).fill(null), c50hi = new Array(N).fill(null);
+      var hitPts = [], missPts = [];
+      pinfo.list.forEach(function (q) {
+        var i = idxOf[q.x]; if (i == null || i >= nH || q.lo80 == null) return;
+        pastByIdx[i] = q; c80lo[i] = q.lo80; c80hi[i] = q.hi80; c50lo[i] = q.lo50 != null ? q.lo50 : null; c50hi[i] = q.hi50 != null ? q.hi50 : null;
+        (q.inside80 ? hitPts : missPts).push([i, q.actual]);
       });
+      [[c80lo, c80hi, 0.13, "過去の80%レンジ"], [c50lo, c50hi, 0.13, "過去の50%レンジ"]].forEach(function (b, k) {
+        series.push({ name: "pl" + k, type: "line", stack: "past" + k, data: b[0].map(function (v) { return v == null ? "-" : v; }), symbol: "none", lineStyle: { opacity: 0 }, silent: true, z: 1 });
+        series.push({ name: b[3], type: "line", stack: "past" + k, data: b[1].map(function (v, i) { return v == null || b[0][i] == null ? "-" : v - b[0][i]; }), symbol: "none",
+          lineStyle: { opacity: 0 }, areaStyle: { color: alpha(t.ink2, b[2]), opacity: 1 }, silent: true, z: 1 });
+      });
+      series.push({ name: "範囲内", type: "scatter", data: hitPts, symbolSize: 4, itemStyle: { color: t.good, borderColor: t.surface, borderWidth: 1 }, silent: true, z: 6 });
+      series.push({ name: "範囲外", type: "scatter", data: missPts, symbol: "diamond", symbolSize: 8, itemStyle: { color: t.bad, borderColor: t.surface, borderWidth: 1.2 }, silent: true, z: 6 });
     }
     if (steps.length) {
       series.push({ name: "予測の中心", type: "line", data: fut("c"), symbol: "none", lineStyle: { width: 2, color: t.accent, type: [6, 4] }, z: 6 });
@@ -851,7 +914,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series.push({ name: "RSI", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pad(blk.ind.rsi14), symbol: "none", lineStyle: { width: 1.5, color: t.ink2 }, silent: true,
         markLine: { symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: "solid" }, label: { color: t.muted, fontSize: 10, position: "end" }, data: [{ yAxis: 30 }, { yAxis: 70 }] } });
     }
-    function xlabel(v) { if (tf === "1h") return jst(v); return v.slice(2).replace(/-/g, "/"); }
+    function xlabel(v) { if (intraday) return jst(v); return v.slice(2).replace(/-/g, "/"); }
     function tooltip(params) {
       if (!params || !params.length) return "";
       var i = params[0].dataIndex; var rows = [];
@@ -859,20 +922,23 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         rows.push('<div style="display:flex;justify-content:space-between;gap:16px;align-items:center"><span style="color:' + t.muted + ';display:inline-flex;gap:6px;align-items:center">' +
           (color ? '<i style="display:inline-block;width:12px;border-top:2px solid ' + color + '"></i>' : "") + esc(label) + '</span><b style="font-family:' + t.mono + ';font-weight:500;color:' + t.ink + '">' + esc(value) + "</b></div>");
       }
-      var head = '<div style="font-weight:600;margin-bottom:4px;color:' + t.ink + '">' + esc(tf === "1h" ? jst(xs[i]) + " まで" : xs[i]) + (i >= nH ? ' <span style="color:' + t.accent + ';font-weight:500">予測</span>' : "") + "</div>";
+      var head = '<div style="font-weight:600;margin-bottom:4px;color:' + t.ink + '">' + esc(intraday ? jst(xs[i]) + " まで" : xs[i]) + (i >= nH ? ' <span style="color:' + t.accent + ';font-weight:500">予測 (' + tfLabel(tf, i - nH + 1) + ")</span>" : "") + "</div>";
       if (i < nH) {
         var c = bars.ohlc[i]; row("始値", fmt(c[0], d)); row("高値", fmt(c[3], d)); row("安値", fmt(c[2], d)); row("終値", fmt(c[1], d));
         if (blk.ind.rsi14[i] != null) row("RSI(14)", fmt(blk.ind.rsi14[i], 1));
       } else {
-        var s = steps[i - nH];
-        row("予測の中心", fmt(s.c, d), t.accent); row("80%レンジ", fmt(s.lo80, d) + " – " + fmt(s.hi80, d)); row("50%レンジ", fmt(s.lo50, d) + " – " + fmt(s.hi50, d));
-        row("95%レンジ", fmt(s.lo95, d) + " – " + fmt(s.hi95, d)); row("上昇確率", pct(s.p));
+        var s = steps[i - nH]; var p0 = blk.prediction.p0;
+        row("予測の中心", fmt(s.c, d) + " (" + signed(pips(s.c - p0, p), 1) + ")", t.accent);
+        [["20", "20%"], ["50", "50%"], ["80", "80%"], ["95", "95%"]].forEach(function (lv) {
+          if (s["lo" + lv[0]] != null) row(lv[1] + "レンジ", fmt(s["lo" + lv[0]], d) + " – " + fmt(s["hi" + lv[0]], d) + " (±" + fmt(pips(s["hi" + lv[0]] - s["lo" + lv[0]], p) / 2, 0) + ")");
+        });
+        row("上昇確率", pct(s.p));
       }
       var q = pastByIdx[i];
       if (q) {
-        row("過去の予測 (起点 " + jst(q.origin) + ")", fmt(q.price, d), q.hit ? t.good : t.bad);
+        row((pinfo.src === "bt" ? "バックテスト: " : "過去の予測: ") + tfLabel(tf, H.h) + " (起点 " + (intraday ? jst(q.origin) : q.origin.slice(0, 10)) + ")", fmt(q.price, d), t.accent);
         row("そのときの80%レンジ", fmt(q.lo80, d) + " – " + fmt(q.hi80, d));
-        row("方向", q.hit === true ? "○ 的中" : q.hit === false ? "× 外れ" : "—"); row("レンジ", q.inside80 ? "○ 範囲内" : "× 範囲外");
+        row("実際", fmt(q.actual, d) + (q.inside80 ? " ○ 範囲内" : " × 範囲外"), q.inside80 ? t.good : t.bad);
       }
       return head + rows.join("");
     }
@@ -880,7 +946,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var right = narrow ? 52 : 74;
     var grids = withRsi ? [{ left: 8, right: right, top: 18, bottom: "27%" }, { left: 8, right: right, top: "78%", bottom: 26 }] : [{ left: 8, right: right, top: 18, bottom: 26 }];
     var xAxes = [{ type: "category", data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { show: !withRsi, color: t.muted, fontFamily: t.mono, fontSize: 10.5, hideOverlap: true, formatter: xlabel }, splitLine: { show: false } }];
-    var yAxes = [{ scale: true, position: "right", splitNumber: narrow ? 4 : 5, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } }];
+    var yAxes = [{ scale: true, position: "right", splitNumber: narrow ? 5 : 8, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } }];
     if (withRsi) {
       xAxes.push({ type: "category", gridIndex: 1, data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, hideOverlap: true, formatter: xlabel } });
       yAxes.push({ gridIndex: 1, min: 0, max: 100, interval: 50, position: "right", axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10 } });
@@ -889,20 +955,35 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       animation: false, backgroundColor: "transparent", textStyle: { fontFamily: t.sans, color: t.muted },
       grid: grids, xAxis: xAxes, yAxis: yAxes,
       axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: t.muted, width: 1 }, label: { backgroundColor: t.ink2, fontFamily: t.mono, fontSize: 10.5, formatter: function (o) { return o.axisDimension === "x" ? xlabel(o.value) : Number(o.value).toFixed(p.decimals); } } },
-      tooltip: Object.assign(tipBox(t), { trigger: "axis", axisPointer: { type: "cross" }, formatter: tooltip, extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,0.15);border-radius:8px;min-width:190px" }),
+      tooltip: Object.assign(tipBox(t), { trigger: "axis", axisPointer: { type: "cross" }, formatter: tooltip, extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,0.15);border-radius:8px;min-width:200px" }),
       dataZoom: [{ type: "inside", xAxisIndex: withRsi ? [0, 1] : [0], startValue: start, endValue: N - 1, minValueSpan: 12 }],
       series: series
     };
     chartOn("chart").setOption(option, true);
-    var hits = (blk.past || []).filter(function (q) { return q.hit === true; }).length, judged = (blk.past || []).filter(function (q) { return q.hit != null; }).length;
-    $("chart-note").textContent = (blk.path && blk.path.coarse ? "(この予測は以前のバージョンで作られたため、予測先の間は直線でつないで表示しています) " : "") + "網掛けの帯は予測レンジ (濃い順に50%・80%・95%)、紫の縦線は選んだ予測先。" + (S.show.past ? "点は過去の" + (tf === "1h" ? "1時間後" : "翌営業日") + "予測で、緑は方向が的中、赤は外れ、縦線はそのときの80%レンジ" + (judged ? " (表示中 " + hits + "/" + judged + " 的中)" : "") + "。" : "") + "橙の破線は重要指標の発表時刻。2本指で拡大・スクロールできます。";
+    // answer check summary for the displayed past forecasts
+    var shown = pinfo.list.filter(function (q) { var i = idxOf[q.x]; return i != null && i >= start && i < nH && q.lo80 != null; });
+    var inside = shown.filter(function (q) { return q.inside80; }).length;
+    var chk = $("chart-check"); clear(chk);
+    if (S.show.past && H) {
+      var srcName = pinfo.src === "bt" ? "バックテスト" : "実際に発行した予測";
+      chk.appendChild(el("span", null, "答え合わせ (" + H.label + "の予測・" + srcName + "): "));
+      chk.appendChild(el("b", shown.length ? (Math.abs(inside / shown.length - 0.8) <= 0.1 ? "good" : "") : "", shown.length ? "80%レンジに " + inside + "/" + shown.length + " (" + pct(inside / shown.length) + ") が収まりました" : "表示期間に判定済みの予測はまだありません"));
+      var sw = el("span", "seg"); sw.style.marginLeft = "8px";
+      segment(sw, [{ label: "自動", value: "auto" }, { label: "実際の予測", value: "live" }, { label: "バックテスト", value: "bt" }], function () { return S.pastSrc; }, function (v) { S.pastSrc = v; renderChart(); });
+      chk.appendChild(sw);
+    }
+    $("chart-note").textContent = (blk.path && blk.path.coarse ? "(この予測は以前のバージョンで作られたため、予測先の間は直線でつないで表示しています) " : "") +
+      "網掛けは予測レンジで、外側から95%・80%・60%・40%・20%の範囲 (濃いほど起こりやすい)。線は80%と95%の境界、紫の縦線と○は選んだ予測先の価格。" +
+      (S.show.past ? "ローソク足の後ろの灰色の帯は、過去に出した" + (H ? H.label : "") + "予測がその時刻について示した50%・80%レンジ。緑の点は実際の値が80%レンジに入ったところ、赤の◆は外れたところ。" : "") +
+      "橙の破線は重要指標の発表時刻。2本指で拡大・スクロールできます。";
   }
 
   function renderDist() {
     var p = curPair(); var H = curHorizon(); var blk = curBlock();
     var host = $("dist-chart"); var lad = clear($("ladder"));
     if (!p || !H || !H.dist) { $("dist-caption").textContent = ""; return; }
-    var t = tokens(); var d = p.decimals + 1; var p0 = blk.prediction.p0; var curve = H.dist.curve;
+    var t = tokens(); var d = p.decimals + 1; var curve = H.dist.curve;
+    var p0 = p.quote && p.quote.price ? p.quote.price : blk.prediction.p0;   // "now" marks the latest quote
     $("dist-title").textContent = H.label + "の予想の分布";
     $("dist-caption").textContent = "山が高いほど起こりやすい価格";
     function band(lo, hi) {
@@ -953,10 +1034,12 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var hs = {}; (blk.prediction.horizons || []).forEach(function (h) { hs[h.x] = h; });
     blk.path.steps.forEach(function (s) {
       var tr = el("tr", hs[s.x] ? "hl" : null);
-      tr.appendChild(el("td", "num", S.tf === "1h" ? jst(s.t) : s.x + (hs[s.x] ? " (" + hs[s.x].label + ")" : "")));
+      tr.appendChild(el("td", "num", (TF_MIN[S.tf] ? jst(s.t) : s.x) + (hs[s.x] ? " (" + hs[s.x].label + ")" : "")));
       tr.appendChild(el("td", "num", fmt(s.c, p.decimals)));
       var pip = (s.c - blk.prediction.p0) / p.pip; tr.appendChild(el("td", "num " + dirClass(pip), signed(pip, 1)));
+      tr.appendChild(el("td", "num opt", fmt(s.lo50, p.decimals) + " – " + fmt(s.hi50, p.decimals)));
       tr.appendChild(el("td", "num", fmt(s.lo80, p.decimals) + " – " + fmt(s.hi80, p.decimals)));
+      tr.appendChild(el("td", "num opt", fmt(s.lo95, p.decimals) + " – " + fmt(s.hi95, p.decimals)));
       tr.appendChild(el("td", "num opt", pct(s.p)));
       body.appendChild(tr);
     });
@@ -1023,9 +1106,9 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function renderPairAll() {
     if (S.view !== "forecast") return;
     renderHead(); renderToggles(); renderChart(); renderDist(); renderPathTable(); renderDrivers();
-    segment($("seg-range"), S.tf === "1h" ? [{ label: "2日", value: 48 }, { label: "5日", value: 120 }, { label: "10日", value: 240 }] : [{ label: "3か月", value: 65 }, { label: "6か月", value: 130 }, { label: "1年", value: 260 }],
+    segment($("seg-range"), S.tf === "15m" ? [{ label: "12時間", value: 48 }, { label: "1日", value: 96 }, { label: "3日", value: 288 }] : S.tf === "1h" ? [{ label: "2日", value: 48 }, { label: "5日", value: 120 }, { label: "10日", value: 240 }] : [{ label: "3か月", value: 65 }, { label: "6か月", value: 130 }, { label: "1年", value: 260 }],
       function () { return S.range[S.tf]; }, function (v) { S.range[S.tf] = v; renderChart(); });
-    segment($("seg-tf"), [{ label: "短期 (1時間足)", value: "1h" }, { label: "中期 (日足)", value: "1d" }], function () { return S.tf; }, function (v) { S.tf = v; persist(); renderPairAll(); });
+    segment($("seg-tf"), TF_ITEMS, function () { return S.tf; }, function (v) { S.tf = v; persist(); renderPairAll(); });
   }
 
   /* ---------------- market analysis ---------------- */
@@ -1184,8 +1267,48 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       pend.appendChild(row);
     });
     $("pending-caption").textContent = "判定を待っている予測 " + (tr.pending_count || 0).toLocaleString() + "件 (近い順)";
-    segment($("seg-track-tf"), [{ label: "1時間足", value: "1h" }, { label: "日足", value: "1d" }], function () { return S.trackTf; }, function (v) { S.trackTf = v; renderTrack(); });
+    segment($("seg-track-tf"), TF_ITEMS, function () { return S.trackTf; }, function (v) { S.trackTf = v; renderTrack(); });
+    renderBacktest(tf, hs, t);
     segment($("seg-track-pair"), [{ label: "全ペア", value: "ALL" }].concat((S.meta.pairs || []).map(function (p) { return { label: p.label, value: p.pair }; })), function () { return S.trackPair; }, function (v) { S.trackPair = v; renderTrack(); });
+  }
+
+  function renderBacktest(tf, hs, t) {
+    var B = S.backtest && S.backtest.tf && S.backtest.tf[tf]; var box = clear($("bt2-stats"));
+    if (!B) { $("bt2-caption").textContent = "まだ計算されていません (次のサーバー処理で作成されます)"; if (charts["bt2-chart"]) charts["bt2-chart"].clear(); return; }
+    var one = S.trackPair !== "ALL"; var byH = one ? ((B.by_pair || {})[S.trackPair] || {}) : B.by_h;
+    $("bt2-caption").textContent = (one ? (pairInfo(S.trackPair) || { label: S.trackPair }).label : "全ペア") + " · 直近" + B.window_days + "日・" + B.origins.toLocaleString() + "時点 · " + jst(S.backtest.at) + " 更新";
+    $("bt2-roll").textContent = "各点は直前" + (B.roll || "") + "に対象時刻を迎えた予測 (全ペア) の割合です。";
+    hs.forEach(function (h) {
+      var m = byH[String(h)] || {}; var a = m.all || { n: 0 }; var r = m.recent || { n: 0 };
+      var st = el("div", "stat"); var h4 = el("h4"); h4.appendChild(el("span", null, tfLabel(tf, h) + "の予測")); h4.appendChild(el("span", "muted small", (a.n || 0).toLocaleString() + "件")); st.appendChild(h4);
+      if (!a.n) { st.appendChild(el("div", "muted small", "判定できる時点がまだありません。")); box.appendChild(st); return; }
+      st.appendChild(el("div", "big", pct(a.cover["80"], 1)));
+      st.appendChild(el("div", "small muted", "80%レンジに実際の値が入った割合 (目標80%)"));
+      var kv = el("div", "kv");
+      function add(k, v, cls) { kv.appendChild(el("span", null, k)); kv.appendChild(el("span", cls || null, v)); }
+      ["50", "95"].forEach(function (lv) { add(lv + "%レンジに入った割合", pct(a.cover[lv], 1), Math.abs(a.cover[lv] - Number(lv) / 100) <= 0.05 ? "good" : null); });
+      add("方向の的中率", a.hit != null ? pct(a.hit, 1) + " (" + a.n_dir + "件)" : "— (ほぼ変化なし予測)");
+      add("誤差: ランダムウォーク比", a.skill != null ? signed(a.skill * 100, 2, "%") : "—", a.skill > 0 ? "good" : a.skill < 0 ? "bad" : null);
+      if (r.n) add("直近" + btWindowName(tf, true) + " 80%レンジ", pct(r.cover["80"], 1) + " (" + r.n + "件)", Math.abs(r.cover["80"] - 0.8) <= 0.07 ? "good" : null);
+      st.appendChild(kv); box.appendChild(st);
+    });
+    var colors = [t.s1, t.s2, t.s3, t.s4]; var metric = S.bt2Metric || 1;
+    var ser = hs.map(function (h, j) {
+      var pts = (B.timeline || {})[String(h)] || [];
+      return { name: tfLabel(tf, h), type: "line", showSymbol: pts.length < 30, symbolSize: 5, data: pts.map(function (q) { return [q[0], q[metric]]; }),
+        lineStyle: { width: 2, color: colors[j] }, itemStyle: { color: colors[j] }, connectNulls: true,
+        endLabel: { show: true, formatter: function (prm) { return tfLabel(tf, h) + " " + pct(prm.value[1]); }, color: t.ink2, fontSize: 10 }, labelLayout: { moveOverlap: "shiftY" } };
+    });
+    if (ser.length) ser[0].markLine = { symbol: "none", silent: true, lineStyle: { color: t.axis, type: "solid" }, label: { formatter: metric === 1 ? "目標 80%" : "偶然 50%", color: t.muted, fontSize: 10, position: "insideStartTop" }, data: [{ yAxis: metric === 1 ? 0.8 : 0.5 }] };
+    chartOn("bt2-chart").setOption({
+      animation: false, backgroundColor: "transparent", textStyle: { fontFamily: t.sans, color: t.muted },
+      grid: { left: 40, right: 100, top: 16, bottom: 28 },
+      xAxis: { type: "time", axisLine: { lineStyle: { color: t.axis } }, axisLabel: { color: t.muted, fontSize: 10, hideOverlap: true, formatter: function (v) { return jst(new Date(v).toISOString()).slice(0, 5); } }, splitLine: { show: false } },
+      yAxis: { type: "value", min: function (v) { return Math.max(0, Math.floor(v.min * 10) / 10); }, max: 1, axisLabel: { color: t.muted, fontSize: 10, formatter: function (v) { return (v * 100).toFixed(0) + "%"; } }, splitLine: { lineStyle: { color: t.hair } } },
+      tooltip: Object.assign(tipBox(t), { trigger: "axis", valueFormatter: function (v) { return v == null ? "—" : pct(v, 1); } }),
+      series: ser
+    }, true);
+    segment($("seg-bt2-metric"), [{ label: "80%レンジ", value: 1 }, { label: "方向", value: 2 }], function () { return S.bt2Metric || 1; }, function (v) { S.bt2Metric = v; renderTrack(); });
   }
 
   /* ---------------- news ---------------- */
@@ -1273,7 +1396,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     renderResearch(m.research, tf);
     var dl = clear($("models"));
     (m.models || []).forEach(function (x) { var d = el("div"); d.appendChild(el("dt", null, x.name)); d.appendChild(el("dd", null, x.description)); dl.appendChild(d); });
-    segment($("seg-learn-tf"), [{ label: "1時間足", value: "1h" }, { label: "日足", value: "1d" }], function () { return S.learnTf; }, function (v) { S.learnTf = v; renderLearning(); });
+    segment($("seg-learn-tf"), TF_ITEMS, function () { return S.learnTf; }, function (v) { S.learnTf = v; renderLearning(); });
   }
 
   function renderResearch(res, tf) {
@@ -1285,7 +1408,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     lead.appendChild(document.createTextNode("上の表: 検証期間の「誤差の改善率 (変化なし比) / 方向の的中率」。太字は統計的に有意な差。下の表: 予測レンジの的中率 (従来 → 現在、名目は50/80/95%)。方向を「変化なし」より安定して当てる方法は見つからなかったため、中心値は「変化なし」付近に保ち、予測レンジの精度を高めています。"));
     if (S.meta && S.meta.repo) {
       lead.appendChild(document.createTextNode(" "));
-      var a = el("a", null, "詳しいレポート"); a.href = S.meta.repo + "/blob/HEAD/" + res.report; a.target = "_blank"; a.rel = "noopener"; lead.appendChild(a);
+      var a = el("a", null, "詳しいレポート"); a.href = S.meta.repo + "/blob/HEAD/" + (R.report || res.report); a.target = "_blank"; a.rel = "noopener"; lead.appendChild(a);
     }
     var hr = el("tr"); hr.appendChild(el("th", null, "方法"));
     hs.forEach(function (h) { hr.appendChild(el("th", "num", tfLabel(tf, Number(h)))); }); head.appendChild(hr);
@@ -1328,7 +1451,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     $("verify-caption").textContent = "ルールはすべてプログラムで自動検査しています";
     var body = clear($("audit-body"));
     ((au && au.results) || []).forEach(function (r) {
-      var row = el("tr"); row.appendChild(el("td", "num", "#" + r.seq)); row.appendChild(el("td", "l", r.pair)); row.appendChild(el("td", "l opt", r.tf === "1h" ? "1時間足" : "日足"));
+      var row = el("tr"); row.appendChild(el("td", "num", "#" + r.seq)); row.appendChild(el("td", "l", r.pair)); row.appendChild(el("td", "l opt", { "15m": "15分足", "1h": "1時間足", "1d": "日足" }[r.tf] || r.tf));
       row.appendChild(el("td", "l opt", jst(r.origin))); var td = el("td"); td.appendChild(el("span", "chip " + (r.ok ? "good" : "bad"), r.ok ? "○ 一致" : "× 不一致")); row.appendChild(td);
       row.appendChild(el("td", "num", fmt(Math.max(r.diffs.m || 0, r.diffs.c || 0), 4))); body.appendChild(row);
     });
@@ -1350,6 +1473,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       return Promise.all([
         loadPair().then(renderPairAll),
         getJSON("market.json").then(function (d) { S.market = d; renderMarket(); }).catch(function () {}),
+        getJSON("backtest.json").then(function (d) { S.backtest = d; if (S.view === "forecast") renderHead(); renderTrack(); }).catch(function () {}),
         getJSON("track.json").then(function (d) { S.track = d; renderTrack(); }).catch(function () {}),
         getJSON("news.json").then(function (d) { S.news = d; renderNews(); }).catch(function () {}),
         getJSON("models.json").then(function (d) { S.models = d; renderLearning(); }).catch(function () {}),

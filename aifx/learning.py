@@ -75,43 +75,45 @@ def learn_horizon(prior: dict | None, samples: list[dict], half_life: float) -> 
     Each sample has m (model bp list), a (actual bp), s (raw sigma bp), k (scale
     used), g (gain used), c0 (model blend), c (final centre) and x (news signal).
     """
+    col = {key: np.array([s[key] for s in samples], dtype=float) for key in ("a", "s", "k", "g", "c0", "c", "x")}
+    m = np.array([s["m"] for s in samples], dtype=float).reshape(len(samples), len(MODEL_KEYS))
+    return learn_arrays(prior, m, half_life=half_life, **col)
+
+
+def learn_arrays(prior: dict | None, m: np.ndarray, a: np.ndarray, s: np.ndarray, k: np.ndarray, g: np.ndarray,
+                 c0: np.ndarray, c: np.ndarray, x: np.ndarray, half_life: float) -> HorizonState:
+    """The same rule on columns (one row per sample, oldest first); used to replay it quickly."""
     n_models = len(MODEL_KEYS)
     prior_mse = np.array(prior["mse_z"]) if prior else np.ones(n_models)
     prior_k = float(prior["k"]) if prior else 1.0
     suu = float(prior.get("suu", 0.0)) if prior else 0.0
     suv = float(prior.get("suv", 0.0)) if prior else 0.0
-    n = len(samples)
+    n = len(a)
     if n:
         ranks = np.arange(n)
         w = 0.5 ** ((n - 1 - ranks) / half_life)
-        m = np.array([s["m"] for s in samples])
-        a = np.array([s["a"] for s in samples])
-        sig = np.array([s["s"] for s in samples])
-        z2 = ((m - a[:, None]) / sig[:, None]) ** 2
+        z2 = ((m - a[:, None]) / s[:, None]) ** 2
         w_sum = float(w.sum())
         mse = (PRIOR_N_MSE * prior_mse + (w[:, None] * z2).sum(axis=0)) / (PRIOR_N_MSE + w_sum)
-        ze = np.abs(np.array([s["c"] for s in samples]) - a) / sig
+        ze = np.abs(c - a) / s
         k_hat = _weighted_quantile(ze, w, 0.8) / BAND_Z["80"]
-        k = (PRIOR_N_K * prior_k + w_sum * k_hat) / (PRIOR_N_K + w_sum)
-        c0 = np.array([s["c0"] for s in samples])
-        u, v = c0 / sig, a / sig
+        k_new = (PRIOR_N_K * prior_k + w_sum * k_hat) / (PRIOR_N_K + w_sum)
+        u, v = c0 / s, a / s
         suu += float(np.sum(w * u * u))
         suv += float(np.sum(w * u * v))
-        g_used = np.array([s["g"] for s in samples])
-        resid = (a - g_used * c0) / (sig * np.array([s["k"] for s in samples]))
-        x = np.array([s["x"] for s in samples])
+        resid = (a - g * c0) / (s * k)
         beta = (BETA_LAMBDA * BETA_PRIOR + float(np.sum(w * resid * x))) / (BETA_LAMBDA + float(np.sum(w * x * x)))
     else:
         w_sum = 0.0
         mse = prior_mse
-        k = prior_k
+        k_new = prior_k
         beta = BETA_PRIOR
     gain = GAIN_ESS * suv / (GAIN_LAMBDA + GAIN_ESS * suu)
     inv = 1.0 / np.maximum(mse, 1e-9)
     weights = inv / inv.sum()
     return HorizonState(
         weights=[round(float(v), 6) for v in weights],
-        k=round(float(np.clip(k, *K_BOUNDS)), 6),
+        k=round(float(np.clip(k_new, *K_BOUNDS)), 6),
         beta=round(float(np.clip(beta, *BETA_BOUNDS)), 6),
         gain=round(float(np.clip(gain, *GAIN_BOUNDS)), 6),
         n_live=n,

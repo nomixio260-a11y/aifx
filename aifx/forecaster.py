@@ -18,12 +18,12 @@ import pandas as pd
 
 from . import news as newsmod
 from .data import Pair
-from .engine import (BP, MODEL_KEYS, Timeframe, band_nu, band_z, combine, horizon_sigma, model_paths,
-                     sigma_steps, step_ends, target_times)
+from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, bar_end, combine, fan_z, horizon_sigma,
+                     model_paths, sigma_steps, step_ends, target_times)
 from .learning import HorizonState
 from .timeutil import iso
 
-MAX_ORIGIN_AGE = {"1h": timedelta(hours=2), "1d": timedelta(hours=36)}
+MAX_ORIGIN_AGE = {"15m": timedelta(minutes=30), "1h": timedelta(hours=2), "1d": timedelta(hours=36)}
 _MODEL_FILES = ("models.py", "engine.py", "volatility.py", "learning.py", "news.py", "forecaster.py")
 
 
@@ -36,34 +36,36 @@ def model_version() -> str:
 
 
 def origin_of(tf: Timeframe, bars: pd.DataFrame) -> datetime:
-    if tf.key == "1h":
-        return bars.index[-1].to_pydatetime() + timedelta(hours=1)
-    from .timeutil import london_day_end
-    return london_day_end(bars.index[-1].date())
+    return bar_end(tf, bars.index[-1])
 
 
-def origin_price(hourly: pd.DataFrame, origin: datetime) -> tuple[float, str] | None:
-    """Close of the latest hourly bar ending at or before ``origin``."""
-    ends = hourly.index + pd.Timedelta(hours=1)
+def origin_price(ref: pd.DataFrame, origin: datetime, minutes: int = 60) -> tuple[float, str] | None:
+    """Close of the latest reference bar (of ``minutes``) ending at or before ``origin``."""
+    ends = ref.index + pd.Timedelta(minutes=minutes)
     idx = int(ends.searchsorted(pd.Timestamp(origin), side="right")) - 1
     if idx < 0:
         return None
-    return float(hourly["close"].iloc[idx]), iso(ends[idx].to_pydatetime())
+    return float(ref["close"].iloc[idx]), iso(ends[idx].to_pydatetime())
 
 
-def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, hourly: pd.DataFrame, origin: datetime,
+def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataFrame, origin: datetime,
                     news_items: list[dict], events: list[dict], prior_seq: int, learn_seq: int,
                     state: dict[int, HorizonState], version: str) -> tuple[dict, dict]:
-    """Returns (ledger record without seq/hash/at, chart detail)."""
+    """Returns (ledger record without seq/hash/at, chart detail).
+
+    ``ref`` are the reference bars of the timeframe (``tf.ref``): the origin
+    price is their close at the origin, and forecasts are scored on them.
+    Daily forecasts also measure recent variance from them (hourly bars).
+    """
     y = np.log(bars["close"].to_numpy()[-tf.fit_bars:])
     steps = max(tf.steps, max(tf.horizons))
     paths, analog_idx = model_paths(y, steps)
     ends = step_ends(tf, origin, steps)
     evs = newsmod.events_between(events, (pair.base, pair.quote), origin, ends[-1], origin)
-    var = sigma_steps(tf, bars.iloc[-tf.fit_bars:], origin, steps, evs, hourly=hourly)
+    var = sigma_steps(tf, bars.iloc[-tf.fit_bars:], origin, steps, evs, hourly=ref if tf.key == "1d" else None)
     press = newsmod.pressures(news_items, origin)
     x = newsmod.pair_signal(press, pair.base, pair.quote)
-    p0, p0_bar = origin_price(hourly, origin)
+    p0, p0_bar = origin_price(ref, origin, TIMEFRAMES[tf.ref].minutes)
     targets = target_times(tf, origin)
     sig_h = horizon_sigma(var, tf.horizons)
     fc = []
@@ -120,7 +122,7 @@ def chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, an
         m = {k: float(paths[k][i]) for k in MODEL_KEYS}
         comb = combine(m, st.weights, float(cum[i]), st.k, x, st.beta, st.gain, nu)
         row = {"t": iso(ends[i]), "c": p0 * float(np.exp(comb["c"] / BP)), "p": comb["p_up"]}
-        for name, z in band_z(nu).items():
+        for name, z in fan_z(nu).items():
             row["lo" + name] = p0 * float(np.exp((comb["c"] - z * comb["sigma"]) / BP))
             row["hi" + name] = p0 * float(np.exp((comb["c"] + z * comb["sigma"]) / BP))
         rows.append(row)

@@ -19,12 +19,12 @@ of hourly bars and confirmed on the later period (research/report.md).
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 
-from .timeutil import HOUR, LONDON, trading_hours_between
+from .timeutil import HOUR, LONDON, trading_slots_between
 
 EVENT_KAPPA_1H = {"High": 3.0, "Medium": 1.0}      # extra variance, in "normal hours" at that time of day
 EVENT_KAPPA_1D = {"High": 0.25, "Medium": 0.08}    # extra variance, as a share of a normal day
@@ -114,62 +114,79 @@ def daily_variance_inputs(daily: pd.DataFrame, hourly: pd.DataFrame | None,
     return (None, DAILY_LAM) if sq is None else (sq, DAILY_RV_LAM)
 
 
-def hour_profile(times, sq: np.ndarray, window: int = 1500, smooth: float = 0.25) -> np.ndarray:
-    """Relative variance by UTC hour of day (24 values, mean 1 over the sample).
+def slot_profile(times, sq: np.ndarray, window: int = 1500, smooth: float = 0.25,
+                 slot_minutes: int = 60) -> np.ndarray:
+    """Relative variance by time of day in slots of ``slot_minutes`` (mean 1 over the sample).
 
     ``sq`` is the per-bar variance proxy (squared returns), aligned with ``times``.
-    ``smooth`` is the weight given to each neighbouring hour.
+    ``smooth`` is the weight given to each neighbouring slot.
     """
-    hours = np.asarray([t.hour for t in times[-window:]])
+    n = 1440 // slot_minutes
+    slots = np.asarray([(t.hour * 60 + t.minute) // slot_minutes for t in times[-window:]])
     ss = sq[-window:]
-    prof = np.ones(24)
-    for h in range(24):
-        sel = ss[hours == h]
+    prof = np.ones(n)
+    for h in range(n):
+        sel = ss[slots == h]
         if len(sel) >= 5:
             prof[h] = np.mean(sel)
-    # Smooth over neighbouring hours (circular) to damp sampling noise.
+    # Smooth over neighbouring slots (circular) to damp sampling noise.
     prof = smooth * np.roll(prof, 1) + (1 - 2 * smooth) * prof + smooth * np.roll(prof, -1)
-    counts = np.bincount(hours, minlength=24).astype(float)
+    counts = np.bincount(slots, minlength=n).astype(float)
     mean = float(np.sum(prof * counts) / max(counts.sum(), 1))
-    return prof / mean if mean > 0 else np.ones(24)
+    return prof / mean if mean > 0 else np.ones(n)
 
 
-def hourly_variance_path(times, y: np.ndarray, origin: datetime, steps: int,
-                         events: list[dict] | None = None, lam: float = 0.97,
-                         reversion: float = 0.985, seasonal: bool = True,
-                         sq: np.ndarray | None = None, profile_window: int = 1500,
-                         smooth: float = 0.25) -> tuple[np.ndarray, list[datetime]]:
-    """Per-step variance for the next ``steps`` open-market hours after ``origin``.
+def hour_profile(times, sq: np.ndarray, window: int = 1500, smooth: float = 0.25) -> np.ndarray:
+    """Relative variance by UTC hour of day (24 values, mean 1 over the sample)."""
+    return slot_profile(times, sq, window, smooth, 60)
+
+
+def intraday_variance_path(times, y: np.ndarray, origin: datetime, steps: int, minutes: int = 60,
+                           events: list[dict] | None = None, lam: float = 0.97, reversion: float = 0.985,
+                           seasonal: bool = True, sq: np.ndarray | None = None, profile_window: int = 1500,
+                           smooth: float = 0.25, profile_minutes: int | None = None,
+                           long_window: int = 1500) -> tuple[np.ndarray, list[datetime]]:
+    """Per-step variance for the next ``steps`` open-market bars of ``minutes`` after ``origin``.
 
     ``times`` are bar open times aligned with ``y`` (log closes), all ending at or
     before ``origin``. ``sq`` optionally replaces the squared returns as the
-    per-bar variance proxy. Returns (variance per step, end time of each step).
+    per-bar variance proxy. The time-of-day profile uses slots of
+    ``profile_minutes`` (default: the bar length). Weekend gaps and scheduled
+    events add variance measured in hours of normal trading, whatever the bar
+    length. Returns (variance per step, end time of each step).
     """
+    pm = profile_minutes or minutes
+    per_hour = 60 / minutes
     r = np.diff(y)
     sq = r * r if sq is None else sq
     t_r = list(times[1:])
-    prof = hour_profile(t_r, sq, profile_window, smooth) if seasonal else np.ones(24)
-    u2 = sq / prof[[t.hour for t in t_r]]
-    long_var = float(np.mean(u2[-1500:]))
+    prof = slot_profile(t_r, sq, profile_window, smooth, pm) if seasonal else np.ones(1440 // pm)
+
+    def slot(t):
+        return (t.hour * 60 + t.minute) // pm
+
+    u2 = sq / prof[[slot(t) for t in t_r]]
+    long_var = float(np.mean(u2[-long_window:]))
     ewma = float(np.mean(u2[:20]))
     for x in u2[20:]:
         ewma = lam * ewma + (1 - lam) * x
     # Future open-market slots (start times) until we have enough steps.
+    step = timedelta(minutes=minutes)
     slots: list[datetime] = []
     horizon_end = origin
     while len(slots) < steps:
-        horizon_end = horizon_end + 24 * HOUR
-        slots = trading_hours_between(origin, horizon_end)
+        horizon_end = horizon_end + max(24 * HOUR, steps * step)
+        slots = trading_slots_between(origin, horizon_end, minutes)
     slots = slots[:steps]
     var = np.empty(steps)
     prev_end = origin
     for k, start in enumerate(slots, start=1):
-        v = (long_var + (ewma - long_var) * reversion ** k) * prof[start.hour]
+        v = (long_var + (ewma - long_var) * reversion ** k) * prof[slot(start)]
         if start > prev_end:  # the market was shut in between (weekend)
-            v += WEEKEND_GAP_HOURS * long_var
+            v += WEEKEND_GAP_HOURS * per_hour * long_var
         var[k - 1] = v
-        prev_end = start + HOUR
-    ends = [s + HOUR for s in slots]
+        prev_end = start + step
+    ends = [s + step for s in slots]
     for ev in events or []:
         t = ev["time"]
         kappa = EVENT_KAPPA_1H.get(ev.get("impact", ""), 0.0)
@@ -177,9 +194,19 @@ def hourly_variance_path(times, y: np.ndarray, origin: datetime, steps: int,
             continue
         for k, (start, end) in enumerate(zip(slots, ends)):
             if start <= t < end:
-                var[k] += kappa * long_var * prof[start.hour]
+                var[k] += kappa * per_hour * long_var * prof[slot(start)]
                 break
     return var, ends
+
+
+def hourly_variance_path(times, y: np.ndarray, origin: datetime, steps: int,
+                         events: list[dict] | None = None, lam: float = 0.97,
+                         reversion: float = 0.985, seasonal: bool = True,
+                         sq: np.ndarray | None = None, profile_window: int = 1500,
+                         smooth: float = 0.25) -> tuple[np.ndarray, list[datetime]]:
+    """Per-step variance for the next ``steps`` open-market hours after ``origin``."""
+    return intraday_variance_path(times, y, origin, steps, 60, events, lam, reversion, seasonal, sq,
+                                  profile_window, smooth)
 
 
 def add_daily_events(var: np.ndarray, day_ends: list[datetime], origin: datetime,

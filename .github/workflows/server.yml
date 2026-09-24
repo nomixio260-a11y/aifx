@@ -51,6 +51,16 @@ jobs:
           fi
           echo "BEFORE=$(aifx head --state state)" >> "$GITHUB_ENV"
 
+      # The rolling backtest is derived data, never part of the ledger. Keeping it
+      # between runs means each cycle only adds the new origins; without it the
+      # cycle simply rebuilds it.
+      - name: Restore the backtest cache
+        uses: actions/cache/restore@v4
+        with:
+          path: state/cache/backtest
+          key: aifx-backtest-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: aifx-backtest-
+
       - name: Run one cycle
         run: aifx cycle --state state --site site --audit 3 --interval 15
 
@@ -65,6 +75,12 @@ jobs:
           git commit -q -m "cycle $(date -u +%Y-%m-%dT%H:%MZ) head $(aifx head --state .)"
           git push origin HEAD:ledger
           echo "::notice::ledger head $(aifx head --state .)"
+
+      - name: Save the backtest cache
+        uses: actions/cache/save@v4
+        with:
+          path: state/cache/backtest
+          key: aifx-backtest-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Check whether GitHub Pages is enabled
         id: pages

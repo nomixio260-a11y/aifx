@@ -19,8 +19,11 @@ START = datetime(2026, 9, 22, 0, 10, tzinfo=UTC)  # a Tuesday: Monday's daily ba
 
 def _shrink(mp):
     """Shrink walk-forward priors so simulated sessions run in seconds."""
-    mp.setitem(engine.TIMEFRAMES, "1h", engine.Timeframe("1h", "1時間足", "時間", (1, 4, 24), 24, 8, 6, 800, 50.0))
-    mp.setitem(engine.TIMEFRAMES, "1d", engine.Timeframe("1d", "日足", "営業日", (1, 5, 10, 20), 20, 8, 5, 500, 20.0))
+    mp.setitem(engine.TIMEFRAMES, "15m", engine.Timeframe("15m", "15分足", "分", (1, 4, 16), 16, 8, 4, 800, 100.0,
+                                                          "15m", 15))
+    mp.setitem(engine.TIMEFRAMES, "1h", engine.Timeframe("1h", "1時間足", "時間", (1, 4, 24), 24, 8, 6, 800, 50.0, "1h", 60))
+    mp.setitem(engine.TIMEFRAMES, "1d", engine.Timeframe("1d", "日足", "営業日", (1, 5, 10, 20), 20, 8, 5, 500, 20.0,
+                                                         "1h", 0))
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +66,7 @@ def run_session(root, cycles=12, step_minutes=30, start=START, **kw):
     from aifx.pipeline import run_cycle
 
     mk = kw.pop("market", None) or market()
+    kw.setdefault("backtest_budget", 0)       # the rolling backtest has its own tests
     reports = []
     for i in range(cycles):
         at = start + timedelta(minutes=step_minutes * i)

@@ -13,6 +13,8 @@ forecast's origin.
 
 from __future__ import annotations
 
+import math
+
 import json
 import time
 import urllib.parse
@@ -206,9 +208,14 @@ def parse_yahoo_intraday(payload: dict, cutoff: datetime, minutes: int = 60) -> 
     return _fix_ohlc(df), live
 
 
+def fetch_intraday(pair: Pair, cutoff: datetime, minutes: int, range_: str) -> tuple[pd.DataFrame, dict]:
+    interval = "60m" if minutes == 60 else f"{minutes}m"
+    payload = _yahoo_chart(pair.yahoo_symbol, f"range={range_}&interval={interval}")
+    return parse_yahoo_intraday(payload, cutoff, minutes)
+
+
 def fetch_hourly(pair: Pair, cutoff: datetime, range_: str = "1y") -> tuple[pd.DataFrame, dict]:
-    payload = _yahoo_chart(pair.yahoo_symbol, f"range={range_}&interval=60m")
-    return parse_yahoo_intraday(payload, cutoff)
+    return fetch_intraday(pair, cutoff, 60, range_)
 
 
 class YahooMarket:
@@ -218,6 +225,9 @@ class YahooMarket:
 
     def hourly(self, pair: Pair, cutoff: datetime, range_: str = "1y"):
         return fetch_hourly(pair, cutoff, range_)
+
+    def intraday(self, pair: Pair, cutoff: datetime, minutes: int, range_: str):
+        return fetch_intraday(pair, cutoff, minutes, range_)
 
     def daily(self, pair: Pair, cutoff: datetime):
         df, source = fetch_daily(pair)
@@ -275,6 +285,41 @@ class SyntheticMarket:
         df = df[(df.index + pd.Timedelta(hours=1) + SETTLE) <= pd.Timestamp(cutoff)]
         live = {"price": float(df["close"].iloc[-1]) if len(df) else None, "time": int(cutoff.timestamp())}
         return df, live
+
+    def intraday(self, pair: Pair, cutoff: datetime, minutes: int, range_: str = "1mo"):
+        if minutes == 60:
+            return self.hourly(pair, cutoff, range_)
+        if 60 % minutes:
+            raise ValueError(f"unsupported bar length {minutes}")
+        h = self._series(pair, cutoff)
+        q = self._subdivide(pair, h, 60 // minutes)
+        q = q[(q.index + pd.Timedelta(minutes=minutes) + SETTLE) <= pd.Timestamp(cutoff)]
+        if range_.endswith("d"):
+            q = q[q.index >= pd.Timestamp(cutoff) - pd.Timedelta(days=int(range_[:-1]))]
+        live = {"price": float(q["close"].iloc[-1]) if len(q) else None, "time": int(cutoff.timestamp())}
+        return q, live
+
+    def _subdivide(self, pair: Pair, h: pd.DataFrame, parts: int) -> pd.DataFrame:
+        """Split each hourly bar into ``parts`` sub-bars along a Brownian bridge, so the
+        sub-bars end exactly at the hourly closes (bars still depend only on their time)."""
+        n = len(h)
+        if not n:
+            return h.copy()
+        salt = sum(ord(c) * (i + 1) for i, c in enumerate(pair.code))
+        z = np.random.default_rng([self.seed, salt, 11]).standard_normal((n, parts)) * self.vol / math.sqrt(parts)
+        w = np.cumsum(z, axis=1)
+        frac = np.arange(1, parts + 1) / parts
+        bridge = w - frac[None, :] * w[:, -1:]
+        lo, lc = np.log(h["open"].to_numpy()), np.log(h["close"].to_numpy())
+        pts = lo[:, None] + (lc - lo)[:, None] * frac[None, :] + bridge
+        close = np.exp(pts).ravel()
+        open_ = np.exp(np.concatenate([lo[:, None], pts[:, :-1]], axis=1)).ravel()
+        wig = np.abs(np.random.default_rng([self.seed, salt, 12]).standard_normal((n * parts, 2))) * self.vol * 0.25
+        idx = (h.index.repeat(parts) + pd.to_timedelta(np.tile(np.arange(parts) * (60 // parts), n), unit="min"))
+        df = pd.DataFrame({"open": open_, "high": np.maximum(open_, close) * (1 + wig[:, 0]),
+                           "low": np.minimum(open_, close) * (1 - wig[:, 1]), "close": close}, index=idx)
+        df.index.name = "time"
+        return df
 
     def daily(self, pair: Pair, cutoff: datetime):
         h = self._series(pair, cutoff)

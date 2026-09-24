@@ -48,6 +48,15 @@ def fetch_hourly_history(pair: Pair) -> pd.DataFrame:
     return df
 
 
+INTRADAY = {"15m": 15, "5m": 5}      # Yahoo keeps about 60 days of these
+
+
+def fetch_intraday_history(pair: Pair, interval: str) -> pd.DataFrame:
+    df, _ = parse_yahoo_intraday(_yahoo_chart(pair.yahoo_symbol, f"range=60d&interval={interval}"), utcnow(),
+                                 minutes=INTRADAY[interval])
+    return df
+
+
 def fetch_fred(series: str) -> pd.Series:
     raw = http_get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=" + urllib.parse.quote(series), timeout=40)
     df = pd.read_csv(io.BytesIO(raw))
@@ -66,6 +75,10 @@ def download(root: Path | None = None, log=print) -> None:
         h = fetch_hourly_history(pair)
         h.to_csv(_path(f"{code}_1h.csv", root), index_label="time", float_format="%.6f")
         log(f"{code}: {len(d)} daily bars from {d.index[0].date()}, {len(h)} hourly bars from {h.index[0]}")
+        for interval in INTRADAY:
+            m = fetch_intraday_history(pair, interval)
+            m.to_csv(_path(f"{code}_{interval}.csv", root), index_label="time", float_format="%.6f")
+            log(f"{code}: {len(m)} {interval} bars from {m.index[0]}")
     for cur, series in RATE_SERIES.items():
         for sid, _freq in series:
             fetch_fred(sid).to_csv(_path(f"rate_{sid}.csv", root), index_label="date")
@@ -87,7 +100,11 @@ def load_vix(root: Path | None = None) -> pd.Series:
 
 
 def load_hourly(code: str, root: Path | None = None) -> pd.DataFrame:
-    df = pd.read_csv(_path(f"{code}_1h.csv", root), index_col="time")
+    return load_intraday(code, "1h", root)
+
+
+def load_intraday(code: str, interval: str, root: Path | None = None) -> pd.DataFrame:
+    df = pd.read_csv(_path(f"{code}_{interval}.csv", root), index_col="time")
     df.index = pd.to_datetime(df.index, utc=True)
     return df.astype("float64")
 

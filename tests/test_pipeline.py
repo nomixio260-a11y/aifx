@@ -225,3 +225,77 @@ def test_documented_verification_commands_work_on_a_fresh_checkout(session, monk
     monkeypatch.setattr("aifx.data.YahooMarket", lambda: market())
     assert cli.main(["audit", "--state", str(root), "--sample", "3", "--external"]) == 0
     assert (root / "cache" / "external.json").exists()
+
+
+def test_fifteen_minute_forecasts_are_issued_scored_on_15m_bars_and_audited(session):
+    root, _ = session
+    ledger = Ledger(root).load()
+    preds = [p for p in ledger.of_type("prediction") if p["tf"] == "15m"]
+    assert len(preds) >= 2 * 10
+    for p in preds:
+        assert parse_iso(p["origin"]).minute % 15 == 0 and p["p0_bar"] == p["origin"]
+        assert [f["h"] for f in p["fc"]] == [1, 4, 16]
+    by_seq = {p["seq"]: p for p in preds}
+    items = [it for o in ledger.of_type("outcome") for it in o["items"] if it[0] in by_seq]
+    assert items, "15-minute forecasts should have been scored"
+    for seq, h, actual, bar_end in items:
+        f = next(x for x in by_seq[seq]["fc"] if x["h"] == h)
+        assert bar_end == f["t"] and actual is not None     # the 15-minute bar closing at the target
+    rep = audit(root, sample=12)
+    assert rep["ok"] and any(r["tf"] == "15m" for r in rep["results"])
+
+
+def test_peeking_at_future_15m_bars_is_caught(tmp_path, monkeypatch):
+    mk = market()
+    real = pl.make_prediction
+
+    def peeking(tf, pair, bars, ref, origin, *args, **kwargs):
+        if tf.key == "15m":
+            bars, _ = mk.intraday(pair, origin + timedelta(hours=2), 15, "5d")
+        return real(tf, pair, bars, ref, origin, *args, **kwargs)
+
+    monkeypatch.setattr(pl, "make_prediction", peeking)
+    root = tmp_path / "state"
+    run_session(root, cycles=5, market=mk)
+    rep = audit(root, sample=8)
+    assert any(not r["ok"] for r in rep["results"] if r["tf"] == "15m")
+
+
+def test_scoring_a_15m_forecast_with_the_wrong_bar_is_caught(tmp_path, monkeypatch):
+    real = pl.score_due
+
+    def hourly_instead(state, at):
+        items = real(state, at)
+        preds = {p["seq"]: p for p in state.ledger.of_type("prediction")}
+        out = []
+        for seq, h, actual, bar_end in items:
+            if actual is not None and preds[seq]["tf"] == "15m":
+                hourly = state.prices.load(preds[seq]["pair"], "1h")
+                actual = float(hourly["close"].iloc[-1]) * 1.001
+            out.append([seq, h, actual, bar_end])
+        return out
+
+    monkeypatch.setattr(pl, "score_due", hourly_instead)
+    reports = run_session(tmp_path / "state", cycles=5)
+    final = reports[-1].verify
+    assert not final["ok"] and any("not the committed bar" in p["msg"] for p in final["problems"])
+
+
+def test_fifteen_minute_targets_skip_the_weekend():
+    from datetime import datetime, timezone
+    from aifx.engine import TIMEFRAMES, target_times
+    origin = datetime(2026, 9, 25, 20, 45, tzinfo=timezone.utc)   # Friday 16:45 New York
+    t = target_times(TIMEFRAMES["15m"], origin)
+    assert t[0] == datetime(2026, 9, 25, 21, 0, tzinfo=timezone.utc)                 # the last bar before the close
+    assert t[1] == datetime(2026, 9, 27, 21, 45, tzinfo=timezone.utc)                # Sunday after the open
+    assert TIMEFRAMES["15m"].horizon_label(4) == "1時間後" and TIMEFRAMES["15m"].horizon_label(1) == "15分後"
+
+
+def test_no_15m_forecast_when_its_first_target_has_passed(tmp_path):
+    from datetime import datetime, timezone
+    # 12:16: the 12:00-12:15 bar is closed but not settled yet, so the newest stored bar
+    # ends at 12:00 and a "15 minutes ahead" forecast would target 12:15, already past.
+    at = datetime(2026, 9, 22, 12, 16, tzinfo=timezone.utc)
+    rep = run_session(tmp_path / "state", cycles=1, start=at)[0]
+    preds = Ledger(tmp_path / "state").load().of_type("prediction")
+    assert rep.verify["ok"] and not [p for p in preds if p["tf"] == "15m"]

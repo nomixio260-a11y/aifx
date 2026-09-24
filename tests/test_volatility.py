@@ -111,5 +111,5 @@ def test_research_summary_is_optional(tmp_path):
     assert research_summary(tmp_path / "missing.json") is None
     s = research_summary()
     if s is not None:
-        assert set(s["tf"]) == {"1d", "1h"}
+        assert {"1d", "1h"} <= set(s["tf"]) <= {"15m", "1d", "1h"}
         assert all(set(x["h"]) == set(s["tf"][tf]["ranges"]) for tf in s["tf"] for x in s["tf"][tf]["direction"])

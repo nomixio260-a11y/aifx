@@ -48,26 +48,38 @@ def is_market_open(t: datetime) -> bool:
     return True
 
 
-def add_trading_hours(t: datetime, n: int) -> datetime:
-    """End of the ``n``-th open-market hour after ``t`` (``t`` on an hour boundary)."""
+def add_trading_minutes(t: datetime, n: int, minutes: int) -> datetime:
+    """End of the ``n``-th open-market bar of ``minutes`` after ``t`` (``t`` on a bar boundary)."""
+    step = timedelta(minutes=minutes)
     cur = t.astimezone(UTC)
     left = n
     while left > 0:
         if is_market_open(cur):
             left -= 1
-        cur += HOUR
+        cur += step
     return cur
 
 
-def trading_hours_between(start: datetime, end: datetime) -> list[datetime]:
-    """Open-market hour slots (their start times) in [start, end)."""
+def trading_slots_between(start: datetime, end: datetime, minutes: int) -> list[datetime]:
+    """Open-market bar slots of ``minutes`` (their start times) in [start, end)."""
+    step = timedelta(minutes=minutes)
     out = []
     cur = start.astimezone(UTC)
     while cur < end:
         if is_market_open(cur):
             out.append(cur)
-        cur += HOUR
+        cur += step
     return out
+
+
+def add_trading_hours(t: datetime, n: int) -> datetime:
+    """End of the ``n``-th open-market hour after ``t`` (``t`` on an hour boundary)."""
+    return add_trading_minutes(t, n, 60)
+
+
+def trading_hours_between(start: datetime, end: datetime) -> list[datetime]:
+    """Open-market hour slots (their start times) in [start, end)."""
+    return trading_slots_between(start, end, 60)
 
 
 def london_day_end(d: date) -> datetime:

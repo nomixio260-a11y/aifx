@@ -17,6 +17,7 @@ from .ledger import DataFiles, canonical, sha256_hex
 from .timeutil import UTC, iso, parse_iso
 
 PRICE_COLS = ["open", "high", "low", "close"]
+INTRADAY_TFS = ("15m", "1h")     # bars keyed by their UTC open time; others by date
 
 
 def parse_price_lines(lines: list[str], tf: str) -> pd.DataFrame:
@@ -24,7 +25,7 @@ def parse_price_lines(lines: list[str], tf: str) -> pd.DataFrame:
     if len(lines) < 2:
         return pd.DataFrame(columns=PRICE_COLS, dtype="float64")
     df = pd.read_csv(io.StringIO("\n".join(lines)), index_col=0)
-    if tf == "1h":
+    if tf in INTRADAY_TFS:
         df.index = pd.to_datetime(df.index, utc=True)
         df.index.name = "time"
     else:
@@ -56,9 +57,10 @@ class PriceStore:
             df = df[df.index > have.index[-1]]
         if not len(df):
             return 0
-        lines = [] if self.files.lines(path) else [("time" if tf == "1h" else "date") + ",open,high,low,close"]
+        intraday = tf in INTRADAY_TFS
+        lines = [] if self.files.lines(path) else [("time" if intraday else "date") + ",open,high,low,close"]
         for ts, row in df.iterrows():
-            key = iso(ts.to_pydatetime()) if tf == "1h" else ts.strftime("%Y-%m-%d")
+            key = iso(ts.to_pydatetime()) if intraday else ts.strftime("%Y-%m-%d")
             lines.append(key + "," + ",".join(f"{float(row[c]):.6f}" for c in PRICE_COLS))
         self.files.append_lines(path, lines)
         self._cache.pop(path, None)

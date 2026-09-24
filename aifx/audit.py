@@ -32,12 +32,12 @@ import numpy as np
 import pandas as pd
 
 from .data import PAIRS
-from .engine import MODEL_KEYS, TIMEFRAMES, prob_up, target_times
+from .engine import MODEL_KEYS, TIMEFRAMES, bars_until, prob_up, target_times
 from .forecaster import MAX_ORIGIN_AGE, make_prediction, model_version
 from .learning import learn, samples_from_ledger
 from .ledger import Ledger, chain_problems, data_file_problems
 from .store import PriceStore, parse_price_lines
-from .timeutil import iso, london_day_end, parse_iso, utcnow
+from .timeutil import iso, parse_iso, utcnow
 
 
 class _Committed:
@@ -123,19 +123,22 @@ def verify(root: Path | str) -> dict:
                 if b is None or item.get("fetched_at") != batches[b]["at"]:
                     add("time", f"{path}:{i} fetched_at {item.get('fetched_at')} does not match its batch")
 
-    # Hourly bars as committed at the end, with the batch that committed each bar.
-    hourly_all: dict[str, tuple[pd.DatetimeIndex, np.ndarray, list[int]]] = {}
+    # Reference bars (hourly, or 15-minute for 15-minute forecasts) as committed at
+    # the end, with the batch that committed each bar.
+    ref_all: dict[tuple[str, str], tuple[pd.DatetimeIndex, np.ndarray, list[int]]] = {}
 
-    def hourly_upto(pair: str, seq: int):
-        if pair not in hourly_all:
-            path = PriceStore.path(pair, "1h")
-            df = parse_price_lines(com.lines(path)[: com.count_before(path, 10 ** 12)], "1h")
-            ends = df.index + pd.Timedelta(hours=1)
+    def ref_upto(pair: str, tf_key: str, seq: int):
+        ref_tf = TIMEFRAMES[tf_key].ref
+        key = (pair, ref_tf)
+        if key not in ref_all:
+            path = PriceStore.path(pair, ref_tf)
+            df = parse_price_lines(com.lines(path)[: com.count_before(path, 10 ** 12)], ref_tf)
+            ends = df.index + pd.Timedelta(minutes=TIMEFRAMES[ref_tf].minutes)
             # Line 1 is the header, so bar i sits on line i + 2.
             owners = com.line_batches(path)
             commit_seq = [owners[i + 1] or 10 ** 12 for i in range(len(df))]
-            hourly_all[pair] = (ends, df["close"].to_numpy(), commit_seq)
-        ends, closes, cseq = hourly_all[pair]
+            ref_all[key] = (ends, df["close"].to_numpy(), commit_seq)
+        ends, closes, cseq = ref_all[key]
         n = bisect.bisect_left(cseq, seq)  # bars committed strictly before seq (commit seqs are non-decreasing)
         return ends[:n], closes[:n]
 
@@ -171,7 +174,7 @@ def verify(root: Path | str) -> dict:
             add("rule", f"{tag}: learning reference invalid")
         if p["news"]["cut"] != p["origin"]:
             add("rule", f"{tag}: news cutoff is not the origin")
-        ends, closes = hourly_upto(p["pair"], p["seq"])
+        ends, closes = ref_upto(p["pair"], p["tf"], p["seq"])
         idx = int(ends.searchsorted(pd.Timestamp(origin), side="right")) - 1
         if idx < 0 or not _close_enough(closes[idx], p["p0"]) or iso(ends[idx].to_pydatetime()) != p["p0_bar"]:
             add("data", f"{tag}: origin price is not the committed bar at the origin")
@@ -199,7 +202,7 @@ def verify(root: Path | str) -> dict:
             scored[(pseq, h)] = o["seq"]
             if o["at"] < f["t"]:
                 add("time", f"{tag}: scored before its target time")
-            ends, closes = hourly_upto(p["pair"], o["seq"])
+            ends, closes = ref_upto(p["pair"], p["tf"], o["seq"])
             t = parse_iso(f["t"])
             origin = parse_iso(p["origin"])
             idx = int(ends.searchsorted(pd.Timestamp(t), side="right")) - 1
@@ -217,7 +220,7 @@ def verify(root: Path | str) -> dict:
     last_at = recs[-1]["at"] if recs else ""
     pending = 0
     for p in preds.values():
-        ends, _ = hourly_upto(p["pair"], 10 ** 12)
+        ends, _ = ref_upto(p["pair"], p["tf"], 10 ** 12)
         last_end = iso(ends[-1].to_pydatetime()) if len(ends) else ""
         for f in p["fc"]:
             if (p["seq"], f["h"]) in scored:
@@ -265,19 +268,15 @@ def reconstruct(ledger: Ledger, com: "_Committed", p: dict, pred_map: dict, outc
     tf = TIMEFRAMES[p["tf"]]
     pair = PAIRS[p["pair"]]
     origin = parse_iso(p["origin"])
-    bars = com.prices_before(pair.code, tf.key, p["seq"])
-    if tf.key == "1h":
-        bars = bars[bars.index + pd.Timedelta(hours=1) <= pd.Timestamp(origin)]
-    else:
-        bars = bars[np.array([london_day_end(d.date()) <= origin for d in bars.index], dtype=bool)]
-    hourly = com.prices_before(pair.code, "1h", p["seq"])
+    bars = bars_until(tf, com.prices_before(pair.code, tf.key, p["seq"]), origin)
+    ref = com.prices_before(pair.code, tf.ref, p["seq"])
     news_items = com.items_before("news", p["seq"])
     events = com.items_before("calendar", p["seq"])
     prior_rec = ledger.by_seq(p["prior"])
     earlier = {s: q for s, q in pred_map.items() if s < p["seq"]}
     samples = samples_from_ledger(earlier, outcomes, tf.key, upto_seq=p["learn"])
     st = learn(prior_rec, samples, tf.horizons, tf.half_life)
-    return make_prediction(tf, pair, bars, hourly, origin, news_items, events, p["prior"], p["learn"], st, p["v"])
+    return make_prediction(tf, pair, bars, ref, origin, news_items, events, p["prior"], p["learn"], st, p["v"])
 
 
 def audit(root: Path | str, sample: int = 4, seed: str | None = None) -> dict:

@@ -16,9 +16,12 @@ import numpy as np
 import pandas as pd
 
 from .models import Model, PatternMatch, default_models
-from .timeutil import HOUR, add_business_days, add_trading_hours, london_date, london_day_end
+from .timeutil import add_business_days, add_trading_minutes, london_date, london_day_end
 from .volatility import (RANGE_WINDOW, add_daily_events, daily_step_variance, daily_variance_inputs,
-                         hourly_variance_path, range_variance, scale_proxy)
+                         hourly_variance_path, intraday_variance_path, range_variance, scale_proxy)
+
+INTRADAY_VOL = {"lam": 0.97, "reversion": 0.997, "seasonal": True, "profile_window": 1920, "smooth": 0.25,
+                "profile_minutes": 60}
 
 BP = 1e4
 BAND_Z = {"50": 0.6745, "80": 1.2816, "95": 1.9600}
@@ -36,17 +39,22 @@ class Timeframe:
     backtest_step: int
     fit_bars: int              # history handed to the models
     half_life: float           # learning discount, in scored forecasts per horizon
+    ref: str = "1h"            # bars that set the origin price and score the forecast
+    minutes: int = 0           # bar length of intraday timeframes (0 = daily bars)
 
     def horizon_label(self, h: int) -> str:
-        if self.key == "1h":
-            return f"{h}時間後"
+        if self.minutes:
+            m = h * self.minutes
+            return f"{m}分後" if m < 60 else f"{m // 60}時間後" if m % 60 == 0 else f"{m // 60}時間{m % 60}分後"
         return "翌営業日" if h == 1 else f"{h}営業日後"
 
 
 TIMEFRAMES = {
-    # Walk-forward priors span ~3 months of hourly bars and ~1 year of daily bars.
-    "1h": Timeframe("1h", "1時間足", "時間", (1, 4, 24), 24, 120, 12, 3000, 400.0),
-    "1d": Timeframe("1d", "日足", "営業日", (1, 5, 10, 20), 20, 60, 5, 1000, 120.0),
+    # Walk-forward priors span ~4 days of 15-minute bars, ~3 months of hourly
+    # bars and ~1 year of daily bars.
+    "15m": Timeframe("15m", "15分足", "分", (1, 4, 16), 16, 96, 4, 2000, 1200.0, "15m", 15),
+    "1h": Timeframe("1h", "1時間足", "時間", (1, 4, 24), 24, 120, 12, 3000, 400.0, "1h", 60),
+    "1d": Timeframe("1d", "日足", "営業日", (1, 5, 10, 20), 20, 60, 5, 1000, 120.0, "1h", 0),
 }
 
 
@@ -60,17 +68,24 @@ def day_of_origin(origin: datetime):
 
 def target_times(tf: Timeframe, origin: datetime, horizons=None) -> list[datetime]:
     hs = horizons or tf.horizons
-    if tf.key == "1h":
-        return [add_trading_hours(origin, h) for h in hs]
+    if tf.minutes:
+        return [add_trading_minutes(origin, h, tf.minutes) for h in hs]
     d = day_of_origin(origin)
     return [london_day_end(add_business_days(d, h)) for h in hs]
 
 
 def step_ends(tf: Timeframe, origin: datetime, steps: int) -> list[datetime]:
-    if tf.key == "1h":
-        return [add_trading_hours(origin, k) for k in range(1, steps + 1)]
+    if tf.minutes:
+        return [add_trading_minutes(origin, k, tf.minutes) for k in range(1, steps + 1)]
     d = day_of_origin(origin)
     return [london_day_end(add_business_days(d, k)) for k in range(1, steps + 1)]
+
+
+def bar_end(tf: Timeframe, ts) -> datetime:
+    """When the bar labelled ``ts`` completed."""
+    if tf.minutes:
+        return ts.to_pydatetime() + timedelta(minutes=tf.minutes)
+    return london_day_end(ts.date())
 
 
 # ------------------------------------------------------------- base models
@@ -105,6 +120,14 @@ def sigma_steps(tf: Timeframe, bars: pd.DataFrame, origin: datetime, steps: int,
         yt = np.log(tail["close"].to_numpy())
         sq = scale_proxy(range_variance(tail), np.diff(yt), RANGE_WINDOW)
         var, _ = hourly_variance_path(list(tail.index.to_pydatetime()), yt, origin, steps, events, sq=sq)
+    elif tf.minutes:
+        # 15-minute bars: the high-low range as in hourly bars, a time-of-day profile in
+        # hourly slots over 20 trading days, a faster-fading EWMA per bar (research/intraday.md).
+        tail = bars.iloc[-2000:]
+        yt = np.log(tail["close"].to_numpy())
+        sq = scale_proxy(range_variance(tail), np.diff(yt), RANGE_WINDOW)
+        var, _ = intraday_variance_path(list(tail.index.to_pydatetime()), yt, origin, steps, tf.minutes, events,
+                                        **INTRADAY_VOL)
     else:
         sq, lam = daily_variance_inputs(bars, hourly, origin)
         var = daily_step_variance(y, steps, lam, sq=sq)
@@ -130,7 +153,7 @@ def norm_cdf(x: float) -> float:
 # the 50 % / 95 % bands follow the t shape. Degrees of freedom per horizon
 # were fitted on long history (research/report.md); None means normal.
 
-BAND_NU = {"1h": {1: 5, 4: 5, 24: 6}, "1d": {1: 10, 5: 10, 10: 15, 20: 30}}
+BAND_NU = {"15m": {1: 5, 4: 5, 16: 4}, "1h": {1: 5, 4: 5, 24: 6}, "1d": {1: 10, 5: 10, 10: 15, 20: 30}}
 
 
 @lru_cache(maxsize=None)
@@ -145,6 +168,14 @@ def _t_table(nu: int) -> tuple[np.ndarray, np.ndarray, float]:
 
 def band_nu(tf_key: str, h: int) -> int | None:
     return BAND_NU.get(tf_key, {}).get(h)
+
+
+FAN_LEVELS = ("20", "40", "50", "60", "80", "95")     # central ranges drawn on the chart (%)
+
+
+def fan_z(nu: int | None) -> dict[str, float]:
+    """Half-widths (in sigma) of the finer set of central ranges used for drawing."""
+    return {lv: round(dist_quantile(0.5 + int(lv) / 200, nu), 6) for lv in FAN_LEVELS}
 
 
 def band_z(nu: int | None) -> dict[str, float]:
@@ -207,8 +238,8 @@ def combine(model_bp: dict[str, float], weights: list[float], sigma_raw: float, 
 
 def bars_until(tf: Timeframe, bars: pd.DataFrame, cutoff: datetime) -> pd.DataFrame:
     """Bars that had completed by ``cutoff``."""
-    if tf.key == "1h":
-        return bars[bars.index + pd.Timedelta(hours=1) <= pd.Timestamp(cutoff)]
+    if tf.minutes:
+        return bars[bars.index + pd.Timedelta(minutes=tf.minutes) <= pd.Timestamp(cutoff)]
     ends = np.array([london_day_end(d.date()) <= cutoff for d in bars.index], dtype=bool)
     return bars[ends]
 
@@ -227,10 +258,7 @@ def backtest_pair(tf: Timeframe, bars: pd.DataFrame, hourly: pd.DataFrame | None
         hist = bars.iloc[: o + 1]
         yy = y[: o + 1]
         paths, _ = model_paths(yy[-tf.fit_bars:], H)
-        if tf.key == "1h":
-            origin_t = hist.index[-1].to_pydatetime() + HOUR
-        else:
-            origin_t = london_day_end(hist.index[-1].date())
+        origin_t = bar_end(tf, hist.index[-1])
         var = sigma_steps(tf, hist.iloc[-tf.fit_bars:], origin_t, H, hourly=hourly)
         sig = horizon_sigma(var, tf.horizons)
         for j, h in enumerate(tf.horizons):
@@ -290,7 +318,7 @@ def backtest_prior(tf: Timeframe, series: dict[str, pd.DataFrame], cutoff: datet
         if len(b) < 600:
             continue
         h = hourly.get(code) if hourly and tf.key == "1d" else None
-        res = backtest_pair(tf, b, None if h is None else bars_until(TIMEFRAMES["1h"], h, cutoff))
+        res = backtest_pair(tf, b, None if h is None else bars_until(TIMEFRAMES[tf.ref], h, cutoff))
         pooled.extend(res["rows"])
         per_pair[code] = {"origins": res["origins"], "stats": summarise_rows(res["rows"], tf.horizons)}
     stats = summarise_rows(pooled, tf.horizons)

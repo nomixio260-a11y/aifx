@@ -1,4 +1,4 @@
-"""Command line: ``aifx cycle | serve | verify | audit | export | status | research``."""
+"""Command line: ``aifx cycle | serve | verify | audit | export | status | research | backtest``."""
 
 from __future__ import annotations
 
@@ -148,12 +148,29 @@ def cmd_status(args) -> int:
 
 
 def cmd_research(args) -> int:
-    from . import history, research
+    from . import history, research, research_intraday
 
     if args.download:
         history.download()
         return 0
+    if args.intraday:
+        research_intraday.run(workers=args.workers)
+        return 0
     research.run(workers=args.workers)
+    return 0
+
+
+def cmd_backtest(args) -> int:
+    from . import backtest
+    from .data import PAIRS
+    from .engine import TIMEFRAMES
+    from .pipeline import State
+    from .timeutil import utcnow
+
+    state = State.open(args.state)
+    tfs = [TIMEFRAMES[k] for k in (args.timeframes or list(TIMEFRAMES))]
+    rep = backtest.update(state, tfs, list(PAIRS), utcnow(), budget=args.budget, log=print)
+    print(json.dumps(rep["rows"], ensure_ascii=False))
     return 0
 
 
@@ -202,8 +219,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("research", help="過去データで検証し research/report.md を作成 (台帳とは別)")
     r.add_argument("--download", action="store_true", help="過去の価格 (Yahoo Finance) と短期金利 (FRED) を data/history/ に取得")
+    r.add_argument("--intraday", action="store_true", help="15分足・5分足 (直近約60日) の検証 (research/intraday.md)")
     r.add_argument("--workers", type=int, default=4)
     r.set_defaults(func=cmd_research)
+
+    b = sub.add_parser("backtest", parents=[common], help="保存済みの価格で直近のバックテストを更新 (cache/ に保存)")
+    b.add_argument("--budget", type=int, default=100000, help="今回計算する起点の上限")
+    b.add_argument("--timeframes", type=lambda v: v.split(","), help="例: 15m,1h")
+    b.set_defaults(func=cmd_backtest)
     return p
 
 

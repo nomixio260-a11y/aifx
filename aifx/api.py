@@ -7,6 +7,7 @@ computes forecasts itself.
     api/news.json          analysed headlines, currency pressure, calendar
     api/models.json        learned weights, calibration, walk-forward results, long-history research
     api/market.json        market analysis: currency strength, volatility, trend, upcoming events
+    api/backtest.json      rolling backtest on the stored history, per timeframe and horizon
     api/verify.json        full verification and audit reports
 """
 
@@ -20,19 +21,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import analysis, indicators
+from . import analysis, backtest, indicators
 from . import news as newsmod
 from . import track
 from .data import CURRENCIES, PAIRS
-from .engine import BAND_Z, BP, MODEL_KEYS, TIMEFRAMES, band_z, dist_cdf, dist_pdf, dist_quantile, step_ends
+from .engine import BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, dist_cdf, dist_pdf, dist_quantile, fan_z, step_ends
 from .forecaster import model_version
 from .learning import learn, samples_from_ledger
 from .models import default_models
 from .pipeline import State
 from .timeutil import iso, london_date, parse_iso, utcnow
 
-HISTORY = {"1h": 240, "1d": 520}
-PAST = {"1h": 96, "1d": 40}
+HISTORY = {"15m": 288, "1h": 240, "1d": 520}
+PAST = {"15m": 96, "1h": 96, "1d": 40}
 RESEARCH = Path(__file__).resolve().parent.parent / "research" / "results.json"
 RESEARCH_ROWS = {
     "1d": [("6モデルの均等平均", "6モデルの均等平均"), ("金利差 (キャリー)", "金利差 (キャリー)"),
@@ -63,6 +64,23 @@ def research_summary(path: Path = RESEARCH) -> dict | None:
                       "after": {k: _r(v, 4) for k, v in r["shape"]["after"][h]["t"]["cover"].items()}}
                   for h in r["shape"]["before"]}
         out["tf"][tf] = {"tune": r["tune"], "test": r["test"], "n": r["n"], "direction": rows, "ranges": ranges}
+    intra = path.parent / "intraday.json"
+    try:
+        m = json.loads(intra.read_text(encoding="utf-8"))["15m"]
+    except (OSError, ValueError, KeyError):
+        return out
+    rows = []
+    for key, label in (("6モデルの均等平均", "6モデルの均等平均"), ("直前15分の値動き (反転/継続)", "直前15分の値動き"),
+                       (next((k for k in m["point"] if k.startswith("本番の学習ルール")), ""), "本番の方式 (学習ルールを再現)")):
+        src = m["point"].get(key)
+        if src:
+            rows.append({"name": label, "h": {h: {"skill": _r(x["skill"], 5), "hit": _r(x["hit"], 4), "p": _r(x["dm_p"], 4)}
+                                             for h, x in src["test"].items()}})
+    ranges = {h: {"before": {k: _r(v, 4) for k, v in m["shape"]["before"][h]["normal"]["cover"].items()},
+                  "after": {k: _r(v, 4) for k, v in m["shape"]["after"][h]["t"]["cover"].items()}}
+              for h in m["shape"]["before"]}
+    out["tf"]["15m"] = {"tune": m["tune"], "test": m["test"], "n": m["n"], "direction": rows, "ranges": ranges,
+                        "report": "research/intraday.md"}
     return out
 
 
@@ -77,16 +95,17 @@ def _label(p: float) -> str:
 
 
 def _xkey(tf: str, t: str) -> str:
-    """Chart x-axis key for an observation time: the hour it closes (1h) or its London day (1d)."""
-    if tf == "1h":
+    """Chart x-axis key for an observation time: when the intraday bar closes, or its London day (1d)."""
+    if TIMEFRAMES[tf].minutes:
         return t
     return london_date(parse_iso(t) - timedelta(minutes=1)).strftime("%Y-%m-%d")
 
 
 def _bars(df: pd.DataFrame, n: int, tf: str, dec: int) -> dict:
     d = df.iloc[-n:]
-    # Hourly bars are keyed by their closing time so they line up with forecast targets.
-    t = [iso(x.to_pydatetime() + timedelta(hours=1)) for x in d.index] if tf == "1h" else [
+    # Intraday bars are keyed by their closing time so they line up with forecast targets.
+    minutes = TIMEFRAMES[tf].minutes
+    t = [iso(x.to_pydatetime() + timedelta(minutes=minutes)) for x in d.index] if minutes else [
         x.strftime("%Y-%m-%d") for x in d.index]
     ohlc = [[_r(o, dec), _r(c, dec), _r(lo, dec), _r(hi, dec)]
             for o, hi, lo, c in d[["open", "high", "low", "close"]].to_numpy()]
@@ -135,7 +154,7 @@ def _horizons(rec: dict, pair) -> list[dict]:
     for f in rec["fc"]:
         sig = f["s"] * f["k"]
         price = p0 * math.exp(f["c"] / BP)
-        z = band_z(f.get("nu"))
+        z = fan_z(f.get("nu"))
         out.append({
             "h": f["h"], "label": TIMEFRAMES[rec["tf"]].horizon_label(f["h"]), "t": f["t"], "x": _xkey(rec["tf"], f["t"]),
             "price": _r(price, pair.decimals + 1),
@@ -143,7 +162,7 @@ def _horizons(rec: dict, pair) -> list[dict]:
             "change_pct": _r((math.exp(f["c"] / BP) - 1) * 100, 3),
             "p_up": _r(f["p"], 4), "dir": _label(f["p"]),
             **{f"{side}{lv}": _r(p0 * math.exp((f["c"] + sgn * z[lv] * sig) / BP), pair.decimals + 1)
-               for lv in ("50", "80", "95") for side, sgn in (("lo", -1), ("hi", 1))},
+               for lv in FAN_LEVELS for side, sgn in (("lo", -1), ("hi", 1))},
             "dist": distribution(p0, f["c"], sig, f.get("nu"), pair),
             "models_up": sum(1 for v in f["m"][1:] if v > 0), "models_total": len(f["m"]) - 1,
             "news_pips": _r(p0 * (math.exp(f["c"] / BP) - math.exp(f["g"] * f["c0"] / BP)) / pair.pip, 2),
@@ -158,7 +177,8 @@ def _coarse_path(rec: dict, horizons: list[dict], tf_key: str, dec: int) -> dict
     tf = TIMEFRAMES[tf_key]
     origin = parse_iso(rec["origin"])
     ends = step_ends(tf, origin, max(tf.steps, max(tf.horizons)))
-    keys = ["c"] + [f"{side}{lv}" for lv in ("50", "80", "95") for side in ("lo", "hi")]
+    keys = ["c"] + [f"{side}{lv}" for lv in FAN_LEVELS for side in ("lo", "hi")
+                    if all(f"{side}{lv}" in h for h in horizons)]
     anchors = [(0, {k: rec["p0"] for k in keys} | {"p": 0.5})]
     for h in horizons:
         anchors.append((h["h"], {"c": h["price"], "p": h["p_up"], **{k: h[k] for k in keys[1:]}}))
@@ -173,17 +193,21 @@ def _coarse_path(rec: dict, horizons: list[dict], tf_key: str, dec: int) -> dict
     return {"steps": steps, "models": {}, "events": [], "news": None, "analogs": [], "coarse": True}
 
 
-def _past(rows: list[dict], pair: str, tf: str, n: int, dec: int) -> list[dict]:
-    sel = [r for r in rows if r["pair"] == pair and r["tf"] == tf and r["h"] == 1][-n:]
-    out = []
-    for r in sel:
-        pred = r["p0"] * math.exp(r["c"] / BP)
-        moved = abs(r["a"]) > 1e-9 and abs(r["c"]) > 1e-9
-        out.append({"t": r["target"], "x": _xkey(tf, r["target"]), "origin": r["origin"], "price": _r(pred, dec),
-                    "lo80": _r(r["p0"] * math.exp((r["c"] - BAND_Z["80"] * r["sigma"]) / BP), dec),
-                    "hi80": _r(r["p0"] * math.exp((r["c"] + BAND_Z["80"] * r["sigma"]) / BP), dec),
-                    "actual": _r(r["actual"], dec), "hit": ((r["c"] > 0) == (r["a"] > 0)) if moved else None,
-                    "inside80": abs(r["c"] - r["a"]) <= BAND_Z["80"] * r["sigma"]})
+def _past(rows: list[dict], pair: str, tf: str, n: int, dec: int) -> dict[str, list[dict]]:
+    """The latest scored live forecasts of each horizon, for the answer-check overlay."""
+    out: dict[str, list[dict]] = {}
+    for h in TIMEFRAMES[tf].horizons:
+        sel = [r for r in rows if r["pair"] == pair and r["tf"] == tf and r["h"] == h][-n:]
+        items = []
+        for r in sel:
+            pred = r["p0"] * math.exp(r["c"] / BP)
+            moved = abs(r["a"]) > 1e-9 and abs(r["c"]) > 1e-9
+            items.append({"t": r["target"], "x": _xkey(tf, r["target"]), "origin": r["origin"], "price": _r(pred, dec),
+                          **{f"{side}{lv}": _r(r["p0"] * math.exp((r["c"] + sgn * r["z"][lv] * r["sigma"]) / BP), dec)
+                             for lv in ("50", "80", "95") for side, sgn in (("lo", -1), ("hi", 1))},
+                          "actual": _r(r["actual"], dec), "hit": ((r["c"] > 0) == (r["a"] > 0)) if moved else None,
+                          "inside80": abs(r["c"] - r["a"]) <= r["z"]["80"] * r["sigma"]})
+        out[str(h)] = items
     return out
 
 
@@ -266,7 +290,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                    "price": payload["quote"]["price"], "change_24h_pct": payload["change_24h_pct"], "outlook": {},
                    "live": tr["by_pair"].get(code, {}).get("1h", {}).get("1", {})}
         for tf_key, tf in TIMEFRAMES.items():
-            bars = hourly if tf_key == "1h" else daily
+            bars = hourly if tf_key == "1h" else daily if tf_key == "1d" else state.prices.load(code, tf_key)
             if not len(bars):
                 continue
             block = {
@@ -354,6 +378,17 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
         "sources": (status.get("news") or {}).get("sources", {}),
         "params": {"tau_hours": newsmod.TAU_HOURS, "lookback_hours": newsmod.LOOKBACK_HOURS, "shrink": newsmod.SHRINK},
     }
+
+    # rolling backtest (derived from the stored prices; see backtest.py) ------
+    bt = backtest.summary(state, list(TIMEFRAMES.values()), list(payloads), now, {c: PAIRS[c].decimals for c in payloads})
+    for code, payload in payloads.items():
+        for tf_key, block in payload["tf"].items():
+            per_h = bt["pairs"].get(code, {}).get(tf_key, {})
+            for items in per_h.values():
+                for it in items:
+                    it["x"] = _xkey(tf_key, it["t"])
+            block["bt_past"] = per_h
+    out["backtest.json"] = {"at": bt["at"], "tf": bt["tf"]}
 
     # market analysis (descriptive) -----------------------------------------
     out["market.json"] = analysis.build(hourly_all, daily_all, events, press_now, ranges24, now)
