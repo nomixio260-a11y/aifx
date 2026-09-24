@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aifx"
-version = "0.1.0"
-description = "FX chart forecasting: multi-model price forecasts, walk-forward backtests and a static web dashboard"
+version = "0.2.0"
+description = "FX forecasting server: live forecasts on a tamper-evident ledger, scored and learned from their own results"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24", "pandas>=2.0"]
