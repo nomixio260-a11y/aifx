@@ -37,7 +37,7 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e ".[llm]"
+        run: pip install -e .
 
       - name: Check out the ledger branch
         run: |
@@ -52,8 +52,6 @@ jobs:
           echo "BEFORE=$(aifx head --state state)" >> "$GITHUB_ENV"
 
       - name: Run one cycle
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: aifx cycle --state state --site site --audit 3 --interval 15
 
       - name: Verify the ledger only grew

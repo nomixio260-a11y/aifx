@@ -118,7 +118,7 @@ def _need_prior(state: State, tf: Timeframe, anchor: datetime) -> bool:
 
 
 def run_cycle(root: Path | str, now: datetime | None = None, market=None, collect_news=True,
-              news_fetch=None, calendar_fetch=None, analyzer=None, pairs: list[str] | None = None,
+              news_fetch=None, calendar_fetch=None, pairs: list[str] | None = None,
               timeframes=None, log=print) -> CycleReport:
     """Run one cycle against the state directory ``root``."""
     state = State.open(root)
@@ -169,21 +169,14 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
         items, src_report = (news_fetch or newsmod.collect_news)(at)
         known = {it["id"] for it in state.news.load(since=at - timedelta(days=62))}
         fresh = [it for it in items if it["id"] not in known]
-        llm_error = None
-        if analyzer is not None and fresh:
-            from .news_llm import merge
-            results, llm_error = analyzer.analyze(fresh)
-            fresh = [merge(it, results[it["id"]]) if it["id"] in results else it for it in fresh]
         stored = state.news.append(fresh, at)
         events, cal_err = (calendar_fetch or newsmod.collect_calendar)()
         new_events = state.calendar.append(events, at)
         report.news = {
             "fetched": len(items), "new": len(stored), "events_new": len(new_events), "sources": src_report,
-            "analyzer": analyzer.name if analyzer is not None else newsmod.ANALYZER,
-            "llm_error": llm_error, "calendar_error": cal_err,
-            "llm_usage": getattr(analyzer, "usage", None),
+            "analyzer": newsmod.ANALYZER, "calendar_error": cal_err,
         }
-        for err in [e["error"] for e in src_report.values() if e.get("error")] + [cal_err, llm_error]:
+        for err in [e["error"] for e in src_report.values() if e.get("error")] + [cal_err]:
             if err:
                 report.errors.append(err)
 

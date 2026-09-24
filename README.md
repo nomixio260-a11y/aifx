@@ -53,11 +53,11 @@
 ### ニュース分析
 
 - 取得元: Google ニュース検索 (日本語・英語の為替・中央銀行・米国指標・地政学)、FRB・ECB・日銀・英中銀・豪中銀の発表、ForexLive、Forex Factory の経済指標カレンダー
-- 見出しごとに、USD・JPY・EUR・GBP・AUD それぞれへの影響 (−1 通貨安 〜 +1 通貨高) を判定します。標準はキーワード分析 (日本語・英語、判定根拠が追える)。`ANTHROPIC_API_KEY` を設定すると、新しい見出しを Claude (`claude-opus-5`、低い推論負荷、構造化出力、拒否時の自動フォールバック付き) で分析します。見出し1件につき1回だけ分析し、結果を保存するので再計算にAPIは不要です。
+- 見出しごとに、USD・JPY・EUR・GBP・AUD それぞれへの影響 (−1 通貨安 〜 +1 通貨高) をキーワード分析 (日本語・英語) で判定します。分析はすべてサーバー内で行い、有料のAPIや外部の分析サービスは使いません。判定根拠となる語句は `aifx/news.py` で確認・調整できます。
 - 通貨ごとの「ニュース圧力」は、新しい見出しほど重く (半減期 約8時間) 平均した値です。ペアの信号は「基軸通貨の圧力 − 決済通貨の圧力」です。
 - 予測に使えるのは、**予測の起点時刻より前に取得・保存済みの見出しだけ**です。
 
-Claude を使う場合の費用の目安: 15分ごとに新しい見出し (最大40件) を1回のリクエストで分析するため、`claude-opus-5` で1日あたりおよそ3〜10ドルです (見出しの数によります)。`AIFX_LLM_MODEL` で別のモデルを、`AIFX_LLM_MAX_ITEMS` で1回あたりの上限件数を指定できます。`AIFX_LLM=off` で無効にできます。
+ニュースの取得先はすべて無料で公開されているRSSとカレンダーです。
 
 ## 成績をごまかせない仕組み
 
@@ -111,13 +111,12 @@ aifx cycle --synthetic --site site      # ネットなしで動作確認 (乱数
 
 ```bash
 docker build -t aifx .
-docker run -d -p 8000:8000 -v aifx-data:/data -e ANTHROPIC_API_KEY=... aifx
+docker run -d -p 8000:8000 -v aifx-data:/data aifx
 ```
 
 ## GitHub での運用
 
 - `.github/workflows/server.yml` が15分ごとに1サイクルを実行し、台帳を `ledger` ブランチに追記して、Pages が有効ならWebページを公開します。デフォルトブランチへのコードの push でもすぐ実行されます。
-- `ANTHROPIC_API_KEY` をリポジトリの Secrets に登録すると Claude によるニュース分析が有効になります (任意)。
 - `ledger` ブランチにブランチ保護 (force push の禁止) を設定すると、履歴の書き換えをGitHub側でも防げます。
 - `.github/workflows/ci.yml` がテスト (不正の検出テストを含む) を実行します。
 
@@ -138,7 +137,6 @@ aifx/
   volatility.py   予測レンジ (時間帯別の変動、週末、重要指標)
   learning.py     実績からの学習
   news.py         ニュース・経済指標の取得と分析、ニュース信号
-  news_llm.py     Claude による見出し分析 (任意)
   ledger.py       ハッシュ鎖の台帳と追記専用ファイル
   store.py        価格・ニュース・指標の保存
   audit.py        検証 (verify) と再計算による監査 (audit)

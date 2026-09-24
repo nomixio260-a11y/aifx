@@ -772,7 +772,6 @@ aifx audit --state state --sample 20 --external</pre>
     Object.keys(n.cur || {}).forEach(function (c) { var v = n.cur[c]; m.appendChild(el("span", "chip " + dirClass(v), c + " " + arrow(v) + Math.abs(v).toFixed(2))); });
     if (!Object.keys(n.cur || {}).length) m.appendChild(el("span", "chip flat", "方向なし"));
     m.appendChild(el("span", null, n.publisher || "")); m.appendChild(el("span", null, jst(n.published_at)));
-    m.appendChild(el("span", null, n.by && n.by.indexOf("claude") === 0 ? "Claude分析" : "キーワード分析"));
     it.appendChild(m);
     if (n.ja) it.appendChild(el("div", "m", n.ja));
     return it;
@@ -918,8 +917,7 @@ aifx audit --state state --sample 20 --external</pre>
     var curs = ["ALL"].concat(Object.keys(n.pressures));
     segment($("seg-news-cur"), curs.map(function (c) { return { label: c === "ALL" ? "すべて" : c, value: c }; }), function () { return S.newsCur; }, function (v) { S.newsCur = v; renderNewsList(); });
     renderNewsList();
-    var analyzer = n.analyzer && n.analyzer.indexOf("claude") === 0 ? "Claude (" + n.analyzer.slice(7) + ")" : "キーワード分析";
-    $("news-caption").textContent = "分析方法: " + analyzer + " · " + jst(n.at) + " 時点";
+    $("news-caption").textContent = "分析: サーバー上のキーワード分析 (外部の有料サービスは不使用) · " + jst(n.at) + " 時点";
     $("news-lead").textContent = "Google ニュース (日本語・英語)、各国中央銀行の発表、FXニュースを15分ごとに集め、見出しごとに各通貨への影響 (+は通貨高、−は通貨安) を判定しています。通貨ごとの圧力は新しい見出しほど重く (半減期 約" + Math.round(n.params.tau_hours * Math.log(2)) + "時間) 平均したもので、ペアの信号は「基軸通貨の圧力 − 決済通貨の圧力」です。予測に反映する強さ (ニュース係数) は、実際の成績から学習して決まります。";
     var src = n.sources || {}; var ok = 0, bad = [];
     Object.keys(src).forEach(function (k) { if (src[k].error) bad.push(k); else ok++; });

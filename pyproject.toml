@@ -11,8 +11,7 @@ requires-python = ">=3.10"
 dependencies = ["numpy>=1.24", "pandas>=2.0"]
 
 [project.optional-dependencies]
-llm = ["anthropic>=1.8"]
-dev = ["pytest>=7", "anthropic>=1.8"]
+dev = ["pytest>=7"]
 
 [project.scripts]
 aifx = "aifx.cli:main"

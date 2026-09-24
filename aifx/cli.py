@@ -23,13 +23,6 @@ def _cycle_kwargs(args) -> dict:
     if args.synthetic:
         kw["market"] = SyntheticMarket(seed=1)
         kw["collect_news"] = False
-    if not args.no_news and not args.synthetic:
-        from . import news_llm
-        if news_llm.enabled():
-            try:
-                kw["analyzer"] = news_llm.ClaudeAnalyzer()
-            except Exception as exc:  # SDK missing or misconfigured: keep the keyword analyzer
-                print(f"Claude analyzer unavailable: {exc}", file=sys.stderr)
     return kw
 
 

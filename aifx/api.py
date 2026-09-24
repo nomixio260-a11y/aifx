@@ -242,8 +242,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                  key=lambda e: e["time"])
     out["news.json"] = {
         "at": iso(now),
-        "analyzer": (status.get("news") or {}).get("analyzer", newsmod.ANALYZER),
-        "llm_usage": (status.get("news") or {}).get("llm_usage"),
+        "analyzer": newsmod.ANALYZER,
         "pressures": press_now,
         "pair_signals": {c: newsmod.pair_signal(press_now, p.base, p.quote) for c, p in PAIRS.items()},
         "history": history,

@@ -4,11 +4,10 @@ Collection: Google News searches (Japanese and English), central-bank press
 feeds (Fed, ECB, BOJ, BoE, RBA), an FX news feed, and the weekly economic
 calendar. Only the headline, publisher, link and times are kept.
 
-Analysis: a transparent bilingual keyword model scores each headline's likely
-effect on USD, JPY, EUR, GBP and AUD (-1 weaker .. +1 stronger). When an
-Anthropic API key is configured, Claude re-scores new relevant headlines
-(see ``news_llm.py``); either way the stored analysis is what the forecaster
-uses, so the signal can be recomputed later.
+Analysis: a transparent bilingual keyword model, run locally with no paid
+service, scores each headline's likely effect on USD, JPY, EUR, GBP and AUD
+(-1 weaker .. +1 stronger). The stored analysis is what the forecaster uses,
+so the signal can be recomputed later.
 
 Signals: a currency's news pressure is a recency-weighted average of headline
 scores, shrunk toward zero when there are few headlines. A pair's signal is
