@@ -943,7 +943,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       return head + rows.join("");
     }
     var start = Math.max(0, nH - S.range[tf]);
-    var right = narrow ? 52 : 74;
+    var right = narrow ? 60 : 74;   // room for the latest-price label (7 digits)
     var grids = withRsi ? [{ left: 8, right: right, top: 18, bottom: "27%" }, { left: 8, right: right, top: "78%", bottom: 26 }] : [{ left: 8, right: right, top: 18, bottom: 26 }];
     var xAxes = [{ type: "category", data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { show: !withRsi, color: t.muted, fontFamily: t.mono, fontSize: 10.5, hideOverlap: true, formatter: xlabel }, splitLine: { show: false } }];
     var yAxes = [{ scale: true, position: "right", splitNumber: narrow ? 5 : 8, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } }];
