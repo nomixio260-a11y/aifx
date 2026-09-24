@@ -12,7 +12,7 @@
   --surface-2: #eceef4;
   --ink: #14151c;
   --ink-2: #4c4f62;
-  --muted: #767a8f;
+  --muted: #666a7e;
   --hair: #e0e2ea;
   --axis: #c3c6d4;
   --accent: #4a3aa7;
@@ -94,7 +94,7 @@
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; padding-bottom: var(--tabbar); }
+body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; -webkit-font-smoothing: antialiased; padding-bottom: var(--tabbar); }
 a { color: var(--accent); }
 button { -webkit-tap-highlight-color: transparent; }
 .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 14px 40px; display: grid; gap: 14px; }
@@ -103,7 +103,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
 .good { color: var(--good); } .bad { color: var(--bad); }
 .muted { color: var(--muted); }
-.small { font-size: 12px; }
+.small { font-size: 12.5px; }
 [hidden] { display: none !important; }
 
 /* header */
@@ -140,15 +140,15 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 
 /* pair chips */
 .rail { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
-.pchip { appearance: none; font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 8px 12px; cursor: pointer; display: grid; gap: 0; min-width: 128px; flex: none; scroll-snap-align: start; }
+.pchip { appearance: none; font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 7px 11px; cursor: pointer; display: grid; gap: 0; min-width: 118px; flex: none; scroll-snap-align: start; }
 .pchip:hover { border-color: var(--axis); }
 .pchip[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.pchip .code { font-weight: 600; font-size: 12.5px; display: flex; justify-content: space-between; gap: 8px; }
+.pchip .code { font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
 .pchip .px { font-size: 16px; font-weight: 500; }
 .pchip .chg { font-size: 11px; white-space: nowrap; }
-.pchip .rng { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.pchip .rng { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 
-.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; line-height: 1.6; white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; line-height: 1.6; white-space: nowrap; }
 .chip.up { background: color-mix(in srgb, var(--up) 12%, transparent); color: var(--up); }
 .chip.down { background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--down); }
 .chip.flat { background: var(--surface-2); color: var(--ink-2); }
@@ -161,66 +161,86 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .view { display: grid; gap: 14px; min-width: 0; }
 .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; }
 .section-head h2 { font-size: 17px; font-weight: 700; }
-.section-head h3 { font-size: 15px; font-weight: 600; }
-.section-head p { margin: 0; font-size: 12px; color: var(--muted); }
-.lead { margin: 0; color: var(--ink-2); font-size: 13px; max-width: 78ch; }
+.section-head h3 { font-size: 16px; font-weight: 600; }
+.section-head p { margin: 0; font-size: 12.5px; color: var(--muted); }
+.lead { margin: 0; color: var(--ink-2); font-size: 13.5px; max-width: 78ch; }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
 .grid2 > .panel { align-self: start; }
 .stack { display: grid; gap: 10px; align-content: start; min-width: 0; }
 
-/* forecast hero */
-.hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: end; }
-.hero .pairname { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.hero .pairname h2 { font-size: 20px; }
-.hero .pairname span { color: var(--ink-2); font-size: 13px; }
-.hero .price { font-family: var(--mono); font-size: 40px; font-weight: 500; line-height: 1.1; margin-top: 4px; }
-.hero .meta { display: flex; gap: 2px 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
-.seg { display: inline-flex; background: var(--surface-2); border-radius: 9px; padding: 2px; gap: 2px; flex-wrap: wrap; }
-.seg button { appearance: none; border: 0; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--ink-2); background: transparent; padding: 5px 11px; border-radius: 7px; cursor: pointer; min-height: 30px; }
-.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
-.ctl-label { font-size: 11px; color: var(--muted); margin-right: 6px; }
+/* forecast: pair header, controls, answer */
+.phead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 16px; }
+.phead .pairname { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.phead .pairname h2 { font-size: 22px; }
+.phead .pairname span { color: var(--ink-2); font-size: 14px; }
+.pquote { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
+.pquote .price { font-size: 30px; font-weight: 600; line-height: 1.1; letter-spacing: 0.01em; }
+.pquote .meta { display: flex; gap: 2px 10px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 3px; flex-wrap: wrap; }
+.seg button { appearance: none; border: 0; font: inherit; font-size: 13px; font-weight: 500; color: var(--ink-2); background: transparent; padding: 6px 12px; border-radius: 8px; cursor: pointer; min-height: 34px; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.14); }
+.seg.big { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+.seg.big button { min-height: 50px; padding: 5px 8px; display: grid; gap: 0; align-content: center; justify-items: center; line-height: 1.3; }
+.seg.big button b { font-size: 14px; font-weight: inherit; white-space: nowrap; }
+.seg.big button small { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.seg.big button[aria-pressed="true"] small { color: var(--accent); font-weight: 600; }
+.ctl-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.ctlbar { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 4fr); gap: 10px 20px; }
+.ctl { display: grid; gap: 4px; min-width: 0; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 
-/* the plain-language summary */
-.summary { border-radius: 12px; background: var(--accent-wash); padding: 14px 16px; display: grid; gap: 4px; }
-.summary .k { font-size: 12.5px; color: var(--ink-2); font-weight: 500; }
-.summary .range { font-family: var(--mono); font-size: 24px; font-weight: 500; line-height: 1.25; }
-.summary .range small { font-size: 13px; color: var(--ink-2); font-family: var(--sans); font-weight: 400; margin-left: 6px; }
-.summary .prob { font-size: 14px; font-weight: 500; }
-.summary .why { font-size: 12px; color: var(--ink-2); }
-.pbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; margin: 4px 0 2px; max-width: 420px; }
-.pbar i { display: block; height: 100%; border-radius: 4px; }
-.pbar-legend { display: flex; justify-content: space-between; max-width: 420px; font-size: 11.5px; }
-
-/* horizon cards with range bars (shared scale) */
-.hcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
-.hcard { appearance: none; font: inherit; color: inherit; text-align: left; border: 1px solid var(--hair); border-radius: 10px; padding: 9px 10px; display: grid; gap: 3px; min-width: 0; background: var(--surface); cursor: pointer; }
-.hcard[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.hcard .when { display: flex; justify-content: space-between; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); font-weight: 500; }
-.hcard .pm { font-family: var(--mono); font-size: 15px; font-weight: 500; }
-.hcard .sub { font-size: 11px; color: var(--muted); }
-.rbar { position: relative; height: 16px; margin: 4px 0 2px; }
-.rbar .trk { position: absolute; left: 0; right: 0; top: 7px; height: 2px; background: var(--hair); border-radius: 1px; }
-.rbar .b { position: absolute; top: 3px; height: 10px; border-radius: 4px; }
-.rbar .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
-.rbar .ctr { position: absolute; top: 4px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.answer { border-radius: 12px; background: var(--accent-wash); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 10px 24px; align-items: center; }
+.answer .k { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+.answer .range { font-size: 30px; font-weight: 600; line-height: 1.2; margin: 2px 0; letter-spacing: 0.01em; }
+.answer .sub { font-size: 13.5px; color: var(--ink-2); }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tile { background: var(--surface); border-radius: 10px; padding: 8px 10px; display: grid; gap: 1px; min-width: 0; }
+.tile .l { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 18px; font-weight: 600; line-height: 1.3; }
+.tile .d { font-size: 11.5px; color: var(--ink-2); }
+.rtable { border-collapse: separate; border-spacing: 0; font-size: 13px; background: var(--surface); border-radius: 10px; overflow: hidden; min-width: 290px; }
+.rtable th, .rtable td { padding: 6px 12px; border-bottom: 1px solid var(--hair); text-align: right; white-space: nowrap; }
+.rtable tr:last-child td { border-bottom: 0; }
+.rtable th { font-size: 11.5px; color: var(--muted); font-weight: 500; background: transparent; position: static; }
+.rtable td:first-child { text-align: left; font-weight: 600; }
+.rtable td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.rtable tr.sel td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.rtable .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+details.why { grid-column: 1 / -1; }
+.rbox details.why > div { max-width: 60ch; }
+details.why > summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 500; list-style: none; display: inline-flex; gap: 6px; align-items: center; }
+details.why > summary::-webkit-details-marker { display: none; }
+details.why > summary::before { content: "▸"; font-size: 11px; }
+details.why[open] > summary::before { content: "▾"; }
+details.why > div { margin-top: 6px; display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
 
 /* chart */
-.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
-.tog { appearance: none; font: inherit; font-size: 12px; color: var(--ink-2); background: transparent; border: 1px solid var(--hair); border-radius: 999px; padding: 4px 10px 4px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; }
-.tog.static { border-color: transparent; cursor: default; padding-inline: 2px 6px; }
-.tog[aria-pressed="false"] { opacity: 0.55; }
-.key { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 8px 16px; }
+.chart-head .ctl { display: flex; align-items: center; gap: 8px; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); align-items: center; }
+.legend-row span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.chart-foot { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 24px; align-items: start; }
+.rbox { display: grid; gap: 6px; }
+.rbox .cap { font-size: 12.5px; color: var(--ink-2); font-weight: 500; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tog { appearance: none; font: inherit; font-size: 13px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 5px 12px 5px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; }
+.tog[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); background: var(--accent-wash); }
+.tog .box { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--axis); display: inline-grid; place-items: center; font-size: 11px; line-height: 1; color: var(--surface); }
+.tog[aria-pressed="true"] .box { background: var(--accent); border-color: var(--accent); }
+.key { display: inline-block; width: 18px; height: 0; border-top: 2px solid; }
 .key.dash { border-top-style: dashed; }
-.key.box { height: 10px; border: 0; border-radius: 2px; }
-.key.candle { width: 10px; height: 10px; border: 0; background: linear-gradient(90deg, var(--up) 50%, var(--down) 50%); border-radius: 2px; }
-.key.dotk { width: 9px; height: 9px; border: 0; border-radius: 50%; }
-.chart { width: 100%; height: 480px; }
+.key.box { width: 14px; height: 12px; border: 0; border-radius: 3px; }
+.key.candle { width: 12px; height: 12px; border: 0; background: linear-gradient(90deg, var(--up) 50%, var(--down) 50%); border-radius: 2px; }
+.key.dotk { width: 10px; height: 10px; border: 0; border-radius: 50%; }
+.key.diak { width: 9px; height: 9px; border: 0; transform: rotate(45deg); border-radius: 1px; }
+.key.bar { width: 6px; height: 14px; border: 0; border-radius: 3px; }
+.chart { width: 100%; height: 480px; touch-action: pan-y; }
 .chart.small { height: 260px; }
 .chart.dist { height: 210px; }
-.note { font-size: 12px; color: var(--muted); margin: 0; }
-.check { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: var(--ink-2); }
-details.more > summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; }
+.chart.check-chart { height: 250px; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+details.more > summary { cursor: pointer; font-size: 13px; color: var(--ink-2); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; }
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "▸"; font-size: 11px; color: var(--muted); }
 details.more[open] > summary::before { content: "▾"; }
@@ -239,7 +259,7 @@ details.more > div { margin-top: 8px; display: grid; gap: 10px; }
 
 .tablebox { overflow-x: auto; border: 1px solid var(--hair); border-radius: 10px; }
 .tablebox.tall { max-height: 380px; overflow-y: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--hair); }
 th:first-child, td:first-child { text-align: left; }
 td.l, th.l { text-align: left; }
@@ -252,10 +272,10 @@ tr.hl td { background: var(--accent-wash); font-weight: 600; }
 .list { display: grid; border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; }
 .list .item { padding: 9px 12px; border-bottom: 1px solid var(--hair); display: grid; gap: 3px; min-width: 0; }
 .list .item:last-child { border-bottom: 0; }
-.list .item .t { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.list .item .t { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
 .list .item .t a { color: var(--ink); text-decoration: none; }
 .list .item .t a:hover { text-decoration: underline; }
-.list .item .m { display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--muted); }
+.list .item .m { display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
 .empty { padding: 14px; color: var(--muted); font-size: 13px; }
 
 /* diverging bars (news pressure, currency strength) */
@@ -308,18 +328,36 @@ footer { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
 footer p { margin: 0; max-width: 95ch; }
 .toast { position: fixed; left: 50%; bottom: calc(18px + var(--tabbar)); transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 20; max-width: calc(100% - 32px); }
 
-@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .ctlbar { grid-template-columns: 1fr; } .answer { grid-template-columns: 1fr; } }
 @media (max-width: 600px) {
   .wrap { padding-inline: 10px; gap: 10px; padding-top: 10px; }
   .panel { padding: 14px 12px; border-radius: 12px; gap: 12px; }
   .brand p { display: none; }
-  .hero .price { font-size: 32px; }
-  .summary .range { font-size: 20px; }
-  .chart { height: 360px; }
+  .pquote .price { font-size: 26px; }
+  .answer { grid-template-columns: 1fr; padding: 12px; gap: 8px; }
+  .chart-foot { grid-template-columns: 1fr; }
+  .panel.main > .chart-head { order: 10; }
+  .panel.main > .chart-foot { order: 11; }
+  .pchip { min-width: 0; padding: 6px 10px; }
+  .pchip .rng { display: none; }
+  .pchip .px { font-size: 15px; }
+  .phead { align-items: baseline; }
+  .pquote { display: contents; }
+  .pquote .meta { font-size: 12px; flex-basis: 100%; }
+  .phead .pairname span { display: none; }
+  .phead .pairname h2 { font-size: 19px; }
+  .seg.big button { min-height: 46px; }
+  .tile .d .opt2 { display: none; }
+  .answer .range { font-size: 24px; }
+  .rtable { min-width: 0; width: 100%; }
+  .tile .v { font-size: 16px; }
+  .tile { padding: 7px 8px; }
+  .ctlbar { grid-template-columns: 1fr; }
+  .chart { height: 380px; }
+  .chart-head { align-items: center; }
   .opt { display: none; }
   th, td { padding: 7px 8px; }
   .lrow { grid-template-columns: 88px minmax(0, 1fr) 40px; gap: 8px; }
-  .hero { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -338,30 +376,40 @@ footer p { margin: 0; max-width: 95ch; }
   <!-- ============ forecast ============ -->
   <section class="view" id="view-forecast" role="tabpanel" aria-label="予測">
     <div class="rail" id="rail" aria-label="通貨ペア"></div>
-    <div class="panel">
-      <div class="hero">
-        <div>
-          <div class="pairname"><h2 id="p-label">読み込み中…</h2><span id="p-name"></span></div>
-          <div class="price num" id="p-price">—</div>
-          <div class="meta" id="p-meta"></div>
-        </div>
-        <span class="seg" id="seg-tf"></span>
+    <div class="panel main">
+      <div class="phead">
+        <div class="pairname"><h2 id="p-label">読み込み中…</h2><span id="p-name"></span></div>
+        <div class="pquote"><span class="price" id="p-price">—</span><span class="meta" id="p-meta"></span></div>
       </div>
-      <div class="summary" id="summary" aria-live="polite"></div>
-      <div class="hcards" id="hcards"></div>
-      <p class="note" id="p-issued"></p>
+      <div class="ctlbar">
+        <div class="ctl"><span class="ctl-label" id="lbl-tf">時間足</span><div class="seg big" id="seg-tf" role="group" aria-labelledby="lbl-tf"></div></div>
+        <div class="ctl"><span class="ctl-label" id="lbl-h">予想する時点</span><div class="seg big" id="seg-h" role="group" aria-labelledby="lbl-h"></div></div>
+      </div>
+      <div class="answer" id="answer" aria-live="polite"></div>
+      <div class="chart-head">
+        <div class="legend-row" id="chart-legend"></div>
+        <div class="ctl"><span class="ctl-label" id="lbl-range">表示期間</span><div class="seg" id="seg-range" role="group" aria-labelledby="lbl-range"></div></div>
+      </div>
+      <div class="chart" id="chart" role="img" aria-label="ローソク足と予測レンジ"></div>
+      <div class="chart-foot">
+        <div class="rbox" id="rbox"></div>
+        <div class="stack">
+          <div class="toggles" id="toggles"></div>
+          <p class="note" id="chart-note"></p>
+        </div>
+      </div>
     </div>
     <div class="grid2">
       <div class="panel">
-        <div class="section-head"><h3>チャートと予測レンジ</h3><span class="seg" id="seg-range"></span></div>
-        <div class="chart" id="chart" role="img" aria-label="ローソク足と予測レンジ"></div>
-        <div class="small check" id="chart-check"></div>
-        <details class="more"><summary>表示の切り替え・見方</summary><div><div class="toggles" id="toggles"></div><p class="note" id="chart-note"></p></div></details>
+        <div class="section-head"><h3 id="check-title">過去の予測は当たったか</h3><span class="seg" id="seg-check"></span></div>
+        <p class="lead" id="check-lead"></p>
+        <div class="chart check-chart" id="check-chart" role="img" aria-label="過去の予測の範囲と実際の値"></div>
+        <div class="legend-row" id="check-legend"></div>
       </div>
       <div class="panel">
         <div class="section-head"><h3 id="dist-title">予想の分布</h3><p id="dist-caption"></p></div>
         <div class="chart dist" id="dist-chart" role="img" aria-label="予想価格の分布"></div>
-        <div class="section-head"><h3>この価格より上にある確率</h3><p id="ladder-caption"></p></div>
+        <div class="section-head"><h3>この価格より上になる確率</h3><p id="ladder-caption"></p></div>
         <div class="ladder" id="ladder"></div>
       </div>
     </div>
@@ -373,13 +421,13 @@ footer p { margin: 0; max-width: 95ch; }
         <div class="list" id="pair-cal"></div>
       </div>
       <div class="panel">
-        <div class="section-head"><h3>関連ニュース</h3><p>起点時刻より前に取得したものだけが予測に使われます</p></div>
+        <div class="section-head"><h3>関連ニュース</h3><p>予測を出す前に取得したものだけを使っています</p></div>
         <div class="list" id="pair-news"></div>
       </div>
     </div>
     <details class="panel more"><summary>時刻ごとの予測 (表)</summary><div>
       <p class="note" id="path-caption"></p>
-      <div class="tablebox tall"><table><thead><tr><th>時刻</th><th class="num">中心</th><th class="num">変化 (pips)</th><th class="num opt">50%レンジ</th><th class="num">80%レンジ</th><th class="num opt">95%レンジ</th><th class="num opt">上昇確率</th></tr></thead><tbody id="path-body"></tbody></table></div>
+      <div class="tablebox tall"><table><thead><tr><th>時刻</th><th class="num">中心</th><th class="num">変化 (pips)</th><th class="num opt">50%の範囲</th><th class="num">80%の範囲</th><th class="num opt">95%の範囲</th><th class="num opt">上がる確率</th></tr></thead><tbody id="path-body"></tbody></table></div>
     </div></details>
   </section>
 
@@ -536,14 +584,14 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   ];
   var S = {
     view: "forecast", pair: "USDJPY", tf: "1h",
-    range: { "15m": narrowMQ.matches ? 48 : 96, "1h": narrowMQ.matches ? 48 : 120, "1d": narrowMQ.matches ? 65 : 130 },
+    range: { "15m": 32, "1h": 48, "1d": 40 },
     h: { "15m": 4, "1h": 24, "1d": 5 },
-    show: { band: true, ma: true, past: true, models: false, rsi: !narrowMQ.matches }, pastSrc: "auto",
+    show: { ma: false, rsi: false }, pastSrc: "auto",
     trackTf: "1h", trackPair: "ALL", trackMetric: 1, newsCur: "ALL", learnTf: "1h", strengthWin: "24h",
     meta: null, pairs: {}, track: null, news: null, models: null, verify: null, market: null, status: null, rendered: {}
   };
   try {
-    var saved = JSON.parse(localStorage.getItem("aifx-view2") || "null");
+    var saved = JSON.parse(localStorage.getItem("aifx-view3") || "null");
     if (saved) { if (saved.show) Object.assign(S.show, saved.show); if (saved.tf) S.tf = saved.tf; if (saved.pair) S.pair = saved.pair; if (saved.h) Object.assign(S.h, saved.h); }
   } catch (e) {}
   function readHash() {
@@ -553,7 +601,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     if (/^(USD|EUR|GBP|AUD)(JPY|USD)$/i.test(h)) { S.pair = h.toUpperCase(); S.view = "forecast"; }
   }
   readHash();
-  function persist() { try { localStorage.setItem("aifx-view2", JSON.stringify({ show: S.show, tf: S.tf, pair: S.pair, h: S.h })); } catch (e) {} }
+  function persist() { try { localStorage.setItem("aifx-view3", JSON.stringify({ show: S.show, tf: S.tf, pair: S.pair, h: S.h })); } catch (e) {} }
 
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -579,7 +627,19 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     return ms >= 0 ? "あと" + txt : txt + "前";
   }
   var TF_MIN = { "15m": 15, "1h": 60 };
-  var TF_ITEMS = [{ label: "15分足", value: "15m" }, { label: "1時間足", value: "1h" }, { label: "日足", value: "1d" }];
+  var TF_ITEMS = [{ label: "15分足", sub: "4時間先まで", value: "15m" }, { label: "1時間足", sub: "24時間先まで", value: "1h" }, { label: "日足", sub: "20営業日先まで", value: "1d" }];
+  // chart history shown by default: twice the longest forecast, so the forecast takes a third of the width
+  var RANGES = {
+    "15m": [{ label: "8時間", value: 32 }, { label: "1日", value: 96 }, { label: "3日", value: 288 }],
+    "1h": [{ label: "2日", value: 48 }, { label: "5日", value: 120 }, { label: "10日", value: 240 }],
+    "1d": [{ label: "2か月", value: 40 }, { label: "6か月", value: 130 }, { label: "1年", value: 260 }]
+  };
+  var coarseMQ = window.matchMedia ? window.matchMedia("(pointer: coarse)") : { matches: false };
+  function jstShort(iso) {   // "9/25 4:00" (JST)
+    var s = jst(iso); var m = /^(\d+)\/(\d+) (\d+):(\d+)/.exec(s); if (!m) return s;
+    return Number(m[1]) + "/" + Number(m[2]) + " " + Number(m[3]) + ":" + m[4];
+  }
+  function dayShort(ymd) { var m = /^(\d+)-(\d+)-(\d+)/.exec(ymd || ""); return m ? Number(m[2]) + "/" + Number(m[3]) : ymd; }
   function tfLabel(tf, h) {
     var m = TF_MIN[tf];
     if (m) { var t = h * m; return t < 60 ? t + "分後" : (t % 60 ? Math.floor(t / 60) + "時間" + (t % 60) + "分後" : t / 60 + "時間後"); }
@@ -712,7 +772,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function segment(host, items, get, set) {
     clear(host);
     items.forEach(function (it) {
-      var b = el("button", null, it.label); b.type = "button"; b.setAttribute("aria-pressed", String(get() === it.value));
+      var b = el("button"); b.type = "button"; b.setAttribute("aria-pressed", String(get() === it.value));
+      if (it.sub != null && host.classList.contains("big")) { b.appendChild(el("b", null, it.label)); b.appendChild(el("small", null, it.sub)); } else b.textContent = it.label;
       b.addEventListener("click", function () { set(it.value); segment(host, items, get, set); });
       host.appendChild(b);
     });
@@ -738,6 +799,32 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     return "上がるか下がるかはほぼ五分五分";
   }
 
+  function probShort(p) {
+    if (p >= 0.6) return "上がりやすい"; if (p >= 0.53) return "やや上がりやすい";
+    if (p <= 0.4) return "下がりやすい"; if (p <= 0.47) return "やや下がりやすい"; return "ほぼ五分五分";
+  }
+  // how often the 80 % range of this timeframe and horizon has held: live record when there is enough of it, else the backtest
+  function accuracyFor(h) {
+    var tr = S.track && S.track.overall && S.track.overall[S.tf] && S.track.overall[S.tf][String(h)];
+    var live = tr && tr.coverage && tr.coverage["80"];
+    if (live && tr.n >= 50) return { rate: live.rate, n: tr.n, src: "実際の予測" };
+    var bt = S.backtest && S.backtest.tf && S.backtest.tf[S.tf] && S.backtest.tf[S.tf].by_h[String(h)];
+    if (bt && bt.all && bt.all.n) return { rate: bt.all.cover["80"], n: bt.all.n, src: "バックテスト", recent: bt.recent };
+    return null;
+  }
+  var BANDS = [["95", 0.12], ["80", 0.17], ["50", 0.26]];   // overlapping washes: 50 % reads darkest
+  function bandSwatch(t, lv) { var a = 0; BANDS.forEach(function (b) { if (Number(b[0]) >= Number(lv)) a = 1 - (1 - a) * (1 - b[1]); }); return alpha(t.accent, a); }
+
+  function renderControls() {
+    var blk = curBlock(); var p = curPair();
+    segment($("seg-tf"), TF_ITEMS, function () { return S.tf; }, function (v) { S.tf = v; persist(); renderPairAll(); });
+    var hs = blk && blk.prediction ? blk.prediction.horizons : [];
+    segment($("seg-h"), hs.map(function (h) { return { label: h.label, sub: "±" + fmt((h.hi80 - h.lo80) / 2 / p.pip, 0) + " pips", value: h.h }; }),
+      function () { var H = curHorizon(); return H ? H.h : null; },
+      function (v) { S.h[S.tf] = v; persist(); renderHead(); renderChart(); renderCheck(); renderDist(); });
+    segment($("seg-range"), RANGES[S.tf], function () { return S.range[S.tf]; }, function (v) { S.range[S.tf] = v; renderChart(); });
+  }
+
   function renderHead() {
     var p = curPair(); if (!p) return;
     var t = tokens();
@@ -745,76 +832,78 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     $("p-price").textContent = fmt(p.quote.price, p.decimals);
     var meta = clear($("p-meta"));
     meta.appendChild(el("span", dirClass(p.change_24h_pct), arrow(p.change_24h_pct) + " " + signed(p.change_24h_pct, 2, "%") + " (24時間)"));
-    meta.appendChild(el("span", null, "レート時刻 " + jst(p.quote.time)));
-    var blk = curBlock(); var sum = clear($("summary")); var cards = clear($("hcards")); var issued = $("p-issued");
-    if (!blk || !blk.prediction) { issued.textContent = ""; sum.appendChild(el("div", "k", "この種類の予測はまだ発行されていません。次のサーバー処理で作成されます。")); return; }
+    meta.appendChild(el("span", null, jstShort(p.quote.time) + " 時点"));
+    renderControls();
+    var blk = curBlock(); var ans = clear($("answer")); clear($("rbox"));
+    if (!blk || !blk.prediction) { ans.appendChild(el("div", "k", "この時間足の予測はまだありません。次のサーバー処理で作成されます。")); return; }
     var pr = blk.prediction; var H = curHorizon(); var d = p.decimals;
-    // plain-language summary
-    sum.appendChild(el("div", "k", H.label + " (" + jst(H.t) + ") の予想 · 80%の確率でこの範囲"));
-    var rg = el("div", "range"); rg.appendChild(document.createTextNode(fmt(H.lo80, d) + " 〜 " + fmt(H.hi80, d)));
     var cur = p.quote && p.quote.price ? p.quote.price : pr.p0;
-    rg.appendChild(el("small", null, "現在値から " + signed(pips(H.lo80 - cur, p), 0) + " 〜 " + signed(pips(H.hi80 - cur, p), 0) + " pips")); sum.appendChild(rg);
-    sum.appendChild(el("div", "prob", probText(H.p_up) + " (上昇確率 " + pct(H.p_up) + ")"));
-    var pb = el("div", "pbar"); pb.setAttribute("role", "img"); pb.setAttribute("aria-label", "上昇 " + pct(H.p_up) + "、下落 " + pct(1 - H.p_up));
-    var iu = el("i"); iu.style.width = (H.p_up * 100).toFixed(1) + "%"; iu.style.background = t.up;
-    var id = el("i"); id.style.flex = "1"; id.style.background = t.down; pb.appendChild(iu); pb.appendChild(id); sum.appendChild(pb);
-    var pl = el("div", "pbar-legend"); pl.appendChild(el("span", "up", "▲ 上昇 " + pct(H.p_up))); pl.appendChild(el("span", "down", "下落 " + pct(1 - H.p_up) + " ▼")); sum.appendChild(pl);
-    var why = [];
-    if (Math.abs(H.gain) < 0.05) why.push("過去の検証で方向を安定して当てる方法が見つかっていないため、予測の中心は現在値付近です。当てにできるのは値動きの幅です。");
-    if (H.events) why.push("この間に重要指標の発表が " + H.events + " 件あり、レンジを広げています。");
-    if (Math.abs(H.news_pips) >= 0.5) why.push("ニュースの材料で中心を " + signed(H.news_pips, 1, " pips") + " 動かしています。");
-    if (why.length) sum.appendChild(el("div", "why", why.join(" ")));
+    var left = el("div");
+    left.appendChild(el("div", "k", H.label + " (" + (TF_MIN[S.tf] ? jstShort(H.t) : dayShort(H.x)) + ") の予想"));
+    left.appendChild(el("div", "range", fmt(H.lo80, d) + " 〜 " + fmt(H.hi80, d)));
+    left.appendChild(el("div", "sub", "80%の確率でこの範囲に入る見込み (現在値から " + signed(pips(H.lo80 - cur, p), 0) + " 〜 " + signed(pips(H.hi80 - cur, p), 0) + " pips)"));
+    ans.appendChild(left);
+    var tiles = el("div", "tiles");
+    function tile(l, v, dtxt, more, cls) {
+      var x = el("div", "tile"); x.appendChild(el("span", "l", l)); x.appendChild(el("span", "v" + (cls ? " " + cls : ""), v));
+      var dd = el("span", "d", dtxt); if (more) dd.appendChild(el("span", "opt2", more)); x.appendChild(dd); tiles.appendChild(x);
+    }
+    tile("予想の中心", fmt(H.price, d), signed(pips(H.price - cur, p), 1) + " pips", " (現在値から)");
+    tile("上がる確率", pct(H.p_up), probShort(H.p_up));
+    var acc = accuracyFor(H.h);
+    tile("的中実績", acc ? pct(acc.rate) : "—", acc ? "目標80%" : "まだありません", acc ? " · " + acc.src + " " + acc.n.toLocaleString() + "回" : "",
+      acc ? (Math.abs(acc.rate - 0.8) <= 0.05 ? "good" : "") : "");
+    ans.appendChild(tiles);
+    // concrete ranges at the selected time, next to the chart
+    var rb = clear($("rbox"));
+    rb.appendChild(el("div", "cap", H.label + "の範囲 (確率ごと)"));
+    var tb = el("table", "rtable"); var th = el("thead"); var hr = el("tr");
+    ["確率", "下限", "上限", "幅 (pips)"].forEach(function (x, i) { var c = el("th", null, x); if (!i) c.style.textAlign = "left"; hr.appendChild(c); });
+    th.appendChild(hr); tb.appendChild(th); var tbody = el("tbody");
+    [["50", "50%"], ["80", "80%"], ["95", "95%"]].forEach(function (lv) {
+      var r = el("tr", lv[0] === "80" ? "sel" : null); var c0 = el("td"); var sw = el("i", "sw"); sw.style.background = bandSwatch(t, lv[0]); c0.appendChild(sw); c0.appendChild(document.createTextNode(lv[1])); r.appendChild(c0);
+      r.appendChild(el("td", "num", fmt(H["lo" + lv[0]], d))); r.appendChild(el("td", "num", fmt(H["hi" + lv[0]], d)));
+      r.appendChild(el("td", "num", "±" + fmt((H["hi" + lv[0]] - H["lo" + lv[0]]) / 2 / p.pip, 0)));
+      tbody.appendChild(r);
+    });
+    tb.appendChild(tbody); tb.setAttribute("aria-label", H.label + "の予想範囲"); rb.appendChild(tb);
+    // the tile's "的中実績" explained, reasons and record, folded
+    var det = el("details", "why"); det.appendChild(el("summary", null, "この予想の根拠と記録")); var dv = el("div");
+    if (Math.abs(H.gain) < 0.05) dv.appendChild(el("div", null, "過去の検証では、上がるか下がるかを安定して当てる方法が見つかっていません。そのため予想の中心は現在値付近に置き、値動きの幅 (範囲) の予想に重点を置いています。"));
+    if (H.events) dv.appendChild(el("div", null, "この間に重要な経済指標の発表が " + H.events + " 件あるため、範囲を広げています。"));
+    if (Math.abs(H.news_pips) >= 0.5) dv.appendChild(el("div", null, "ニュースの材料で中心を " + signed(H.news_pips, 1, " pips") + " 動かしています。"));
+    if (acc) dv.appendChild(el("div", null, "的中実績は、この時間足・この時点の予想で、実際の値が80%の範囲に入った割合です (" + acc.src + "、全ペア " + acc.n.toLocaleString() + "回)。"));
     var BT = S.backtest && S.backtest.tf && S.backtest.tf[S.tf]; var btm = BT && BT.by_h[String(H.h)];
     if (btm && btm.all && btm.all.n) {
       var bb = btm.all; var rr = btm.recent || { n: 0 }; var mine = (((BT.by_pair || {})[S.pair] || {})[String(H.h)] || {}).all || { n: 0 };
-      var line = el("div", "why");
-      line.appendChild(el("b", null, "バックテスト (直近" + btWindowName(S.tf, false) + "・全ペア" + bb.n.toLocaleString() + "件): "));
-      line.appendChild(document.createTextNode("この予測先の80%レンジに実際の値が入った割合 " + pct(bb.cover["80"]) + "、95%レンジ " + pct(bb.cover["95"]) +
-        (bb.hit != null ? "、方向の的中 " + pct(bb.hit) : "") + "。" +
-        (rr.n >= 30 ? "直近" + btWindowName(S.tf, true) + "では80%レンジ " + pct(rr.cover["80"]) + (mine.n >= 30 ? "、" : "。") : "") +
-        (mine.n >= 30 ? p.label + "だけでは " + pct(mine.cover["80"]) + "。" : "") + "毎回の処理で最新のデータを加えて更新しています。"));
-      sum.appendChild(line);
+      dv.appendChild(el("div", null, "バックテスト (直近" + btWindowName(S.tf, false) + "): 80%の範囲 " + pct(bb.cover["80"]) + "、95%の範囲 " + pct(bb.cover["95"]) +
+        (rr.n >= 30 ? "。直近" + btWindowName(S.tf, true) + "は80%の範囲 " + pct(rr.cover["80"]) : "") + (mine.n >= 30 ? "。" + p.label + "だけでは " + pct(mine.cover["80"]) : "") + "。"));
     }
-    // horizon cards on a shared scale
-    var maxHalf = 0; pr.horizons.forEach(function (h) { maxHalf = Math.max(maxHalf, Math.abs(h.hi95 - pr.p0), Math.abs(pr.p0 - h.lo95)); });
-    function posOf(v) { return 50 + (v - pr.p0) / (maxHalf || 1) * 48; }
-    pr.horizons.forEach(function (h) {
-      var c = el("button", "hcard"); c.type = "button"; c.setAttribute("aria-pressed", String(h.h === H.h));
-      var w = el("div", "when"); w.appendChild(el("span", null, h.label)); w.appendChild(el("span", "num " + dirClass(h.p_up - 0.5), pct(h.p_up) + "↑")); c.appendChild(w);
-      c.appendChild(el("div", "pm", "±" + fmt((h.hi80 - h.lo80) / 2 / p.pip, 0) + " pips"));
-      var bar = el("div", "rbar"); bar.setAttribute("aria-hidden", "true"); bar.appendChild(el("div", "trk"));
-      [["95", 0.16], ["80", 0.3], ["50", 0.55]].forEach(function (b) {
-        var s = el("div", "b"); var l = posOf(h["lo" + b[0]]), r = posOf(h["hi" + b[0]]);
-        s.style.left = l + "%"; s.style.width = Math.max(1, r - l) + "%"; s.style.background = alpha(t.accent, b[1]); bar.appendChild(s);
-      });
-      var now = el("div", "now"); now.style.left = Math.max(0, Math.min(100, posOf(cur))) + "%"; bar.appendChild(now);
-      var ctr = el("div", "ctr"); ctr.style.left = posOf(h.price) + "%"; bar.appendChild(ctr);
-      c.appendChild(bar);
-      c.appendChild(el("div", "sub", fmt(h.lo80, d) + "–" + fmt(h.hi80, d)));
-      c.setAttribute("aria-label", h.label + " 80%レンジ " + fmt(h.lo80, d) + "から" + fmt(h.hi80, d) + "、上昇確率 " + pct(h.p_up));
-      c.addEventListener("click", function () { S.h[S.tf] = h.h; persist(); renderHead(); renderDist(); renderChart(); });
-      cards.appendChild(c);
-    });
-    issued.textContent = "カードの帯は予測レンジ (濃い順に50%・80%・95%)、縦線が現在値、○が予測の中心。起点 " + jst(pr.origin) + " の " + fmt(pr.p0, d) + " から予測" + (Math.abs(cur - pr.p0) >= p.pip / 2 ? " (その後 " + signed(pips(cur - pr.p0, p), 1) + " pips 動いています)" : "") + " · 発行 " + jst(pr.issued) + " · 記録 #" + pr.seq;
+    dv.appendChild(el("div", null, "起点 " + jstShort(pr.origin) + " の " + fmt(pr.p0, d) + " から予測" + (Math.abs(cur - pr.p0) >= p.pip / 2 ? " (その後 " + signed(pips(cur - pr.p0, p), 1) + " pips 動いています)" : "") + "。発行 " + jstShort(pr.issued) + "、台帳の記録 #" + pr.seq + "。"));
+    det.appendChild(dv); rb.appendChild(det);
   }
 
   var TOGGLES = [
-    { key: "band", label: "予測レンジ", cls: "key box", style: function (t) { return "background:" + alpha(t.accent, 0.3); } },
-    { key: "past", label: "答え合わせ (過去の予測と実際)", cls: "key dotk", style: function (t) { return "background:" + t.good; } },
-    { key: "ma", label: "移動平均 20/75", cls: "key", style: function (t) { return "border-color:" + t.ma20; } },
-    { key: "rsi", label: "RSI", cls: "key", style: function (t) { return "border-color:" + t.ink2; } },
-    { key: "models", label: "各モデルの予測", cls: "key", style: function (t) { return "border-color:" + alpha(t.ink2, 0.5); } }
+    { key: "ma", label: "移動平均 (20・75本)" },
+    { key: "rsi", label: "RSI" }
   ];
   function renderToggles() {
     var t = tokens(); var host = clear($("toggles"));
-    var f1 = el("span", "tog static"); f1.appendChild(el("i", "key candle")); f1.appendChild(el("span", null, "陽線/陰線")); host.appendChild(f1);
-    var f2 = el("span", "tog static"); var k2 = el("i", "key dash"); k2.style.borderColor = t.accent; f2.appendChild(k2); f2.appendChild(el("span", null, "予測の中心")); host.appendChild(f2);
+    host.appendChild(el("span", "ctl-label", "追加で表示"));
     TOGGLES.forEach(function (g) {
       var b = el("button", "tog"); b.type = "button"; b.setAttribute("aria-pressed", String(!!S.show[g.key]));
-      var k = el("i", g.cls); k.setAttribute("style", g.style(t)); b.appendChild(k); b.appendChild(el("span", null, g.label));
+      b.appendChild(el("span", "box", S.show[g.key] ? "✓" : "")); b.appendChild(el("span", null, g.label));
       b.addEventListener("click", function () { S.show[g.key] = !S.show[g.key]; persist(); renderToggles(); renderChart(); });
       host.appendChild(b);
     });
+    var lg = clear($("chart-legend"));
+    function key(cls, style, label) { var s = el("span"); var k = el("i", cls); if (style) k.setAttribute("style", style); s.appendChild(k); s.appendChild(el("span", null, label)); lg.appendChild(s); }
+    key("key box", "background:" + bandSwatch(t, "50"), "50%");
+    key("key box", "background:" + bandSwatch(t, "80"), "80%");
+    key("key box", "background:" + bandSwatch(t, "95"), "95%の確率で入る範囲");
+    key("key dash", "border-color:" + t.accent, "予想の中心");
+    key("key", "border-color:" + t.ink2, "現在値");
+    if (S.show.ma) { key("key", "border-color:" + t.ma20, "20本平均"); key("key", "border-color:" + t.ma75, "75本平均"); }
   }
 
   function pastList(blk, h) {
@@ -834,148 +923,159 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var xs = bars.t.concat(steps.map(function (s) { return s.x; }));
     var N = xs.length; var lastIdx = nH - 1; var last = bars.ohlc[lastIdx][1];
     var idxOf = {}; xs.forEach(function (x, i) { idxOf[x] = i; });
-    var H = curHorizon();
+    var H = curHorizon(); var hIdx = H && idxOf[H.x] != null ? idxOf[H.x] : N - 1;
+    var p0 = blk.prediction ? blk.prediction.p0 : last;
+    var cur = p.quote && p.quote.price ? p.quote.price : last;
     function pad(arr) { return arr.concat(new Array(steps.length).fill(null)); }
-    function fut(key) { var o = new Array(N).fill(null); if (!steps.length) return o; o[lastIdx] = (blk.prediction ? blk.prediction.p0 : last); steps.forEach(function (s, i) { o[nH + i] = s[key] != null ? s[key] : null; }); return o; }
+    // forecast values between two x indexes (the origin carries the starting price)
+    function fut(key, from, to) {
+      var o = new Array(N).fill("-"); if (!steps.length) return o;
+      if (lastIdx >= from && lastIdx <= to) o[lastIdx] = p0;
+      steps.forEach(function (s, i) { var j = nH + i; if (j >= from && j <= to && s[key] != null) o[j] = s[key]; });
+      return o;
+    }
     var series = [];
-    var marks = [{ yAxis: last, label: { position: "end", formatter: fmt(last, p.decimals) } }];
-    if (H && idxOf[H.x] != null) marks.push({ xAxis: H.x, lineStyle: { color: t.accent, width: 1, type: "solid" }, label: { position: "insideEndTop", formatter: H.label, color: t.accent, fontSize: 10.5, backgroundColor: "transparent" } });
-    (blk.path && blk.path.events || []).filter(function (e) { return e.x && idxOf[e.x] != null; }).slice(0, 8).forEach(function (e) {
-      marks.push({ xAxis: e.x, lineStyle: { color: e.impact === "High" ? t.warn : t.axis, width: 1, type: "dashed" }, label: { position: "insideStartTop", formatter: e.cur, color: t.warn, fontSize: 10, backgroundColor: "transparent" } });
+    var marks = [{ yAxis: cur, lineStyle: { color: t.ink2, width: 1, type: "solid" }, label: { position: "end", formatter: fmt(cur, p.decimals), color: t.surface, backgroundColor: t.ink2 } }];
+    if (steps.length) marks.push({ xAxis: xs[hIdx], lineStyle: { color: t.accent, width: 1.5, type: "solid" }, label: { position: "insideEndTop", formatter: H ? H.label : "", color: t.accent, fontSize: 11.5, fontWeight: 600, backgroundColor: "transparent" } });
+    (blk.path && blk.path.events || []).filter(function (e) { return e.x && idxOf[e.x] != null; }).slice(0, 6).forEach(function (e) {
+      marks.push({ xAxis: e.x, lineStyle: { color: t.warn, width: 1, type: [4, 4] }, label: { position: "insideStartTop", formatter: "指標 " + e.cur, color: t.warn, fontSize: 10.5, backgroundColor: "transparent" } });
     });
     series.push({
-      name: "ローソク足", type: "candlestick", data: bars.ohlc.concat(new Array(steps.length).fill("-")), barMaxWidth: 9,
+      name: "ローソク足", type: "candlestick", data: bars.ohlc.concat(new Array(steps.length).fill("-")), barMaxWidth: 10,
       itemStyle: { color: t.up, color0: t.down, borderColor: t.up, borderColor0: t.down },
-      markArea: steps.length ? { silent: true, itemStyle: { color: t.future }, label: { show: true, position: "insideTop", color: t.muted, fontSize: 11, formatter: "予測" }, data: [[{ xAxis: xs[nH] }, { xAxis: xs[N - 1] }]] } : undefined,
-      markLine: { symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: "solid" },
-        label: { color: t.ink, fontFamily: t.mono, fontSize: 11, backgroundColor: t.surface2, padding: [2, 5], borderRadius: 3 }, data: marks }
+      markArea: steps.length ? { silent: true, itemStyle: { color: t.future }, label: { show: true, position: "insideTopLeft", color: t.muted, fontSize: 11.5, formatter: "予想", offset: [6, 0] }, data: [[{ xAxis: xs[nH] }, { xAxis: xs[N - 1] }]] } : undefined,
+      markLine: { symbol: "none", silent: true, label: { color: t.ink, fontFamily: t.mono, fontSize: 11, padding: [2, 5], borderRadius: 3 }, data: marks }
     });
     if (S.show.ma) {
-      series.push({ name: "移動平均20", type: "line", data: pad(blk.ind.sma20), symbol: "none", lineStyle: { width: 1.5, color: t.ma20 }, silent: true, z: 2 });
-      series.push({ name: "移動平均75", type: "line", data: pad(blk.ind.sma75), symbol: "none", lineStyle: { width: 1.5, color: t.ma75 }, silent: true, z: 2 });
+      series.push({ name: "20本平均", type: "line", data: pad(blk.ind.sma20), symbol: "none", lineStyle: { width: 1.5, color: t.ma20 }, silent: true, z: 2 });
+      series.push({ name: "75本平均", type: "line", data: pad(blk.ind.sma75), symbol: "none", lineStyle: { width: 1.5, color: t.ma75 }, silent: true, z: 2 });
     }
-    // fan: nested central ranges, 95 % outermost; overlapping shades darken toward the centre
-    var FAN = [["95", 0.07], ["80", 0.09], ["60", 0.11], ["40", 0.13], ["20", 0.16]];
-    if (S.show.band && steps.length) {
-      FAN.forEach(function (b) {
-        if (steps[0]["lo" + b[0]] == null) return;
-        var lo = fut("lo" + b[0]); var hi = fut("hi" + b[0]);
-        series.push({ name: "b" + b[0] + "lo", type: "line", stack: "b" + b[0], data: lo.map(function (v) { return v == null ? "-" : v; }), symbol: "none", lineStyle: { opacity: 0 }, silent: true, z: 3 });
-        series.push({ name: "b" + b[0], type: "line", stack: "b" + b[0], data: hi.map(function (v, i) { return v == null || lo[i] == null ? "-" : v - lo[i]; }), symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: alpha(t.accent, b[1]), opacity: 1 }, silent: true, z: 3 });
-      });
-      ["80", "95"].forEach(function (lv) {
-        ["hi", "lo"].forEach(function (side) {
-          series.push({ name: lv + side, type: "line", data: fut(side + lv), symbol: "none", silent: true, z: 4,
-            lineStyle: { width: lv === "80" ? 1.2 : 0.8, color: alpha(t.accent, lv === "80" ? 0.75 : 0.45) } });
-        });
-      });
-      // labelled prices at the selected horizon
-      if (H && idxOf[H.x] != null) {
-        var pts = [["hi95", "95%上限"], ["hi80", "80%上限"], ["c", "中心"], ["lo80", "80%下限"], ["lo95", "95%下限"]].filter(function (k) { return H[k[0] === "c" ? "price" : k[0]] != null; });
-        series.push({ name: "horizon", type: "scatter", z: 7, silent: true, symbolSize: 7,
-          itemStyle: { color: t.surface, borderColor: t.accent, borderWidth: 1.5 },
-          data: pts.map(function (k) { var v = H[k[0] === "c" ? "price" : k[0]]; return { value: [idxOf[H.x], v], name: k[1] }; }),
-          label: { show: !narrow || true, position: "left", distance: 6, color: t.ink, fontFamily: t.mono, fontSize: 10.5, backgroundColor: alpha(t.surface, 0.85), padding: [1, 3], borderRadius: 3,
-            formatter: function (prm) { return (narrow ? "" : prm.name + " ") + fmt(prm.value[1], p.decimals); } },
-          labelLayout: { hideOverlap: true } });
-      }
-    }
-    if (S.show.models && blk.path && blk.path.models) {
-      MODEL_KEYS.forEach(function (k) {
-        var o = new Array(N).fill(null); o[lastIdx] = blk.prediction.p0; (blk.path.models[k] || []).forEach(function (v, i) { o[nH + i] = v; });
-        series.push({ name: MODEL_NAMES[k], type: "line", data: o, symbol: "none", lineStyle: { width: 1, color: alpha(t.ink2, 0.5) }, silent: true, z: 4 });
-      });
-    }
-    // answer check: the ranges that past forecasts of the selected horizon gave for each time,
-    // drawn as a corridor behind the candles, with the actual price marked where it fell outside
-    var pastByIdx = {}; var pinfo = { list: [] };
-    if (S.show.past && H) {
-      pinfo = pastList(blk, H.h);
-      var c80lo = new Array(N).fill(null), c80hi = new Array(N).fill(null), c50lo = new Array(N).fill(null), c50hi = new Array(N).fill(null);
-      var hitPts = [], missPts = [];
-      pinfo.list.forEach(function (q) {
-        var i = idxOf[q.x]; if (i == null || i >= nH || q.lo80 == null) return;
-        pastByIdx[i] = q; c80lo[i] = q.lo80; c80hi[i] = q.hi80; c50lo[i] = q.lo50 != null ? q.lo50 : null; c50hi[i] = q.hi50 != null ? q.hi50 : null;
-        (q.inside80 ? hitPts : missPts).push([i, q.actual]);
-      });
-      [[c80lo, c80hi, 0.13, "過去の80%レンジ"], [c50lo, c50hi, 0.13, "過去の50%レンジ"]].forEach(function (b, k) {
-        series.push({ name: "pl" + k, type: "line", stack: "past" + k, data: b[0].map(function (v) { return v == null ? "-" : v; }), symbol: "none", lineStyle: { opacity: 0 }, silent: true, z: 1 });
-        series.push({ name: b[3], type: "line", stack: "past" + k, data: b[1].map(function (v, i) { return v == null || b[0][i] == null ? "-" : v - b[0][i]; }), symbol: "none",
-          lineStyle: { opacity: 0 }, areaStyle: { color: alpha(t.ink2, b[2]), opacity: 1 }, silent: true, z: 1 });
-      });
-      series.push({ name: "範囲内", type: "scatter", data: hitPts, symbolSize: 4, itemStyle: { color: t.good, borderColor: t.surface, borderWidth: 1 }, silent: true, z: 6 });
-      series.push({ name: "範囲外", type: "scatter", data: missPts, symbol: "diamond", symbolSize: 8, itemStyle: { color: t.bad, borderColor: t.surface, borderWidth: 1.2 }, silent: true, z: 6 });
-    }
+    // forecast fan: full strength up to the selected time, faint after it
     if (steps.length) {
-      series.push({ name: "予測の中心", type: "line", data: fut("c"), symbol: "none", lineStyle: { width: 2, color: t.accent, type: [6, 4] }, z: 6 });
+      [[lastIdx, hIdx, 1], [hIdx, N - 1, 0.4]].forEach(function (part, pi) {
+        if (part[1] <= part[0]) return;
+        BANDS.forEach(function (b) {
+          var lo = fut("lo" + b[0], part[0], part[1]); var hi = fut("hi" + b[0], part[0], part[1]);
+          series.push({ name: "b" + b[0] + "lo" + pi, type: "line", stack: "b" + b[0] + pi, data: lo, symbol: "none", lineStyle: { opacity: 0 }, silent: true, z: 3 });
+          series.push({ name: "b" + b[0] + pi, type: "line", stack: "b" + b[0] + pi, data: hi.map(function (v, i) { return v === "-" || lo[i] === "-" ? "-" : v - lo[i]; }), symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: alpha(t.accent, b[1] * part[2]), opacity: 1 }, silent: true, z: 3 });
+        });
+        ["hi80", "lo80"].forEach(function (k) {
+          series.push({ name: k + pi, type: "line", data: fut(k, part[0], part[1]), symbol: "none", silent: true, z: 4, lineStyle: { width: 1.5 * (pi ? 0.7 : 1), color: alpha(t.accent, pi ? 0.35 : 0.85) } });
+        });
+        series.push({ name: "中心" + pi, type: "line", data: fut("c", part[0], part[1]), symbol: "none", silent: true, z: 6, lineStyle: { width: pi ? 1.5 : 2, color: alpha(t.accent, pi ? 0.45 : 1), type: [6, 4] } });
+      });
+      if (H) {
+        var side = N - 1 - hIdx >= 3 ? "right" : "left";
+        series.push({ name: "時点の価格", type: "scatter", z: 8, silent: true, symbolSize: 8,
+          itemStyle: { color: t.surface, borderColor: t.accent, borderWidth: 2 },
+          data: [["hi80", "80%上限"], ["price", "中心"], ["lo80", "80%下限"]].map(function (k) { return { value: [hIdx, H[k[0]]], name: k[1] }; }),
+          label: { show: true, position: side, distance: 7, color: t.ink, fontFamily: t.mono, fontSize: 11.5, fontWeight: 500, backgroundColor: alpha(t.surface, 0.9), padding: [2, 4], borderRadius: 3,
+            formatter: function (prm) { return prm.name + " " + fmt(prm.value[1], p.decimals); } },
+          labelLayout: { moveOverlap: "shiftY" } });
+      }
     }
     var withRsi = !!S.show.rsi;
     if (withRsi) {
       series.push({ name: "RSI", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pad(blk.ind.rsi14), symbol: "none", lineStyle: { width: 1.5, color: t.ink2 }, silent: true,
         markLine: { symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: "solid" }, label: { color: t.muted, fontSize: 10, position: "end" }, data: [{ yAxis: 30 }, { yAxis: 70 }] } });
     }
-    function xlabel(v) { if (intraday) return jst(v); return v.slice(2).replace(/-/g, "/"); }
+    function xlabel(v) { return intraday ? jstShort(v) : dayShort(v); }
     function tooltip(params) {
       if (!params || !params.length) return "";
       var i = params[0].dataIndex; var rows = [];
       function row(label, value, color) {
         rows.push('<div style="display:flex;justify-content:space-between;gap:16px;align-items:center"><span style="color:' + t.muted + ';display:inline-flex;gap:6px;align-items:center">' +
-          (color ? '<i style="display:inline-block;width:12px;border-top:2px solid ' + color + '"></i>' : "") + esc(label) + '</span><b style="font-family:' + t.mono + ';font-weight:500;color:' + t.ink + '">' + esc(value) + "</b></div>");
+          (color ? '<i style="display:inline-block;width:12px;border-top:2px solid ' + color + '"></i>' : "") + esc(label) + '</span><b style="font-family:' + t.mono + ';font-weight:600;color:' + t.ink + '">' + esc(value) + "</b></div>");
       }
-      var head = '<div style="font-weight:600;margin-bottom:4px;color:' + t.ink + '">' + esc(intraday ? jst(xs[i]) + " まで" : xs[i]) + (i >= nH ? ' <span style="color:' + t.accent + ';font-weight:500">予測 (' + tfLabel(tf, i - nH + 1) + ")</span>" : "") + "</div>";
+      var head = '<div style="font-weight:600;margin-bottom:4px;color:' + t.ink + '">' + esc(intraday ? jstShort(xs[i]) : xs[i]) + (i >= nH ? ' <span style="color:' + t.accent + '">予想 (' + tfLabel(tf, i - nH + 1) + ")</span>" : "") + "</div>";
       if (i < nH) {
         var c = bars.ohlc[i]; row("始値", fmt(c[0], d)); row("高値", fmt(c[3], d)); row("安値", fmt(c[2], d)); row("終値", fmt(c[1], d));
-        if (blk.ind.rsi14[i] != null) row("RSI(14)", fmt(blk.ind.rsi14[i], 1));
+        if (S.show.rsi && blk.ind.rsi14[i] != null) row("RSI(14)", fmt(blk.ind.rsi14[i], 1));
       } else {
-        var s = steps[i - nH]; var p0 = blk.prediction.p0;
-        row("予測の中心", fmt(s.c, d) + " (" + signed(pips(s.c - p0, p), 1) + ")", t.accent);
-        [["20", "20%"], ["50", "50%"], ["80", "80%"], ["95", "95%"]].forEach(function (lv) {
-          if (s["lo" + lv[0]] != null) row(lv[1] + "レンジ", fmt(s["lo" + lv[0]], d) + " – " + fmt(s["hi" + lv[0]], d) + " (±" + fmt(pips(s["hi" + lv[0]] - s["lo" + lv[0]], p) / 2, 0) + ")");
+        var s = steps[i - nH];
+        row("予想の中心", fmt(s.c, d), t.accent);
+        [["50", "50%"], ["80", "80%"], ["95", "95%"]].forEach(function (lv) {
+          if (s["lo" + lv[0]] != null) row(lv[1] + "の範囲", fmt(s["lo" + lv[0]], d) + " – " + fmt(s["hi" + lv[0]], d));
         });
-        row("上昇確率", pct(s.p));
-      }
-      var q = pastByIdx[i];
-      if (q) {
-        row((pinfo.src === "bt" ? "バックテスト: " : "過去の予測: ") + tfLabel(tf, H.h) + " (起点 " + (intraday ? jst(q.origin) : q.origin.slice(0, 10)) + ")", fmt(q.price, d), t.accent);
-        row("そのときの80%レンジ", fmt(q.lo80, d) + " – " + fmt(q.hi80, d));
-        row("実際", fmt(q.actual, d) + (q.inside80 ? " ○ 範囲内" : " × 範囲外"), q.inside80 ? t.good : t.bad);
+        row("上がる確率", pct(s.p));
       }
       return head + rows.join("");
     }
     var start = Math.max(0, nH - S.range[tf]);
-    var right = narrow ? 60 : 74;   // room for the latest-price label (7 digits)
-    var grids = withRsi ? [{ left: 8, right: right, top: 18, bottom: "27%" }, { left: 8, right: right, top: "78%", bottom: 26 }] : [{ left: 8, right: right, top: 18, bottom: 26 }];
-    var xAxes = [{ type: "category", data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { show: !withRsi, color: t.muted, fontFamily: t.mono, fontSize: 10.5, hideOverlap: true, formatter: xlabel }, splitLine: { show: false } }];
-    var yAxes = [{ scale: true, position: "right", splitNumber: narrow ? 5 : 8, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } }];
+    var right = narrow ? 62 : 76;   // room for the latest-price label (7 digits)
+    var grids = withRsi ? [{ left: 8, right: right, top: 26, bottom: "26%" }, { left: 8, right: right, top: "79%", bottom: 28 }] : [{ left: 8, right: right, top: 26, bottom: 28 }];
+    var xAxes = [{ type: "category", data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { show: !withRsi, color: t.muted, fontSize: 11, hideOverlap: true, formatter: xlabel }, splitLine: { show: false } }];
+    var yAxes = [{ scale: true, position: "right", splitNumber: narrow ? 5 : 7, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 11, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } }];
     if (withRsi) {
-      xAxes.push({ type: "category", gridIndex: 1, data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10.5, hideOverlap: true, formatter: xlabel } });
+      xAxes.push({ type: "category", gridIndex: 1, data: xs, boundaryGap: true, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 11, hideOverlap: true, formatter: xlabel } });
       yAxes.push({ gridIndex: 1, min: 0, max: 100, interval: 50, position: "right", axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10 } });
     }
     var option = {
       animation: false, backgroundColor: "transparent", textStyle: { fontFamily: t.sans, color: t.muted },
       grid: grids, xAxis: xAxes, yAxis: yAxes,
-      axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: t.muted, width: 1 }, label: { backgroundColor: t.ink2, fontFamily: t.mono, fontSize: 10.5, formatter: function (o) { return o.axisDimension === "x" ? xlabel(o.value) : Number(o.value).toFixed(p.decimals); } } },
-      tooltip: Object.assign(tipBox(t), { trigger: "axis", axisPointer: { type: "cross" }, formatter: tooltip, extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,0.15);border-radius:8px;min-width:200px" }),
-      dataZoom: [{ type: "inside", xAxisIndex: withRsi ? [0, 1] : [0], startValue: start, endValue: N - 1, minValueSpan: 12 }],
+      axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: t.muted, width: 1 }, label: { backgroundColor: t.ink2, fontFamily: t.mono, fontSize: 11, formatter: function (o) { return o.axisDimension === "x" ? xlabel(o.value) : Number(o.value).toFixed(p.decimals); } } },
+      tooltip: Object.assign(tipBox(t), { trigger: "axis", axisPointer: { type: "cross" }, formatter: tooltip, extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,0.15);border-radius:8px;min-width:190px" }),
+      // phones: fixed window (period buttons) so a finger on the chart scrolls the page; desktop: drag to pan, Ctrl + wheel to zoom
+      dataZoom: [{ type: "inside", xAxisIndex: withRsi ? [0, 1] : [0], startValue: start, endValue: N - 1, minValueSpan: 12, disabled: coarseMQ.matches, zoomOnMouseWheel: "ctrl", moveOnMouseWheel: false, moveOnMouseMove: true, preventDefaultMouseMove: false }],
       series: series
     };
     chartOn("chart").setOption(option, true);
-    // answer check summary for the displayed past forecasts
-    var shown = pinfo.list.filter(function (q) { var i = idxOf[q.x]; return i != null && i >= start && i < nH && q.lo80 != null; });
-    var inside = shown.filter(function (q) { return q.inside80; }).length;
-    var chk = $("chart-check"); clear(chk);
-    if (S.show.past && H) {
-      var srcName = pinfo.src === "bt" ? "バックテスト" : "実際に発行した予測";
-      chk.appendChild(el("span", null, "答え合わせ (" + H.label + "の予測・" + srcName + "): "));
-      chk.appendChild(el("b", shown.length ? (Math.abs(inside / shown.length - 0.8) <= 0.1 ? "good" : "") : "", shown.length ? "80%レンジに " + inside + "/" + shown.length + " (" + pct(inside / shown.length) + ") が収まりました" : "表示期間に判定済みの予測はまだありません"));
-      var sw = el("span", "seg"); sw.style.marginLeft = "8px";
-      segment(sw, [{ label: "自動", value: "auto" }, { label: "実際の予測", value: "live" }, { label: "バックテスト", value: "bt" }], function () { return S.pastSrc; }, function (v) { S.pastSrc = v; renderChart(); });
-      chk.appendChild(sw);
-    }
-    $("chart-note").textContent = (blk.path && blk.path.coarse ? "(この予測は以前のバージョンで作られたため、予測先の間は直線でつないで表示しています) " : "") +
-      "網掛けは予測レンジで、外側から95%・80%・60%・40%・20%の範囲 (濃いほど起こりやすい)。線は80%と95%の境界、紫の縦線と○は選んだ予測先の価格。" +
-      (S.show.past ? "ローソク足の後ろの灰色の帯は、過去に出した" + (H ? H.label : "") + "予測がその時刻について示した50%・80%レンジ。緑の点は実際の値が80%レンジに入ったところ、赤の◆は外れたところ。" : "") +
-      "橙の破線は重要指標の発表時刻。2本指で拡大・スクロールできます。";
+    $("chart-note").textContent = (blk.path && blk.path.coarse ? "(この予測は以前のバージョンで作られたため、予想時点の間を直線でつないでいます) " : "") +
+      "紫の縦線が選んだ時点で、そこまでの範囲を濃く表示しています。" + (steps.some(function () { return true; }) && (blk.path.events || []).length ? "橙の点線は重要指標の発表時刻。" : "") +
+      (coarseMQ.matches ? "期間はボタンで切り替えます。" : "ドラッグで移動、Ctrl+ホイールで拡大できます。");
+  }
+
+  function renderCheck() {
+    var p = curPair(); var blk = curBlock(); var H = curHorizon();
+    if (!p || !$("check-chart").offsetParent) return;
+    var t = tokens(); var d = p.decimals + 1; var tf = S.tf; var intraday = !!TF_MIN[tf];
+    if (!blk || !H) { $("check-lead").textContent = "予測がまだありません。"; if (charts["check-chart"]) charts["check-chart"].clear(); return; }
+    var info = pastList(blk, H.h);
+    var list = info.list.filter(function (q) { return q.lo80 != null && q.actual != null; }).slice(narrowMQ.matches ? -36 : -60);
+    $("check-title").textContent = H.label + "の予想は当たったか";
+    segment($("seg-check"), [{ label: "自動", value: "auto" }, { label: "実際の予測", value: "live" }, { label: "バックテスト", value: "bt" }], function () { return S.pastSrc; }, function (v) { S.pastSrc = v; renderCheck(); });
+    var inside = list.filter(function (q) { return q.inside80; }).length;
+    $("check-lead").textContent = list.length ?
+      "直近 " + list.length + " 回のうち " + inside + " 回 (" + pct(inside / list.length) + ") で、実際の値が予想した80%の範囲に入りました (目標は80%)。" +
+      (info.src === "bt" ? "過去のデータで予測を作り直したバックテストの結果です" + (info.nLive ? " (実際に記録した予測はまだ " + info.nLive + " 回)" : "") + "。" : "結果が出る前に台帳へ記録した予測の結果です。")
+      : "まだ判定済みの予測がありません。";
+    var lg = clear($("check-legend"));
+    function key(cls, style, label) { var s = el("span"); var k = el("i", cls); k.setAttribute("style", style); s.appendChild(k); s.appendChild(el("span", null, label)); lg.appendChild(s); }
+    key("key bar", "background:" + alpha(t.accent, 0.35), "予想した80%の範囲");
+    key("key", "border-color:" + t.ink2, "実際の値");
+    key("key dotk", "background:" + t.good, "範囲内");
+    key("key diak", "background:" + t.bad, "範囲外");
+    if (!list.length) { if (charts["check-chart"]) charts["check-chart"].clear(); return; }
+    var cx = list.map(function (q) { return q.t; });
+    var ranges = list.map(function (q, i) { return [i, q.lo80, q.hi80, q.price]; });
+    function lab(v) { return intraday ? jstShort(v) : dayShort(v.slice(0, 10)); }
+    chartOn("check-chart").setOption({
+      animation: false, backgroundColor: "transparent", textStyle: { fontFamily: t.sans, color: t.muted },
+      grid: { left: 8, right: narrowMQ.matches ? 56 : 66, top: 12, bottom: 28 },
+      xAxis: { type: "category", data: cx, axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 11, hideOverlap: true, formatter: lab } },
+      yAxis: { scale: true, position: "right", splitNumber: 4, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 11, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 4 : 2); } } },
+      tooltip: Object.assign(tipBox(t), { trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: alpha(t.accent, 0.06) } },
+        formatter: function (ps) {
+          var q = list[ps[0].dataIndex]; if (!q) return "";
+          return '<div style="font-weight:600;color:' + t.ink + '">' + esc(lab(q.t)) + " の値</div>" +
+            '<div style="color:' + t.muted + '">予想 (' + esc(intraday ? jstShort(q.origin) : String(q.origin).slice(0, 10)) + ' 時点): <b style="color:' + t.ink + ';font-family:' + t.mono + '">' + fmt(q.lo80, d) + " – " + fmt(q.hi80, d) + "</b></div>" +
+            '<div style="color:' + t.muted + '">実際: <b style="color:' + t.ink + ';font-family:' + t.mono + '">' + fmt(q.actual, d) + "</b> " + (q.inside80 ? '<span style="color:' + t.good + '">● 範囲内</span>' : '<span style="color:' + t.bad + '">◆ 範囲外</span>') + "</div>";
+        } }),
+      series: [
+        { name: "予想した80%の範囲", type: "custom", data: ranges, z: 2,
+          renderItem: function (params, api) {
+            var a = api.coord([api.value(0), api.value(1)]); var b = api.coord([api.value(0), api.value(2)]); var c = api.coord([api.value(0), api.value(3)]);
+            var w = Math.max(3, Math.min(10, api.size([1, 0])[0] * 0.55));
+            return { type: "group", children: [
+              { type: "rect", shape: { x: a[0] - w / 2, y: b[1], width: w, height: Math.max(1, a[1] - b[1]), r: Math.min(3, w / 2) }, style: { fill: alpha(t.accent, 0.3) } },
+              { type: "line", shape: { x1: a[0] - w / 2, y1: c[1], x2: a[0] + w / 2, y2: c[1] }, style: { stroke: t.accent, lineWidth: 1.5 } }
+            ] };
+          }, encode: { x: 0, y: [1, 2] } },
+        { name: "実際の値", type: "line", data: list.map(function (q) { return q.actual; }), symbol: "none", lineStyle: { width: 1.5, color: alpha(t.ink2, 0.7) }, z: 3, silent: true },
+        { name: "範囲内", type: "scatter", data: list.map(function (q, i) { return q.inside80 ? [i, q.actual] : null; }).filter(Boolean), symbolSize: 7, itemStyle: { color: t.good, borderColor: t.surface, borderWidth: 1.5 }, z: 4, silent: true },
+        { name: "範囲外", type: "scatter", symbol: "diamond", data: list.map(function (q, i) { return q.inside80 ? null : [i, q.actual]; }).filter(Boolean), symbolSize: 10, itemStyle: { color: t.bad, borderColor: t.surface, borderWidth: 1.5 }, z: 5, silent: true }
+      ]
+    }, true);
   }
 
   function renderDist() {
@@ -1105,10 +1205,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
 
   function renderPairAll() {
     if (S.view !== "forecast") return;
-    renderHead(); renderToggles(); renderChart(); renderDist(); renderPathTable(); renderDrivers();
-    segment($("seg-range"), S.tf === "15m" ? [{ label: "12時間", value: 48 }, { label: "1日", value: 96 }, { label: "3日", value: 288 }] : S.tf === "1h" ? [{ label: "2日", value: 48 }, { label: "5日", value: 120 }, { label: "10日", value: 240 }] : [{ label: "3か月", value: 65 }, { label: "6か月", value: 130 }, { label: "1年", value: 260 }],
-      function () { return S.range[S.tf]; }, function (v) { S.range[S.tf] = v; renderChart(); });
-    segment($("seg-tf"), TF_ITEMS, function () { return S.tf; }, function (v) { S.tf = v; persist(); renderPairAll(); });
+    renderHead(); renderToggles(); renderChart(); renderCheck(); renderDist(); renderPathTable(); renderDrivers();
   }
 
   /* ---------------- market analysis ---------------- */
@@ -1194,19 +1291,19 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       var s = source[String(h)] || { n: 0 }; totalN += s.n || 0;
       var box = el("div", "stat"); var h4 = el("h4"); h4.appendChild(el("span", null, tfLabel(tf, h) + "の予測")); h4.appendChild(el("span", "muted small", (s.n || 0) + "件判定済み")); box.appendChild(h4);
       if (!s.n) { box.appendChild(el("div", "muted small", "まだ判定済みの予測がありません。")); stats.appendChild(box); return; }
-      var dir = s.direction || {};
-      box.appendChild(el("div", "big", dir.rate != null ? pct(dir.rate, 1) : "—"));
-      box.appendChild(el("div", "small muted", "方向の的中率 " + (dir.n ? dir.hits + "/" + dir.n : "") + (dir.lo != null ? " · 95%区間 " + pct(dir.lo) + "–" + pct(dir.hi) : "")));
+      var dir = s.direction || {}; var cov = s.coverage || {};
+      box.appendChild(el("div", "big", cov["80"] ? pct(cov["80"].rate, 1) : "—"));
+      box.appendChild(el("div", "small muted", "80%の範囲に実際の値が入った割合 (目標80%)"));
       var kv = el("div", "kv");
       function add(k, v, cls) { kv.appendChild(el("span", null, k)); kv.appendChild(el("span", cls || null, v)); }
+      ["50", "95"].forEach(function (lv) { if (cov[lv]) add(lv + "%の範囲に入った割合", pct(cov[lv].rate, 1), Math.abs(cov[lv].rate - Number(lv) / 100) <= 0.05 ? "good" : null); });
+      add("方向の的中率", dir.rate != null ? pct(dir.rate, 1) + " (" + dir.hits + "/" + dir.n + ")" : "—");
       add("偶然 (50%) との差", dir.p != null ? (dir.p < 0.05 ? "有意 p=" + fmt(dir.p, 3) : "有意でない p=" + fmt(dir.p, 2)) : "—");
       add("誤差: ランダムウォーク比", s.skill != null ? signed(s.skill * 100, 1, "%") : "—", s.skill > 0 ? "good" : s.skill < 0 ? "bad" : null);
-      var cov = s.coverage || {};
-      ["50", "80", "95"].forEach(function (lv) { if (cov[lv]) add(lv + "%レンジに収まった割合", pct(cov[lv].rate, 1), Math.abs(cov[lv].rate - Number(lv) / 100) <= 0.05 ? "good" : null); });
       add("確率の精度 (Brierスキル)", s.bss != null ? signed(s.bss * 100, 1, "%") : "—", s.bss > 0 ? "good" : s.bss < 0 ? "bad" : null);
       box.appendChild(kv); stats.appendChild(box);
     });
-    var lead = "サーバーが発行した予測は、対象時刻を過ぎると自動で判定されます。的中率は偶然でも50%前後になるため、95%区間と「ランダムウォーク (予測しない) と比べた誤差」、レンジが名目どおり当たっているかを合わせて見てください。";
+    var lead = "予測は結果が出る前に台帳へ記録し、対象の時刻を過ぎると自動で判定しています。大事なのは「80%の範囲」に実際の値が約80%の割合で入っているかどうかです。上がるか下がるかの的中率は偶然でも50%前後になります。";
     if (!totalN && tr.pending && tr.pending.length) lead += " 最初の判定は " + jst(tr.pending[0].target) + " 頃です。";
     $("track-lead").textContent = lead;
     var colors = [t.s1, t.s2, t.s3, t.s4];
@@ -1283,13 +1380,13 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       var st = el("div", "stat"); var h4 = el("h4"); h4.appendChild(el("span", null, tfLabel(tf, h) + "の予測")); h4.appendChild(el("span", "muted small", (a.n || 0).toLocaleString() + "件")); st.appendChild(h4);
       if (!a.n) { st.appendChild(el("div", "muted small", "判定できる時点がまだありません。")); box.appendChild(st); return; }
       st.appendChild(el("div", "big", pct(a.cover["80"], 1)));
-      st.appendChild(el("div", "small muted", "80%レンジに実際の値が入った割合 (目標80%)"));
+      st.appendChild(el("div", "small muted", "80%の範囲に実際の値が入った割合 (目標80%)"));
       var kv = el("div", "kv");
       function add(k, v, cls) { kv.appendChild(el("span", null, k)); kv.appendChild(el("span", cls || null, v)); }
-      ["50", "95"].forEach(function (lv) { add(lv + "%レンジに入った割合", pct(a.cover[lv], 1), Math.abs(a.cover[lv] - Number(lv) / 100) <= 0.05 ? "good" : null); });
-      add("方向の的中率", a.hit != null ? pct(a.hit, 1) + " (" + a.n_dir + "件)" : "— (ほぼ変化なし予測)");
+      ["50", "95"].forEach(function (lv) { add(lv + "%の範囲に入った割合", pct(a.cover[lv], 1), Math.abs(a.cover[lv] - Number(lv) / 100) <= 0.05 ? "good" : null); });
+      add("方向の的中率", a.hit != null ? pct(a.hit, 1) : "—");
       add("誤差: ランダムウォーク比", a.skill != null ? signed(a.skill * 100, 2, "%") : "—", a.skill > 0 ? "good" : a.skill < 0 ? "bad" : null);
-      if (r.n) add("直近" + btWindowName(tf, true) + " 80%レンジ", pct(r.cover["80"], 1) + " (" + r.n + "件)", Math.abs(r.cover["80"] - 0.8) <= 0.07 ? "good" : null);
+      if (r.n) add("直近" + btWindowName(tf, true) + "の80%の範囲", pct(r.cover["80"], 1), Math.abs(r.cover["80"] - 0.8) <= 0.07 ? "good" : null);
       st.appendChild(kv); box.appendChild(st);
     });
     var colors = [t.s1, t.s2, t.s3, t.s4]; var metric = S.bt2Metric || 1;
@@ -1475,7 +1572,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         loadPair().then(renderPairAll),
         getJSON("market.json").then(function (d) { S.market = d; renderMarket(); }).catch(function () {}),
         getJSON("backtest.json").then(function (d) { S.backtest = d; if (S.view === "forecast") renderHead(); renderTrack(); }).catch(function () {}),
-        getJSON("track.json").then(function (d) { S.track = d; renderTrack(); }).catch(function () {}),
+        getJSON("track.json").then(function (d) { S.track = d; if (S.view === "forecast") renderHead(); renderTrack(); }).catch(function () {}),
         getJSON("news.json").then(function (d) { S.news = d; renderNews(); }).catch(function () {}),
         getJSON("models.json").then(function (d) { S.models = d; renderLearning(); }).catch(function () {}),
         getJSON("verify.json").then(function (d) { S.verify = d; renderVerify(); }).catch(function () {})
