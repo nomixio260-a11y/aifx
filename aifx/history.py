@@ -33,6 +33,12 @@ RATE_SERIES = {
 }
 
 
+# stock index per currency (research on month-end hedging and risk appetite)
+EQUITY = {"USD": "^GSPC", "JPY": "^N225", "EUR": "^GDAXI", "GBP": "^FTSE", "AUD": "^AXJO"}
+FUTURES = {"ES": "ES=F"}             # S&P 500 futures, hourly (trade nearly around the clock)
+EXTRA_RATES = ("DGS2",)              # US 2-year Treasury yield, daily
+
+
 def _path(name: str, root: Path | None = None) -> Path:
     return (root or HIST_DIR) / name
 
@@ -85,6 +91,25 @@ def download(root: Path | None = None, log=print) -> None:
             log(f"rate {cur} {sid}")
     fetch_fred("VIXCLS").to_csv(_path("rate_VIXCLS.csv", root), index_label="date")
     log("VIX (VIXCLS)")
+    download_extra(root, log)
+
+
+def download_extra(root: Path | None = None, log=print) -> None:
+    """Stock indices, S&P 500 futures and the US 2-year yield (research_direction.py)."""
+    root = root or HIST_DIR
+    root.mkdir(parents=True, exist_ok=True)
+    p1 = int(datetime(2000, 1, 1).timestamp())
+    for cur, sym in EQUITY.items():
+        d = parse_yahoo_chart(_yahoo_chart(sym, f"period1={p1}&period2={int(time.time())}&interval=1d"))
+        d.to_csv(_path(f"eq_{cur}_1d.csv", root), index_label="date", float_format="%.6f")
+        log(f"equity {cur} {sym}: {len(d)} days from {d.index[0].date()}")
+    for key, sym in FUTURES.items():
+        h, _ = parse_yahoo_intraday(_yahoo_chart(sym, "range=730d&interval=60m"), utcnow())
+        h.to_csv(_path(f"fut_{key}_1h.csv", root), index_label="time", float_format="%.6f")
+        log(f"futures {key} {sym}: {len(h)} hours from {h.index[0]}")
+    for sid in EXTRA_RATES:
+        fetch_fred(sid).to_csv(_path(f"rate_{sid}.csv", root), index_label="date")
+        log(f"rate {sid}")
 
 
 def load_daily(code: str, root: Path | None = None) -> pd.DataFrame:
@@ -99,14 +124,33 @@ def load_vix(root: Path | None = None) -> pd.Series:
     return s[~s.index.duplicated(keep="last")]
 
 
+def load_equity(cur: str, root: Path | None = None) -> pd.Series:
+    """Close of the currency's stock index by local trading date."""
+    s = pd.read_csv(_path(f"eq_{cur}_1d.csv", root), index_col="date", parse_dates=["date"])["close"]
+    return s[~s.index.duplicated(keep="last")].sort_index()
+
+
+def load_futures_hourly(key: str, root: Path | None = None) -> pd.DataFrame:
+    return _load_times(_path(f"fut_{key}_1h.csv", root))
+
+
+def load_fred(sid: str, root: Path | None = None) -> pd.Series:
+    s = pd.read_csv(_path(f"rate_{sid}.csv", root), index_col="date", parse_dates=["date"]).iloc[:, 0]
+    return s[~s.index.duplicated(keep="last")].sort_index()
+
+
+def _load_times(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path, index_col="time")
+    df.index = pd.to_datetime(df.index, utc=True)
+    return df.astype("float64")
+
+
 def load_hourly(code: str, root: Path | None = None) -> pd.DataFrame:
     return load_intraday(code, "1h", root)
 
 
 def load_intraday(code: str, interval: str, root: Path | None = None) -> pd.DataFrame:
-    df = pd.read_csv(_path(f"{code}_{interval}.csv", root), index_col="time")
-    df.index = pd.to_datetime(df.index, utc=True)
-    return df.astype("float64")
+    return _load_times(_path(f"{code}_{interval}.csv", root))
 
 
 def rates_panel(index: pd.DatetimeIndex, root: Path | None = None) -> pd.DataFrame:

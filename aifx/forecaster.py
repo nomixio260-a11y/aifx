@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from . import news as newsmod
-from . import trade
+from . import season, trade
 from .data import Pair
 from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, bar_end, combine, fan_z, horizon_sigma,
                      model_paths, sigma_steps, step_ends, target_times)
@@ -27,7 +27,8 @@ from .store import known_before
 from .timeutil import iso
 
 MAX_ORIGIN_AGE = {"15m": timedelta(minutes=30), "1h": timedelta(hours=2), "1d": timedelta(hours=36)}
-_MODEL_FILES = ("models.py", "engine.py", "volatility.py", "learning.py", "news.py", "forecaster.py", "trade.py", "rates.py")
+_MODEL_FILES = ("models.py", "engine.py", "volatility.py", "learning.py", "news.py", "forecaster.py", "trade.py", "rates.py",
+                "season.py")
 
 
 def model_version() -> str:
@@ -64,12 +65,15 @@ def usable_rates(items: list[dict] | None, origin: datetime) -> dict | None:
 
 def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataFrame, origin: datetime,
                     news_items: list[dict], events: list[dict], prior_seq: int, learn_seq: int,
-                    state: dict[int, HorizonState], version: str, rate_items: list[dict] | None = None) -> tuple[dict, dict]:
+                    state: dict[int, HorizonState], version: str, rate_items: list[dict] | None = None,
+                    hourly: pd.DataFrame | None = None) -> tuple[dict, dict]:
     """Returns (ledger record without seq/hash/at, chart detail).
 
     ``ref`` are the reference bars of the timeframe (``tf.ref``): the origin
     price is their close at the origin, and forecasts are scored on them.
     Daily forecasts also measure recent variance from them (hourly bars).
+    ``hourly``: the pair's hourly bars, for the time-of-day drift of 15-minute
+    and hourly forecasts (season.py).
     """
     y = np.log(bars["close"].to_numpy()[-tf.fit_bars:])
     steps = max(tf.steps, max(tf.horizons))
@@ -82,12 +86,15 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
     p0, p0_bar = origin_price(ref, origin, TIMEFRAMES[tf.ref].minutes)
     targets = target_times(tf, origin)
     sig_h = horizon_sigma(var, tf.horizons)
+    bar_drift = season.step_drift(tf.minutes, hourly, origin, steps)
+    drift = season.centre_drift(bar_drift, tf.minutes)
     fc = []
     for j, h in enumerate(tf.horizons):
         st = state[h]
         m = {k: float(paths[k][h - 1]) for k in MODEL_KEYS}
         nu = band_nu(tf.key, h)
-        comb = combine(m, st.weights, sig_h[j], st.k, x, st.beta, st.gain, nu)
+        d = round(float(drift[h - 1]), 4)
+        comb = combine(m, st.weights, sig_h[j], st.k, x, st.beta, st.gain, nu, d)
         n_ev = sum(1 for e in evs if origin < e["time"] <= targets[j])
         fc.append({
             "h": h,
@@ -100,6 +107,7 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
             "g": st.gain,
             "nu": nu,
             "c0": round(comb["c0"], 4),
+            "d": d,
             "c": round(comb["c"], 4),
             "p": round(comb["p_up"], 4),
             "ev": n_ev,
@@ -120,11 +128,12 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
         # the trade plan: reference signal, stop, target and time limit (trade.py)
         "trade": trade.plan(tf, pair, bars.iloc[-tf.fit_bars:], origin, p0, usable_rates(rate_items, origin)),
     }
-    chart = chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, analog_idx, press)
+    chart = chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, analog_idx, press, drift, bar_drift)
     return record, chart
 
 
-def chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, analog_idx, press) -> dict:
+def chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, analog_idx, press, drift=None,
+                 bar_drift=None) -> dict:
     """Per-step paths for drawing (not part of the ledger)."""
     steps = len(ends)
     hs = sorted(state)
@@ -136,8 +145,10 @@ def chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, an
         st = state[h_ref]
         nu = band_nu(tf.key, h_ref)
         m = {k: float(paths[k][i]) for k in MODEL_KEYS}
-        comb = combine(m, st.weights, float(cum[i]), st.k, x, st.beta, st.gain, nu)
-        row = {"t": iso(ends[i]), "c": p0 * float(np.exp(comb["c"] / BP)), "p": comb["p_up"]}
+        d = float(drift[i]) if drift is not None else 0.0
+        comb = combine(m, st.weights, float(cum[i]), st.k, x, st.beta, st.gain, nu, d)
+        row = {"t": iso(ends[i]), "c": p0 * float(np.exp(comb["c"] / BP)), "p": comb["p_up"], "d": d,
+               "bar_d": float(bar_drift[i]) if bar_drift is not None else 0.0}
         for name, z in fan_z(nu).items():
             row["lo" + name] = p0 * float(np.exp((comb["c"] - z * comb["sigma"]) / BP))
             row["hi" + name] = p0 * float(np.exp((comb["c"] + z * comb["sigma"]) / BP))

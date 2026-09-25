@@ -23,10 +23,10 @@ import pandas as pd
 
 from . import analysis, backtest, indicators
 from . import news as newsmod
-from . import scenario, track, trade
+from . import scenario, season, track, trade
 from .rates import latest as rates_latest
 from .data import CURRENCIES, PAIRS
-from .engine import (BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, bars_until, dist_cdf, dist_pdf, dist_quantile, fan_z,
+from .engine import (BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, bar_end, bars_until, dist_cdf, dist_pdf, dist_quantile, fan_z,
                      step_ends)
 from .forecaster import model_version
 from .learning import learn, samples_from_ledger
@@ -115,10 +115,11 @@ CANDLE_EVAL = {"15m": (timedelta(days=3), 5), "1h": (timedelta(days=20), 7), "1d
 CANDLE_RESEARCH = RESEARCH.parent / "candles.json"
 
 
-def candle_eval(tf, bars: pd.DataFrame, now) -> list[tuple]:
-    """Forecast candles rebuilt at recent origins from the bars up to each origin, against the real
-    candles that followed: (step, forecast dir, actual dir, forecast colour, actual colour,
-    forecast size, actual size, 14-bar average size)."""
+def candle_eval(tf, bars: pd.DataFrame, now, hourly: pd.DataFrame | None = None) -> list[tuple]:
+    """Forecast candles rebuilt at recent origins from the bars up to each origin (and the time-of-day
+    drift from the hourly bars before the origin's day), against the real candles that followed:
+    (step, forecast dir, actual dir, forecast colour, actual colour, forecast size, actual size,
+    14-bar average size, direction called by the drift)."""
     window, every = CANDLE_EVAL[tf.key]
     steps = max(tf.horizons)
     if len(bars) < 400:
@@ -131,13 +132,15 @@ def candle_eval(tf, bars: pd.DataFrame, now) -> list[tuple]:
     out = []
     first = int(bars.index.searchsorted(since))
     for t in range(max(first, 300), len(c) - 1, every):
-        cs, _ = scenario.candles(tf.key, bars.iloc[: t + 1], steps, float(c[t]), tf.minutes)
+        drift = season.step_drift(tf.minutes, hourly, bar_end(tf, bars.index[t]), steps)
+        target = float(c[t]) * math.exp(float(season.centre_drift(drift, tf.minutes)[-1]) / BP)
+        cs, _ = scenario.candles(tf.key, bars.iloc[: t + 1], steps, target, tf.minutes, drift)
         for j, (po, ph, pl, pc) in enumerate(cs):
             k = t + 1 + j
             if k >= len(c):
                 break
             out.append((j + 1, np.sign(pc - c[t]), np.sign(c[k] - c[t]), np.sign(pc - po), np.sign(c[k] - o[k]),
-                        ph - pl, h[k] - lo[k], atr[t]))
+                        ph - pl, h[k] - lo[k], atr[t], np.sign(drift[j])))
     return out
 
 
@@ -150,9 +153,12 @@ def candle_stats(rows: list[tuple]) -> dict:
     ok = np.isfinite(R[:, 7])
     mae = np.mean(np.abs(R[ok, 5] - R[ok, 6]))
     mae_atr = np.mean(np.abs(R[ok, 7] - R[ok, 6]))
+    call = (R[:, 8] != 0) & (R[:, 4] != 0)                   # candles whose colour the time-of-day drift called
     return {"n": int(len(R)), "dir_hit": _r(float(np.mean(R[d, 1] == R[d, 2])), 4) if d.any() else None,
             "color_hit": _r(float(np.mean(R[b, 3] == R[b, 4])), 4) if b.any() else None,
-            "size_vs_atr": _r(float(mae / mae_atr - 1), 4) if mae_atr > 0 else None}
+            "size_vs_atr": _r(float(mae / mae_atr - 1), 4) if mae_atr > 0 else None,
+            "call_n": int(call.sum()), "call_share": _r(float(np.mean(R[:, 8] != 0)), 4),
+            "call_hit": _r(float(np.mean(R[call, 8] == R[call, 4])), 4) if call.any() else None}
 
 
 def research_summary(path: Path = RESEARCH) -> dict | None:
@@ -449,11 +455,13 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
             if rec is not None and block.get("path"):
                 steps_ = block["path"]["steps"]
                 hist = bars_until(tf, bars, parse_iso(rec["origin"]))
-                cs, info = scenario.candles(tf_key, hist, len(steps_), steps_[-1]["c"], tf.minutes)
+                drift = np.array([st.get("bar_d") or 0.0 for st in steps_], dtype=float)
+                cs, info = scenario.candles(tf_key, hist, len(steps_), steps_[-1]["c"], tf.minutes, drift)
                 if cs:
                     block["candles"] = {"items": [[_r(v, dec) for v in k] for k in cs], "x": [st["x"] for st in steps_],
-                                        "t": [st["t"] for st in steps_], "analog": str(info["analog_end"])}
-                candle_rows.setdefault(tf_key, []).extend(candle_eval(tf, bars, now))
+                                        "t": [st["t"] for st in steps_], "analog": str(info["analog_end"]),
+                                        "call": info["call"], "drift_bp": [_r(float(v), 3) for v in drift]}
+                candle_rows.setdefault(tf_key, []).extend(candle_eval(tf, bars, now, hourly if tf.minutes else None))
             if tf_key == "1d" and len(daily) > 80:
                 block["technical"] = indicators.technical_summary(daily, indicators.compute_all(daily))
             payload["tf"][tf_key] = block

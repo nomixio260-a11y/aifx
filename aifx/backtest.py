@@ -28,6 +28,7 @@ import pandas as pd
 
 from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, band_z, bar_end, bars_until, horizon_sigma,
                      model_paths, prob_up, sigma_steps, target_times)
+from . import season
 from .forecaster import model_version, origin_price
 from .learning import learn_arrays
 from .timeutil import iso, parse_iso
@@ -70,16 +71,17 @@ def update(state, tfs: list[Timeframe], pairs: list[str], now: datetime, budget:
             ref = state.prices.load(code, tf.ref)
             if len(bars) < 450 or not len(ref):
                 continue
+            hourly = (ref if tf.ref == "1h" else state.prices.load(code, "1h")) if tf.minutes else None
             ends = [bar_end(tf, ts) for ts in bars.index]
             todo = [o for o in range(400, len(bars)) if ends[o] >= since and iso(ends[o]) not in cache["rows"]]
-            jobs[code] = (cache, bars, ref, ends, todo[::-1])
+            jobs[code] = (cache, bars, ref, ends, todo[::-1], hourly)
         for i in range(max((len(j[4]) for j in jobs.values()), default=0)):
-            for cache, bars, ref, ends, todo in jobs.values():
-                if added < limit and i < len(todo) and _forecast(tf, cache["rows"], bars, ref, ends[todo[i]], todo[i]):
+            for cache, bars, ref, ends, todo, hourly in jobs.values():
+                if added < limit and i < len(todo) and _forecast(tf, cache["rows"], bars, ref, ends[todo[i]], todo[i], hourly):
                     added += 1
             if added >= limit:
                 break
-        for code, (cache, _, ref, _, _) in jobs.items():
+        for code, (cache, _, ref, _, _, _) in jobs.items():
             _fill_outcomes(cache["rows"], ref, TIMEFRAMES[tf.ref].minutes)
             cache["rows"] = {k: v for k, v in cache["rows"].items() if k >= iso(since)}
             state.write_cache(_key(tf.key, code), cache)
@@ -89,8 +91,10 @@ def update(state, tfs: list[Timeframe], pairs: list[str], now: datetime, budget:
     return {"added": added, "rows": report}
 
 
-def _forecast(tf: Timeframe, rows: dict, bars: pd.DataFrame, ref: pd.DataFrame, origin: datetime, o: int) -> bool:
-    """The forecast the models would have made at ``origin`` from the bars completed by then."""
+def _forecast(tf: Timeframe, rows: dict, bars: pd.DataFrame, ref: pd.DataFrame, origin: datetime, o: int,
+              hourly: pd.DataFrame | None = None) -> bool:
+    """The forecast the models would have made at ``origin`` from the bars completed by then
+    (the time-of-day drift uses hourly bars from before the origin's day only)."""
     ref_min = TIMEFRAMES[tf.ref].minutes
     ref_o = ref.iloc[:int((ref.index + pd.Timedelta(minutes=ref_min)).searchsorted(pd.Timestamp(origin), side="right"))]
     p = origin_price(ref_o, origin, ref_min)
@@ -102,9 +106,10 @@ def _forecast(tf: Timeframe, rows: dict, bars: pd.DataFrame, ref: pd.DataFrame, 
     var = sigma_steps(tf, hist, origin, H, None, hourly=ref_o if tf.key == "1d" else None)
     sig = horizon_sigma(var, tf.horizons)
     targets = target_times(tf, origin)
+    drift = season.centre_drift(season.step_drift(tf.minutes, hourly, origin, H), tf.minutes)
     rows[iso(origin)] = {"p0": p[0], "h": {
         str(h): {"t": iso(targets[j]), "m": [round(float(paths[k][h - 1]), 3) for k in MODEL_KEYS],
-                 "s": round(sig[j], 4), "a": None}
+                 "s": round(sig[j], 4), "d": round(float(drift[h - 1]), 4), "a": None}
         for j, h in enumerate(tf.horizons)}}
     return True
 
@@ -144,6 +149,7 @@ def _replay(tf: Timeframe, samples: list[dict], prior_rec: dict | None) -> list[
         m = np.array([r["m"] for r in known], dtype=float).reshape(n, len(MODEL_KEYS))
         a = np.array([r["a"] for r in known], dtype=float)
         sig = np.array([r["s"] for r in known], dtype=float)
+        dft = np.array([r.get("d", 0.0) for r in known], dtype=float)
         used = np.zeros((4, n))              # k, g, c0, c given to each forecast by the replay
         zero = np.zeros(n)
         j, st = 0, None
@@ -153,9 +159,9 @@ def _replay(tf: Timeframe, samples: list[dict], prior_rec: dict | None) -> list[
                 j += 1
             if st is None or j != j0:
                 st = learn_arrays(prior, m[:j], a[:j], sig[:j], used[0, :j], used[1, :j], used[2, :j], used[3, :j],
-                                  zero[:j], tf.half_life)
+                                  zero[:j], tf.half_life, dft[:j])
             r["k"], r["g"], r["c0"] = st.k, st.gain, float(np.dot(st.weights, r["m"]))
-            r["c"] = st.gain * r["c0"]
+            r["c"] = st.gain * r["c0"] + r.get("d", 0.0)
             r["sigma"] = r["s"] * st.k
             r["nu"] = nu
             r["p_up"] = prob_up(r["c"], r["sigma"], nu)
@@ -181,7 +187,11 @@ def _metrics(rows: list[dict]) -> dict:
     for lv in LEVELS:
         zmult = np.array([band_z(r["nu"])[lv] for r in rows])
         cover[lv] = float(np.mean(np.abs(a - c) <= zmult * sig))
-    return {"n": n, "hit": hits / moving.sum() if moving.sum() else None, "n_dir": int(moving.sum()),
+    d = np.array([r.get("d", 0.0) for r in rows])
+    called = moving & (np.abs(d) > 1e-9)
+    calls = {"n": int(called.sum()), "share": float(np.mean(np.abs(d) > 1e-9)),
+             "hit": float(np.mean(np.sign(c[called]) == np.sign(a[called]))) if called.any() else None}
+    return {"n": n, "hit": hits / moving.sum() if moving.sum() else None, "n_dir": int(moving.sum()), "calls": calls,
             "skill": 1 - rmse / rmse_rw if rmse_rw > 0 else None, "cover": cover,
             "mae_bp": float(np.mean(np.abs(c - a))), "brier": float(np.mean((p - (a > 0)) ** 2))}
 

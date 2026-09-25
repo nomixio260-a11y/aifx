@@ -224,13 +224,14 @@ def dist_pdf(z: np.ndarray, nu: int | None) -> np.ndarray:
 
 
 def combine(model_bp: dict[str, float], weights: list[float], sigma_raw: float, k: float,
-            news: float, beta: float, gain: float, nu: int | None = None) -> dict:
+            news: float, beta: float, gain: float, nu: int | None = None, drift: float = 0.0) -> dict:
     """Blend models, scale the blend by its learned gain, calibrate the spread and
-    apply the learned news tilt. A gain near 0 means the models have shown no
-    directional skill, so the forecast stays close to "no change"."""
+    apply the learned news tilt and the time-of-day drift (season.py). A gain near
+    0 means the models have shown no directional skill, so the forecast stays
+    close to "no change" apart from the drift."""
     c0 = float(sum(w * model_bp[key] for w, key in zip(weights, MODEL_KEYS)))
     sigma = sigma_raw * k
-    c = gain * c0 + beta * news * sigma
+    c = gain * c0 + beta * news * sigma + drift
     return {"c0": c0, "c": c, "sigma": sigma, "p_up": prob_up(c, sigma, nu)}
 
 

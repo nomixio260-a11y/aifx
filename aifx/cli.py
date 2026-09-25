@@ -164,6 +164,10 @@ def cmd_research(args) -> int:
         from . import research_candles
         research_candles.run()
         return 0
+    if args.direction:
+        from . import research_direction
+        research_direction.run()
+        return 0
     if args.intraday:
         research_intraday.run(workers=args.workers)
         return 0
@@ -229,11 +233,14 @@ def build_parser() -> argparse.ArgumentParser:
     st.set_defaults(func=cmd_status)
 
     r = sub.add_parser("research", help="過去データで検証し research/report.md を作成 (台帳とは別)")
-    r.add_argument("--download", action="store_true", help="過去の価格 (Yahoo Finance) と短期金利 (FRED) を data/history/ に取得")
+    r.add_argument("--download", action="store_true",
+                   help="過去の価格 (Yahoo Finance)、短期金利・米2年金利 (FRED)、株価指数を data/history/ に取得")
     r.add_argument("--intraday", action="store_true", help="15分足・5分足 (直近約60日) の検証 (research/intraday.md)")
     r.add_argument("--trade", action="store_true", help="売買ルールの検証 (コスト込み、research/trade.md)")
     r.add_argument("--ml", action="store_true", help="機械学習による方向予測の検証 (research/ml.md、scikit-learn と lightgbm が必要)")
     r.add_argument("--candles", action="store_true", help="予想ローソク足の精度の検証 (research/candles.md)")
+    r.add_argument("--direction", action="store_true",
+                   help="方向の予測の検証: 時間帯の偏り、株価・金利、月末など (research/direction.md)")
     r.add_argument("--workers", type=int, default=4)
     r.set_defaults(func=cmd_research)
 

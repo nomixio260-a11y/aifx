@@ -76,10 +76,10 @@ def test_backtest_replays_the_live_learning_rule(session, small_window):
         known = sorted((k for k in rows if k["a"] is not None and k["t"] <= r["origin"]),
                        key=lambda k: (k["t"], k["origin"], k["pair"]))
         assert len(known) > 20
-        st = learn_horizon(prior["h"]["1"], [{**{f: k[f] for f in ("m", "a", "s", "k", "g", "c0", "c")}, "x": 0.0}
+        st = learn_horizon(prior["h"]["1"], [{**{f: k[f] for f in ("m", "a", "s", "k", "g", "c0", "c", "d")}, "x": 0.0}
                                              for k in known], tf.half_life)
         assert (r["k"], r["g"]) == (st.k, st.gain)
-        assert r["c"] == pytest.approx(st.gain * float(np.dot(st.weights, r["m"])), abs=1e-12)
+        assert r["c"] == pytest.approx(st.gain * float(np.dot(st.weights, r["m"])) + r["d"], abs=1e-12)
         assert r["sigma"] == pytest.approx(r["s"] * st.k)
 
 

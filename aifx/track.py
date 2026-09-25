@@ -28,7 +28,8 @@ def join(predictions: list[dict], outcomes: list[dict]) -> tuple[list[dict], set
                 "seq": pseq, "pair": p["pair"], "tf": p["tf"], "h": h, "issued": p["at"], "origin": p["origin"],
                 "target": f["t"], "p0": p["p0"], "c": f["c"], "c0": f["c0"], "g": f["g"],
                 "sigma": f["s"] * f["k"], "p": f["p"], "z": band_z(f.get("nu")),
-                "m": f["m"], "x": p["news"]["x"], "actual": actual, "a": a, "bar_end": bar_end, "scored": o["at"],
+                "m": f["m"], "x": p["news"]["x"], "d": f.get("d", 0.0), "actual": actual, "a": a, "bar_end": bar_end,
+                "scored": o["at"],
             })
     rows.sort(key=lambda r: (r["target"], r["seq"], r["h"]))
     return rows, done
@@ -54,12 +55,20 @@ def summary(rows: list[dict], tf: str, h: int) -> dict:
         for i, k in enumerate(MODEL_KEYS)
     }
     no_news = np.array([r["g"] * r["c0"] for r in sel])
+    out["calls"] = direction_calls(sel)
     out["news_effect"] = {
         "rmse_with_bp": out["rmse_bp"],
         "rmse_without_bp": float(np.sqrt(np.mean((no_news - a) ** 2))),
         "active": int(np.sum(np.abs(_arr(sel, "x")) > 1e-9)),
     }
     return out
+
+
+def direction_calls(sel: list[dict]) -> dict:
+    """Forecasts whose direction came from the time-of-day drift (season.py): how often it was right."""
+    calls = [r for r in sel if abs(r.get("d", 0.0)) > 1e-9 and abs(r["a"]) > 1e-9 and abs(r["c"]) > 1e-9]
+    return {"n": len(calls), "share": len(calls) / len(sel) if sel else None,
+            "hit": float(np.mean([(r["c"] > 0) == (r["a"] > 0) for r in calls])) if calls else None}
 
 
 def timeline(rows: list[dict], tf: str, h: int, max_points: int = 160) -> list[list]:
@@ -104,7 +113,7 @@ def build(predictions: list[dict], outcomes: list[dict], pip_of: dict[str, float
             by_pair[pair][tf] = {}
             for h in TIMEFRAMES[tf].horizons:
                 s = summary(pr, tf, h)
-                by_pair[pair][tf][str(h)] = {k: s.get(k) for k in ("n", "direction", "skill", "rmse_bp", "coverage")}
+                by_pair[pair][tf][str(h)] = {k: s.get(k) for k in ("n", "direction", "skill", "rmse_bp", "coverage", "calls")}
     recent = [_row_view(r, pip_of) for r in reversed(rows[-150:])]
     pending = []
     for p in predictions:

@@ -73,16 +73,18 @@ def learn_horizon(prior: dict | None, samples: list[dict], half_life: float) -> 
     """``samples``: scored forecasts for one horizon, sorted oldest first.
 
     Each sample has m (model bp list), a (actual bp), s (raw sigma bp), k (scale
-    used), g (gain used), c0 (model blend), c (final centre) and x (news signal).
+    used), g (gain used), c0 (model blend), c (final centre), x (news signal)
+    and d (time-of-day drift, 0 when absent).
     """
-    col = {key: np.array([s[key] for s in samples], dtype=float) for key in ("a", "s", "k", "g", "c0", "c", "x")}
+    col = {key: np.array([s.get(key, 0.0) for s in samples], dtype=float) for key in ("a", "s", "k", "g", "c0", "c", "x", "d")}
     m = np.array([s["m"] for s in samples], dtype=float).reshape(len(samples), len(MODEL_KEYS))
     return learn_arrays(prior, m, half_life=half_life, **col)
 
 
 def learn_arrays(prior: dict | None, m: np.ndarray, a: np.ndarray, s: np.ndarray, k: np.ndarray, g: np.ndarray,
-                 c0: np.ndarray, c: np.ndarray, x: np.ndarray, half_life: float) -> HorizonState:
-    """The same rule on columns (one row per sample, oldest first); used to replay it quickly."""
+                 c0: np.ndarray, c: np.ndarray, x: np.ndarray, half_life: float, d: np.ndarray | None = None) -> HorizonState:
+    """The same rule on columns (one row per sample, oldest first); used to replay it quickly.
+    ``d``: the time-of-day drift in each centre; the gain and news tilt are learned from what is left."""
     n_models = len(MODEL_KEYS)
     prior_mse = np.array(prior["mse_z"]) if prior else np.ones(n_models)
     prior_k = float(prior["k"]) if prior else 1.0
@@ -98,10 +100,11 @@ def learn_arrays(prior: dict | None, m: np.ndarray, a: np.ndarray, s: np.ndarray
         ze = np.abs(c - a) / s
         k_hat = _weighted_quantile(ze, w, 0.8) / BAND_Z["80"]
         k_new = (PRIOR_N_K * prior_k + w_sum * k_hat) / (PRIOR_N_K + w_sum)
-        u, v = c0 / s, a / s
+        ad = a - d if d is not None else a
+        u, v = c0 / s, ad / s
         suu += float(np.sum(w * u * u))
         suv += float(np.sum(w * u * v))
-        resid = (a - g * c0) / (s * k)
+        resid = (ad - g * c0) / (s * k)
         beta = (BETA_LAMBDA * BETA_PRIOR + float(np.sum(w * resid * x))) / (BETA_LAMBDA + float(np.sum(w * x * x)))
     else:
         w_sum = 0.0
@@ -143,7 +146,7 @@ def samples_from_ledger(predictions: dict[int, dict], outcomes: list[dict], tf: 
             a = float(np.log(actual / p["p0"]) * 1e4)
             by_h.setdefault(h, []).append((fc["t"], pred_seq, {
                 "m": fc["m"], "a": a, "s": fc["s"], "k": fc["k"], "g": fc["g"], "c0": fc["c0"],
-                "c": fc["c"], "x": p["news"]["x"],
+                "c": fc["c"], "x": p["news"]["x"], "d": fc.get("d", 0.0),
             }))
     return {h: [s for _, _, s in sorted(rows, key=lambda r: (r[0], r[1]))] for h, rows in by_h.items()}
 

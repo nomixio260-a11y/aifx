@@ -251,6 +251,7 @@ td .chip { font-size: 11.5px; }
 .key.box { width: 14px; height: 12px; border: 0; border-radius: 3px; }
 .key.candle { width: 12px; height: 12px; border: 0; background: linear-gradient(90deg, var(--up) 50%, var(--down) 50%); border-radius: 2px; }
 .key.dotk { width: 10px; height: 10px; border: 0; border-radius: 50%; }
+.key.ring { width: 8px; height: 8px; border-radius: 50%; background: transparent; }
 .key.diak { width: 9px; height: 9px; border: 0; transform: rotate(45deg); border-radius: 1px; }
 .key.bar { width: 6px; height: 14px; border: 0; border-radius: 3px; }
 .chart { width: 100%; height: 480px; touch-action: pan-y; }
@@ -817,11 +818,18 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   }
   function candleAccText(blk, short) {
     var A = blk && blk.candles && blk.candles.accuracy; if (!A || !A.all || !A.all.n) return "";
-    var sz = A.all.size_vs_atr, dh = A.all.dir_hit;
+    var sz = A.all.size_vs_atr, dh = A.all.dir_hit, callTxt = A.all.call_n ? "、うち時間帯の偏りで向きを決めた足 (" + pct(A.all.call_share, 0) + ") の陽線・陰線の的中率 " + pct(A.all.call_hit, 1) + " (" + A.all.call_n.toLocaleString() + "本)" : "";
     if (short) return "予想ローソク足の直近" + A.window_days + "日の成績: 足の大きさの誤差は平均値幅 (ATR) より " +
-      (sz != null ? (sz <= 0 ? pct(-sz, 0) + " 小さい" : pct(sz, 0) + " 大きい") : "—") + "・終値の方向の的中率 " + pct(dh, 1) + " (偶然は50%)";
+      (sz != null ? (sz <= 0 ? pct(-sz, 0) + " 小さい" : pct(sz, 0) + " 大きい") : "—") + "・陽線・陰線の的中率 " + pct(A.all.color_hit, 1) + callTxt + " (偶然は50%)";
     return "予想ローソク足の成績 (直近" + A.window_days + "日・7ペア・" + A.all.n.toLocaleString() + "本): 足の大きさ (高値−安値) の誤差は、単純な平均値幅 (ATR) と比べて " + (sz != null ? signed(sz * 100, 0, "%") : "—") +
-      "、終値の方向の的中率 " + pct(dh, 1) + "、陽線・陰線の的中率 " + pct(A.all.color_hit, 1) + "。";
+      "、終値の方向の的中率 " + pct(dh, 1) + "、陽線・陰線の的中率 " + pct(A.all.color_hit, 1) + callTxt + "。";
+  }
+  // the next bar's direction from the time-of-day drift (season.py), if it makes a call
+  function nextCallText(blk) {
+    var C = blk && blk.candles; if (!C || !C.drift_bp || !TF_MIN[S.tf]) return "";
+    var d = C.drift_bp[0], when = TF_MIN[S.tf] === 60 ? "次の1時間" : "次の15分";
+    if (!d) return when + ": 方向の根拠なし (この時間帯は上下どちらとも言えません)";
+    return when + ": " + (d > 0 ? "▲ 上がりやすい" : "▼ 下がりやすい") + "時間帯 (過去1年の平均 " + signed(d, 1, "bp") + ")";
   }
 
   var TOGGLES = [
@@ -851,6 +859,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       key("key diak", "background:" + t.bad, "損切り");
     }
     if (S.show.pred) key("key candle", "background:linear-gradient(90deg," + alpha(t.up, 0.5) + " 50%," + alpha(t.down, 0.5) + " 50%);border:1.2px solid " + t.ink2, "予想ローソク足 (薄い色)");
+    var CB = curBlock() && curBlock().candles;
+    if (S.show.pred && CB && (CB.call || []).some(function (v) { return v; })) key("key ring", "border:1.6px solid " + t.accent, "向きに根拠のある足");
     key("key", "border-color:" + t.ink2, "現在値");
     if (S.show.ma) { key("key", "border-color:" + t.ma20, "20本平均"); key("key", "border-color:" + t.ma75, "75本平均"); }
   }
@@ -1035,6 +1045,13 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       var pdata = new Array(nH).fill("-").concat(pc.map(function (k) { return [k.o, k.c, k.l, k.h]; }));
       series.push({ name: "予想ローソク足", type: "candlestick", data: pdata, barMaxWidth: 10, z: 6,
         itemStyle: { color: alpha(t.up, 0.5), color0: alpha(t.down, 0.5), borderColor: t.up, borderColor0: t.down, borderWidth: 1.2 } });
+      // candles whose colour the time-of-day drift called: a ring above (up) or below (down)
+      var calls = (blk.candles && blk.candles.call) || [];
+      var cdata = new Array(N).fill("-");
+      pc.forEach(function (k, i) { if (calls[i]) cdata[nH + i] = calls[i] > 0 ? k.h : k.l; });
+      if (calls.some(function (v) { return v; }))
+        series.push({ name: "方向に根拠のある足", type: "scatter", data: cdata, symbol: "emptyCircle", symbolSize: 7, z: 8, silent: true,
+          symbolOffset: [0, 0], itemStyle: { color: t.accent, borderWidth: 1.6 } });
     }
     // trade plan: take-profit and stop zones up to the time limit, and past signals with their results
     var T = blk.trade; var sigAt = {};
@@ -1119,9 +1136,12 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series: series
     };
     chartOn("chart").setOption(option, true);
-    $("chart-acc").textContent = S.show.pred && pc.length ? candleAccText(blk, true) : "";
+    var nxt = nextCallText(blk);
+    $("chart-acc").textContent = S.show.pred && pc.length ? (nxt ? nxt + "。" : "") + candleAccText(blk, true) : "";
     $("chart-note").textContent = (S.show.pred && pc.length ? "「これから」の範囲の薄い色のローソク足がサーバーの予想です。今と値動きの形・時間帯が似た過去の局面の続きを、今の値動きの大きさに合わせて描いています。" +
-        "足の大きさは当たりやすい一方、陽線か陰線か (方向) は検証で偶然と区別できず、当てにできません。" + candleAccText(blk, false) : "") +
+        (TF_MIN[S.tf] ? "足の大きさは当たりやすい一方、陽線か陰線か (方向) が偶然より当たるのは、○ 印の足 (時間帯の偏り、主に日本時間の朝5〜7時ごろのロールオーバー前後) だけです (検証の的中率: 1時間足 約57%、15分足 約54%)。" +
+          "ロールオーバーではスワップの付与に合わせて価格がずれるため、表示上の方向は当たっても売買の利益にはなりにくい点に注意してください。それ以外の足の向きは当てにできません。"
+          : "足の大きさは当たりやすい一方、日足の陽線・陰線 (方向) は検証で偶然と区別できず、当てにできません。") + candleAccText(blk, false) : "") +
       (S.show.trade ? "緑の帯が利確、赤の帯が損切りまでの範囲で、右端が決済の期限です。▲▼は過去のシグナル、●は利確、◆は損切り、■は期限での決済。" : "") +
       ((blk.path && blk.path.events || []).length ? "橙の点線は重要指標の発表時刻。" : "") +
       (coarseMQ.matches ? "期間はボタンで切り替えます。" : "ドラッグで移動、Ctrl+ホイールで拡大できます。");
@@ -1297,6 +1317,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       ["50", "95"].forEach(function (lv) { if (cov[lv]) add(lv + "%の範囲に入った割合", pct(cov[lv].rate, 1), Math.abs(cov[lv].rate - Number(lv) / 100) <= 0.05 ? "good" : null); });
       add("方向の的中率", dir.rate != null ? pct(dir.rate, 1) + " (" + dir.hits + "/" + dir.n + ")" : "—");
       add("偶然 (50%) との差", dir.p != null ? (dir.p < 0.05 ? "有意 p=" + fmt(dir.p, 3) : "有意でない p=" + fmt(dir.p, 2)) : "—");
+      if (s.calls && s.calls.n) add("時間帯の偏りで方向を示した回の的中率", pct(s.calls.hit, 1) + " (" + s.calls.n + "件)", s.calls.hit > 0.5 ? "good" : null);
       add("誤差: ランダムウォーク比", s.skill != null ? signed(s.skill * 100, 1, "%") : "—", s.skill > 0 ? "good" : s.skill < 0 ? "bad" : null);
       add("確率の精度 (Brierスキル)", s.bss != null ? signed(s.bss * 100, 1, "%") : "—", s.bss > 0 ? "good" : s.bss < 0 ? "bad" : null);
       box.appendChild(kv); stats.appendChild(box);
@@ -1383,6 +1404,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       function add(k, v, cls) { kv.appendChild(el("span", null, k)); kv.appendChild(el("span", cls || null, v)); }
       ["50", "95"].forEach(function (lv) { add(lv + "%の範囲に入った割合", pct(a.cover[lv], 1), Math.abs(a.cover[lv] - Number(lv) / 100) <= 0.05 ? "good" : null); });
       add("方向の的中率", a.hit != null ? pct(a.hit, 1) : "—");
+      if (a.calls && a.calls.n) add("時間帯の偏りで方向を示した回 (" + pct(a.calls.share, 0) + ")", pct(a.calls.hit, 1) + " (" + a.calls.n.toLocaleString() + "件)", a.calls.hit > 0.5 ? "good" : null);
       add("誤差: ランダムウォーク比", a.skill != null ? signed(a.skill * 100, 2, "%") : "—", a.skill > 0 ? "good" : a.skill < 0 ? "bad" : null);
       if (r.n) add("直近" + btWindowName(tf, true) + "の80%の範囲", pct(r.cover["80"], 1), Math.abs(r.cover["80"] - 0.8) <= 0.07 ? "good" : null);
       st.appendChild(kv); box.appendChild(st);

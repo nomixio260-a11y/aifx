@@ -13,9 +13,11 @@ of its range) is taken from the most typical of the past situations that
 looked most like now: the last ``L`` bars' moves in units of their volatility,
 at the same time of day for intraday bars. Of the ``K`` nearest situations,
 the one whose continuation is closest to all the others (the medoid) is used.
-Because no method was found that calls the direction better than chance, the
-path is then tilted so that it ends at the forecast centre (the most accurate
-end point in the research).
+The one direction effect that held out of sample is the time-of-day drift
+(season.py): where it makes a call for a bar, that candle is drawn in the
+called direction (the analogue's candle, mirrored if needed). The path is then
+tilted, through the other candles, so that it ends at the forecast centre (the
+most accurate end point in the research).
 
 Everything is computed from the bars up to the origin, so the same candles
 can be rebuilt by anyone from the stored prices.
@@ -91,9 +93,10 @@ def sizes(tf_key: str, bars: pd.DataFrame, steps: int, minutes: int = 0) -> np.n
 
 
 def candles(tf_key: str, bars: pd.DataFrame, steps: int, end_target: float | None = None,
-            minutes: int = 0) -> tuple[list[list[float]], dict]:
+            minutes: int = 0, drift: np.ndarray | None = None) -> tuple[list[list[float]], dict]:
     """Forecast candles [open, high, low, close] for ``steps`` bars after the last one, and how they
-    were made. ``end_target``: the price the path should end at (the forecast centre)."""
+    were made. ``end_target``: the price the path should end at (the forecast centre). ``drift``:
+    the expected move of each bar from the time-of-day drift (bp, 0 where it makes no call)."""
     o, h, lo, c = (bars[k].to_numpy(float) for k in ("open", "high", "low", "close"))
     n = len(c)
     L = PATTERN[tf_key]
@@ -143,10 +146,17 @@ def candles(tf_key: str, bars: pd.DataFrame, steps: int, end_target: float | Non
     fh = np.where(rng > 0, (top - pc) / safe, 0.5)
     fl = np.where(rng > 0, (bot - pc) / safe, -0.5)
     size = sizes(tf_key, bars, steps, minutes)
+    call = np.zeros(steps) if drift is None else np.sign(np.asarray(drift, dtype=float)[:steps])
+    flip = call * np.sign(fc) < 0                           # a called bar's candle points the called way
+    fc, fh, fl = np.where(flip, -fc, fc), np.where(flip, -fl, fh), np.where(flip, -fh, fl)
+    doji = (call != 0) & (fc == 0)
+    fc = np.where(doji, call * 0.25, fc)
+    fh, fl = np.maximum(fh, fc), np.minimum(fl, fc)
     body = fc * size
     tilt = np.zeros(steps)
-    if end_target is not None and size.sum() > 0:           # spread the shift to the forecast centre by candle size
-        tilt = (np.log(end_target) - y[now] - body.sum()) * size / size.sum()
+    free = size * (call == 0) if np.any(call == 0) else size
+    if end_target is not None and free.sum() > 0:           # shift to the forecast centre through the uncalled candles
+        tilt = (np.log(end_target) - y[now] - body.sum()) * free / free.sum()
     out = []
     op = y[now]
     for j in range(steps):
@@ -155,5 +165,6 @@ def candles(tf_key: str, bars: pd.DataFrame, steps: int, end_target: float | Non
         lp = min(op + fl[j] * size[j], op, cp)
         out.append([float(np.exp(op)), float(np.exp(hp)), float(np.exp(lp)), float(np.exp(cp))])
         op = cp
-    info = {"analog_end": bars.index[ch[m]], "k": len(chosen), "pattern": L, "size": [float(x) for x in size]}
+    info = {"analog_end": bars.index[ch[m]], "k": len(chosen), "pattern": L, "size": [float(x) for x in size],
+            "call": [int(x) for x in call]}
     return out, info

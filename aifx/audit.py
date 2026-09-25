@@ -184,9 +184,11 @@ def verify(root: Path | str) -> dict:
                 add("rule", f"{tag} h={f['h']}: weights do not sum to 1")
             c0 = sum(w * m for w, m in zip(f["w"], f["m"]))
             sig = f["s"] * f["k"]
-            c = f["g"] * f["c0"] + f["b"] * p["news"]["x"] * sig
+            c = f["g"] * f["c0"] + f["b"] * p["news"]["x"] * sig + f.get("d", 0.0)
             if abs(c0 - f["c0"]) > 2e-3 or abs(c - f["c"]) > 2e-3 or abs(prob_up(f["c"], sig, f.get("nu")) - f["p"]) > 2e-4:
                 add("rule", f"{tag} h={f['h']}: stored numbers are inconsistent")
+            if f.get("d") and not tf.minutes:
+                add("rule", f"{tag} h={f['h']}: a time-of-day drift on a daily forecast")
         tr = p.get("trade")
         if tr is not None:
             ex = trade_exits(p["tf"])
@@ -254,7 +256,7 @@ def verify(root: Path | str) -> dict:
 
 def _compare(rec: dict, redo: dict) -> dict:
     diffs = {"p0": abs(rec["p0"] - redo["p0"]), "news_x": abs(rec["news"]["x"] - redo["news"]["x"])}
-    worst = {"m": 0.0, "s": 0.0, "w": 0.0, "k": 0.0, "b": 0.0, "g": 0.0, "c": 0.0, "p": 0.0}
+    worst = {"m": 0.0, "s": 0.0, "w": 0.0, "k": 0.0, "b": 0.0, "g": 0.0, "c": 0.0, "p": 0.0, "d": 0.0}
     for a, b in zip(rec["fc"], redo["fc"]):
         worst["m"] = max(worst["m"], max(abs(x - y) for x, y in zip(a["m"], b["m"])))
         worst["s"] = max(worst["s"], abs(a["s"] - b["s"]) / max(a["s"], 1e-9))
@@ -263,6 +265,7 @@ def _compare(rec: dict, redo: dict) -> dict:
         worst["b"] = max(worst["b"], abs(a["b"] - b["b"]))
         worst["g"] = max(worst["g"], abs(a["g"] - b["g"]))
         worst["c"] = max(worst["c"], abs(a["c"] - b["c"]))
+        worst["d"] = max(worst["d"], abs(a.get("d", 0.0) - b.get("d", 0.0)))
         worst["p"] = max(worst["p"], abs(a["p"] - b["p"]))
         if a.get("nu") != b.get("nu"):
             worst["p"] = max(worst["p"], 1.0)
@@ -272,7 +275,7 @@ def _compare(rec: dict, redo: dict) -> dict:
     worst["trade"] = diffs["trade"]
     ok = worst["trade"] == 0.0 and (diffs["p0"] < 1e-9 and diffs["news_x"] < 1e-6 and worst["m"] < 1e-3 and worst["s"] < 1e-6
           and worst["w"] < 1e-6 and worst["k"] < 1e-6 and worst["b"] < 1e-6 and worst["g"] < 1e-6
-          and worst["c"] < 2e-3 and worst["p"] < 2e-4)
+          and worst["c"] < 2e-3 and worst["p"] < 2e-4 and worst["d"] < 2e-3)
     return {"ok": ok, "diffs": {k: float(f"{v:.3g}") for k, v in diffs.items()}}
 
 
@@ -290,7 +293,9 @@ def reconstruct(ledger: Ledger, com: "_Committed", p: dict, pred_map: dict, outc
     earlier = {s: q for s, q in pred_map.items() if s < p["seq"]}
     samples = samples_from_ledger(earlier, outcomes, tf.key, upto_seq=p["learn"])
     st = learn(prior_rec, samples, tf.horizons, tf.half_life)
-    return make_prediction(tf, pair, bars, ref, origin, news_items, events, p["prior"], p["learn"], st, p["v"], rate_items)
+    hourly = ref if tf.ref == "1h" else com.prices_before(pair.code, "1h", p["seq"]) if tf.minutes else None
+    return make_prediction(tf, pair, bars, ref, origin, news_items, events, p["prior"], p["learn"], st, p["v"], rate_items,
+                           hourly)
 
 
 def audit(root: Path | str, sample: int = 4, seed: str | None = None) -> dict:
