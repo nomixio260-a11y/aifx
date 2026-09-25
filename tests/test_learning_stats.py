@@ -84,3 +84,13 @@ def test_scores_against_random_walk():
     assert s["skill"] == pytest.approx(0.0)
     assert s["direction"]["n"] == 0 and s["bss"] == pytest.approx(0.0)
     assert 0.75 < s["coverage"]["80"]["rate"] < 0.85
+
+
+def test_void_outcomes_are_not_learned_from():
+    from aifx.learning import samples_from_ledger
+    fc = {"h": 1, "t": "2026-09-22T01:00:00Z", "m": [0.0] * 6, "s": 10.0, "k": 1.0, "g": 0.0, "c0": 0.0, "c": 0.0}
+    preds = {1: {"seq": 1, "tf": "1h", "p0": 150.0, "news": {"x": 0.0}, "fc": [fc]},
+             2: {"seq": 2, "tf": "1h", "p0": 150.0, "news": {"x": 0.0}, "fc": [dict(fc, t="2026-09-22T02:00:00Z")]}}
+    outcomes = [{"seq": 3, "items": [[1, 1, None, None], [2, 1, 150.15, "2026-09-22T02:00:00Z"]]}]
+    got = samples_from_ledger(preds, outcomes, "1h")
+    assert len(got[1]) == 1 and got[1][0]["a"] > 0

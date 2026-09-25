@@ -135,7 +135,7 @@ def samples_from_ledger(predictions: dict[int, dict], outcomes: list[dict], tf: 
             break
         for pred_seq, h, actual, _bar_end in rec["items"]:
             p = predictions.get(pred_seq)
-            if p is None or p["tf"] != tf:
+            if p is None or p["tf"] != tf or actual is None:     # void: no price data up to the target
                 continue
             fc = next((f for f in p["fc"] if f["h"] == h), None)
             if fc is None:
