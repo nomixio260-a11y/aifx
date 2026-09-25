@@ -23,7 +23,7 @@ import pandas as pd
 
 from . import analysis, backtest, indicators
 from . import news as newsmod
-from . import track, trade
+from . import scenario, track, trade
 from .rates import latest as rates_latest
 from .data import CURRENCIES, PAIRS
 from .engine import (BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, bars_until, dist_cdf, dist_pdf, dist_quantile, fan_z,
@@ -109,6 +109,50 @@ def _trade_block(tf, pair, rec: dict, bars: pd.DataFrame, ref: pd.DataFrame, pre
     out["bt"] = {"days": TRADE_BT[tf.key].days, "stats": trade.stats(bt),
                  "trades": [_trade_item(tf.key, t, dec) for t in bt[-TRADE_LIST:]]}
     return out
+
+
+CANDLE_EVAL = {"15m": (timedelta(days=3), 5), "1h": (timedelta(days=20), 7), "1d": (timedelta(days=365), 5)}
+CANDLE_RESEARCH = RESEARCH.parent / "candles.json"
+
+
+def candle_eval(tf, bars: pd.DataFrame, now) -> list[tuple]:
+    """Forecast candles rebuilt at recent origins from the bars up to each origin, against the real
+    candles that followed: (step, forecast dir, actual dir, forecast colour, actual colour,
+    forecast size, actual size, 14-bar average size)."""
+    window, every = CANDLE_EVAL[tf.key]
+    steps = max(tf.horizons)
+    if len(bars) < 400:
+        return []
+    o, h, lo, c = (bars[k].to_numpy(float) for k in ("open", "high", "low", "close"))
+    atr = pd.Series(h - lo).rolling(14).mean().to_numpy()
+    since = pd.Timestamp(now - window)
+    if bars.index.tz is None:
+        since = since.tz_localize(None)
+    out = []
+    first = int(bars.index.searchsorted(since))
+    for t in range(max(first, 300), len(c) - 1, every):
+        cs, _ = scenario.candles(tf.key, bars.iloc[: t + 1], steps, float(c[t]), tf.minutes)
+        for j, (po, ph, pl, pc) in enumerate(cs):
+            k = t + 1 + j
+            if k >= len(c):
+                break
+            out.append((j + 1, np.sign(pc - c[t]), np.sign(c[k] - c[t]), np.sign(pc - po), np.sign(c[k] - o[k]),
+                        ph - pl, h[k] - lo[k], atr[t]))
+    return out
+
+
+def candle_stats(rows: list[tuple]) -> dict:
+    if not rows:
+        return {"n": 0}
+    R = np.array(rows, dtype=float)
+    d = (R[:, 1] != 0) & (R[:, 2] != 0)
+    b = (R[:, 3] != 0) & (R[:, 4] != 0)
+    ok = np.isfinite(R[:, 7])
+    mae = np.mean(np.abs(R[ok, 5] - R[ok, 6]))
+    mae_atr = np.mean(np.abs(R[ok, 7] - R[ok, 6]))
+    return {"n": int(len(R)), "dir_hit": _r(float(np.mean(R[d, 1] == R[d, 2])), 4) if d.any() else None,
+            "color_hit": _r(float(np.mean(R[b, 3] == R[b, 4])), 4) if b.any() else None,
+            "size_vs_atr": _r(float(mae / mae_atr - 1), 4) if mae_atr > 0 else None}
 
 
 def research_summary(path: Path = RESEARCH) -> dict | None:
@@ -333,6 +377,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
     payloads: dict[str, dict] = {}
     pair_summaries = []
     rate_item = rates_latest(state.rates.load(since=now - timedelta(days=40)))
+    candle_rows: dict[str, list] = {}
     trade_res = trade_research()
     preds_by = {}
     for p in preds:
@@ -401,11 +446,34 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                 }
             elif rec is not None:
                 block["path"] = _coarse_path(rec, block["prediction"]["horizons"], tf_key, dec)
+            if rec is not None and block.get("path"):
+                steps_ = block["path"]["steps"]
+                hist = bars_until(tf, bars, parse_iso(rec["origin"]))
+                cs, info = scenario.candles(tf_key, hist, len(steps_), steps_[-1]["c"], tf.minutes)
+                if cs:
+                    block["candles"] = {"items": [[_r(v, dec) for v in k] for k in cs], "x": [st["x"] for st in steps_],
+                                        "t": [st["t"] for st in steps_], "analog": str(info["analog_end"])}
+                candle_rows.setdefault(tf_key, []).extend(candle_eval(tf, bars, now))
             if tf_key == "1d" and len(daily) > 80:
                 block["technical"] = indicators.technical_summary(daily, indicators.compute_all(daily))
             payload["tf"][tf_key] = block
         payloads[code] = payload
         pair_summaries.append(summary)
+
+    # forecast candles: how they have done lately (all pairs), and in the research
+    try:
+        cres = json.loads(CANDLE_RESEARCH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cres = {}
+    for tf_key, rows_ in candle_rows.items():
+        steps_all = max(TIMEFRAMES[tf_key].horizons)
+        acc = {"window_days": CANDLE_EVAL[tf_key][0].days or 1, "all": candle_stats(rows_),
+               "next": candle_stats([r for r in rows_ if r[0] == 1]), "last": candle_stats([r for r in rows_ if r[0] == steps_all]),
+               "research": (cres.get(tf_key) or {}).get("h")}
+        for code in payloads:
+            blk = payloads[code]["tf"].get(tf_key)
+            if blk and "candles" in blk:
+                blk["candles"]["accuracy"] = acc
 
     # news --------------------------------------------------------------
     items = state.news.load(since=now - timedelta(days=4))

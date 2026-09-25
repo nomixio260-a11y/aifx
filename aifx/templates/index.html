@@ -256,6 +256,8 @@ td .chip { font-size: 11.5px; }
 .chart { width: 100%; height: 480px; touch-action: pan-y; }
 .chart.small { height: 260px; }
 .note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.acc-line { font-size: 12.5px; color: var(--ink2); margin: -4px 0 0; }
+.acc-line:empty { display: none; }
 details.more > summary { cursor: pointer; font-size: 13px; color: var(--ink-2); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; }
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "▸"; font-size: 11px; color: var(--muted); }
@@ -394,6 +396,7 @@ footer p { margin: 0; max-width: 95ch; }
         <div class="ctl"><span class="ctl-label" id="lbl-range">表示期間</span><div class="seg" id="seg-range" role="group" aria-labelledby="lbl-range"></div></div>
       </div>
       <div class="chart" id="chart" role="img" aria-label="ローソク足と売買プラン"></div>
+      <p class="acc-line" id="chart-acc"></p>
       <div class="chart-foot1">
         <div class="toggles" id="toggles"></div>
         <p class="note" id="chart-note"></p>
@@ -806,21 +809,19 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     renderControls();
   }
 
-  // Forecast candles: each future bar opens at the previous forecast close and closes at the
-  // forecast centre; the wicks span the bar's expected high-low range (sqrt(8/pi) sd of a random
-  // walk over the bar), from the per-bar variance the server's forecast implies.
+  // Forecast candles from the server (scenario.py): open, high, low, close of each future bar
   function predCandles(blk) {
-    var steps = blk && blk.path ? blk.path.steps : [];
-    if (!steps.length || !blk.prediction) return [];
-    var z80 = 1.2816; var prevC = blk.prediction.p0; var prevV = 0; var out = [];
-    steps.forEach(function (s) {
-      var sdc = s.hi80 != null ? (s.hi80 - s.lo80) / 2 / z80 : 0; var v = sdc * sdc;
-      var sd = Math.sqrt(Math.max(v - prevV, v * 0.02)); prevV = Math.max(v, prevV);
-      var o = prevC, c = s.c, half = 0.8 * sd;
-      out.push({ t: s.t, x: s.x, o: o, c: c, h: Math.max(o, c) + half, l: Math.min(o, c) - half, p: s.p });
-      prevC = c;
-    });
-    return out;
+    var C = blk && blk.candles; if (!C || !C.items) return [];
+    var steps = (blk.path && blk.path.steps) || [];
+    return C.items.map(function (k, i) { return { t: C.t[i], x: C.x[i], o: k[0], h: k[1], l: k[2], c: k[3], p: steps[i] ? steps[i].p : null }; });
+  }
+  function candleAccText(blk, short) {
+    var A = blk && blk.candles && blk.candles.accuracy; if (!A || !A.all || !A.all.n) return "";
+    var sz = A.all.size_vs_atr, dh = A.all.dir_hit;
+    if (short) return "予想ローソク足の直近" + A.window_days + "日の成績: 足の大きさの誤差は平均値幅 (ATR) より " +
+      (sz != null ? (sz <= 0 ? pct(-sz, 0) + " 小さい" : pct(sz, 0) + " 大きい") : "—") + "・終値の方向の的中率 " + pct(dh, 1) + " (偶然は50%)";
+    return "予想ローソク足の成績 (直近" + A.window_days + "日・7ペア・" + A.all.n.toLocaleString() + "本): 足の大きさ (高値−安値) の誤差は、単純な平均値幅 (ATR) と比べて " + (sz != null ? signed(sz * 100, 0, "%") : "—") +
+      "、終値の方向の的中率 " + pct(dh, 1) + "、陽線・陰線の的中率 " + pct(A.all.color_hit, 1) + "。";
   }
 
   var TOGGLES = [
@@ -849,7 +850,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       key("key dotk", "background:" + t.good, "利確");
       key("key diak", "background:" + t.bad, "損切り");
     }
-    if (S.show.pred) key("key box", "background:" + alpha(t.accent, 0.3) + ";border:1.5px solid " + t.accent, "予想ローソク足");
+    if (S.show.pred) key("key candle", "background:linear-gradient(90deg," + alpha(t.up, 0.5) + " 50%," + alpha(t.down, 0.5) + " 50%);border:1.2px solid " + t.ink2, "予想ローソク足 (薄い色)");
     key("key", "border-color:" + t.ink2, "現在値");
     if (S.show.ma) { key("key", "border-color:" + t.ma20, "20本平均"); key("key", "border-color:" + t.ma75, "75本平均"); }
   }
@@ -1033,9 +1034,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     if (S.show.pred && pc.length) {
       var pdata = new Array(nH).fill("-").concat(pc.map(function (k) { return [k.o, k.c, k.l, k.h]; }));
       series.push({ name: "予想ローソク足", type: "candlestick", data: pdata, barMaxWidth: 10, z: 6,
-        itemStyle: { color: alpha(t.accent, 0.35), color0: alpha(t.accent, 0.12), borderColor: alpha(t.accent, 0.75), borderColor0: alpha(t.accent, 0.75), borderWidth: 1 } });
-      var pline = new Array(N).fill("-"); pline[lastIdx] = blk.prediction.p0; pc.forEach(function (k, i) { pline[nH + i] = k.c; });
-      series.push({ name: "予想の終値", type: "line", data: pline, symbol: "none", silent: true, z: 7, lineStyle: { width: 2, color: t.accent, type: [6, 3] } });
+        itemStyle: { color: alpha(t.up, 0.5), color0: alpha(t.down, 0.5), borderColor: t.up, borderColor0: t.down, borderWidth: 1.2 } });
     }
     // trade plan: take-profit and stop zones up to the time limit, and past signals with their results
     var T = blk.trade; var sigAt = {};
@@ -1120,8 +1119,9 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series: series
     };
     chartOn("chart").setOption(option, true);
-    $("chart-note").textContent = (S.show.pred ? "紫のローソク足がサーバーの予想です。実体は予想の終値の動き、ヒゲはその足で動きそうな幅 (時間帯や指標発表で変わります)。" +
-        "方向を当てる根拠は見つかっていないため、終値はほぼ横ばいになります。" + (blk.path && blk.path.coarse ? "(以前の版の予測のため、予想時点の間を直線でつないでいます) " : "") : "") +
+    $("chart-acc").textContent = S.show.pred && pc.length ? candleAccText(blk, true) : "";
+    $("chart-note").textContent = (S.show.pred && pc.length ? "「これから」の範囲の薄い色のローソク足がサーバーの予想です。今と値動きの形・時間帯が似た過去の局面の続きを、今の値動きの大きさに合わせて描いています。" +
+        "足の大きさは当たりやすい一方、陽線か陰線か (方向) は検証で偶然と区別できず、当てにできません。" + candleAccText(blk, false) : "") +
       (S.show.trade ? "緑の帯が利確、赤の帯が損切りまでの範囲で、右端が決済の期限です。▲▼は過去のシグナル、●は利確、◆は損切り、■は期限での決済。" : "") +
       ((blk.path && blk.path.events || []).length ? "橙の点線は重要指標の発表時刻。" : "") +
       (coarseMQ.matches ? "期間はボタンで切り替えます。" : "ドラッグで移動、Ctrl+ホイールで拡大できます。");
