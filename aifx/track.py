@@ -7,6 +7,7 @@ from collections import defaultdict
 
 import numpy as np
 
+from . import season
 from .engine import BAND_Z, BP, MODEL_KEYS, TIMEFRAMES, band_z
 from .stats import scores
 
@@ -28,7 +29,8 @@ def join(predictions: list[dict], outcomes: list[dict]) -> tuple[list[dict], set
                 "seq": pseq, "pair": p["pair"], "tf": p["tf"], "h": h, "issued": p["at"], "origin": p["origin"],
                 "target": f["t"], "p0": p["p0"], "c": f["c"], "c0": f["c0"], "g": f["g"],
                 "sigma": f["s"] * f["k"], "p": f["p"], "z": band_z(f.get("nu")),
-                "m": f["m"], "x": p["news"]["x"], "d": f.get("d", 0.0), "actual": actual, "a": a, "bar_end": bar_end,
+                "m": f["m"], "x": p["news"]["x"], "d": f.get("d", 0.0), "dt": f.get("dt", 0.0), "actual": actual, "a": a,
+                "bar_end": bar_end,
                 "scored": o["at"],
             })
     rows.sort(key=lambda r: (r["target"], r["seq"], r["h"]))
@@ -65,10 +67,15 @@ def summary(rows: list[dict], tf: str, h: int) -> dict:
 
 
 def direction_calls(sel: list[dict]) -> dict:
-    """Forecasts whose direction came from the time-of-day drift (season.py): how often it was right."""
-    calls = [r for r in sel if abs(r.get("d", 0.0)) > 1e-9 and abs(r["a"]) > 1e-9 and abs(r["c"]) > 1e-9]
-    return {"n": len(calls), "share": len(calls) / len(sel) if sel else None,
-            "hit": float(np.mean([(r["c"] > 0) == (r["a"] > 0) for r in calls])) if calls else None}
+    """Forecasts whose direction came from the time-of-day drift (season.py): how often it was right,
+    all calls and the high-confidence ones."""
+    out = {}
+    for name, keep in (("all", lambda r: True), ("high", lambda r: abs(r.get("dt", 0.0)) >= season.T_HIGH)):
+        pool = [r for r in sel if abs(r.get("d", 0.0)) > 1e-9 and keep(r)]
+        calls = [r for r in pool if abs(r["a"]) > 1e-9 and abs(r["c"]) > 1e-9]
+        out[name] = {"n": len(calls), "share": len(pool) / len(sel) if sel else None,
+                     "hit": float(np.mean([(r["c"] > 0) == (r["a"] > 0) for r in calls])) if calls else None}
+    return out
 
 
 def timeline(rows: list[dict], tf: str, h: int, max_points: int = 160) -> list[list]:

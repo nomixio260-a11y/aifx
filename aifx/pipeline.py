@@ -257,10 +257,9 @@ def run_cycle(root: Path | str, now: datetime | None = None, market=None, collec
                 continue
             if target_times(tf, origin, tf.horizons[:1])[0] <= at:
                 continue    # the next bar has already closed: a forecast for it would not be ahead of time
-            hourly = ref if tf.ref == "1h" else state.prices.load(pair.code, "1h") if tf.minutes else None
             try:
                 rec, chart = make_prediction(tf, pair, bars, ref, origin, news_items, events,
-                                             prior_rec["seq"], learn_seq, st, version, rate_items, hourly)
+                                             prior_rec["seq"], learn_seq, st, version, rate_items)
             except Exception as exc:
                 report.errors.append(f"{pair.code} {tf.key} forecast: {exc}")
                 traceback.print_exc()

@@ -265,7 +265,7 @@ def _compare(rec: dict, redo: dict) -> dict:
         worst["b"] = max(worst["b"], abs(a["b"] - b["b"]))
         worst["g"] = max(worst["g"], abs(a["g"] - b["g"]))
         worst["c"] = max(worst["c"], abs(a["c"] - b["c"]))
-        worst["d"] = max(worst["d"], abs(a.get("d", 0.0) - b.get("d", 0.0)))
+        worst["d"] = max(worst["d"], abs(a.get("d", 0.0) - b.get("d", 0.0)), abs(a.get("dt", 0.0) - b.get("dt", 0.0)) / 100)
         worst["p"] = max(worst["p"], abs(a["p"] - b["p"]))
         if a.get("nu") != b.get("nu"):
             worst["p"] = max(worst["p"], 1.0)
@@ -293,9 +293,7 @@ def reconstruct(ledger: Ledger, com: "_Committed", p: dict, pred_map: dict, outc
     earlier = {s: q for s, q in pred_map.items() if s < p["seq"]}
     samples = samples_from_ledger(earlier, outcomes, tf.key, upto_seq=p["learn"])
     st = learn(prior_rec, samples, tf.horizons, tf.half_life)
-    hourly = ref if tf.ref == "1h" else com.prices_before(pair.code, "1h", p["seq"]) if tf.minutes else None
-    return make_prediction(tf, pair, bars, ref, origin, news_items, events, p["prior"], p["learn"], st, p["v"], rate_items,
-                           hourly)
+    return make_prediction(tf, pair, bars, ref, origin, news_items, events, p["prior"], p["learn"], st, p["v"], rate_items)
 
 
 def audit(root: Path | str, sample: int = 4, seed: str | None = None) -> dict:

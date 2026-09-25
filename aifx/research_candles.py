@@ -35,7 +35,6 @@ def evaluate(tf: str, log=print) -> dict:
     span = None
     for code in PAIRS:
         df = _load(tf, code)
-        hourly = history.load_hourly(code) if minutes else None
         n = len(df)
         start = int(n * 0.6)
         o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
@@ -43,7 +42,7 @@ def evaluate(tf: str, log=print) -> dict:
         span = (str(df.index[start])[:10], str(df.index[-1])[:10])
         for t in range(start, n - steps, every):
             origin = (df.index[t] + pd.Timedelta(minutes=minutes)).to_pydatetime() if minutes else None
-            drift = season.step_drift(minutes, hourly, origin, steps) if minutes else np.zeros(steps)
+            drift = season.step_drift(minutes, df, origin, steps)[0] if minutes else np.zeros(steps)
             end = season.centre_drift(drift, minutes)[-1] if minutes else 0.0
             cs, _ = scenario.candles(tf, df.iloc[: t + 1], steps, c[t] * np.exp(end / 1e4), minutes, drift)
             if not cs:

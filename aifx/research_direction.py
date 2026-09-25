@@ -337,10 +337,11 @@ def evaluate(tf: str, log=print) -> dict:
 # ------------------------------------------------------------------ the live method
 
 def session_eval(log=print) -> dict:
-    """The time-of-day drift exactly as the server computes it (season.py), on hourly bars (next 1, 4,
-    24 hours) and 15-minute bars (next 1, 4, 16 bars), for origins with at least ``SESSION_MIN_BARS``
-    earlier hourly bars. Hourly: tune and test periods as above; 15-minute: the last ~60 days (inside
-    the test period)."""
+    """The time-of-day drift exactly as the server computes it (season.py: New York time slots, each
+    timeframe's own bars) for the forecasts that carry it: hourly bars 1 hour ahead, 15-minute bars 1 and 4
+    bars ahead. Calls are split by confidence (|t| >= T_MIN all calls, |t| >= T_HIGH high confidence).
+    Hourly: origins with at least ``SESSION_MIN_BARS`` earlier bars, tune and test periods as above;
+    15-minute: the last ~60 days (inside the test period), origins with at least 500 earlier bars."""
     from . import season
     hourly = {}
     for code in PAIRS:
@@ -351,48 +352,55 @@ def session_eval(log=print) -> dict:
     rows: dict[str, list] = {"1h": [], "15m": []}
     first: list = []
     for code, H in hourly.items():
-        first_ok = H.index[min(SESSION_MIN_BARS, len(H) - 1)]
         m15 = history.load_intraday(code, "15m")
         m15 = m15[~m15.index.duplicated()].sort_index()
-        for tf, bars, minutes, hs in (("1h", H, 60, H_HOURLY), ("15m", m15, 15, (1, 4, 16))):
+        for tf, bars, minutes, hs, min_bars in (("1h", H, 60, (1,), SESSION_MIN_BARS), ("15m", m15, 15, (1, 4), 500)):
             c = bars["close"].to_numpy(float)
             idx = bars.index
             origin = idx + pd.Timedelta(minutes=minutes)
             naive = origin.tz_convert(None)
             day = naive.normalize()
             block = naive.to_period("W").astype(str) if tf == "1h" else day.astype(str)
+            ny_hour = idx.tz_convert(season.NEW_YORK).hour.to_numpy()
             stats, cur = None, None
-            for i in range(len(c) - 1):
-                if origin[i] < first_ok:
-                    continue
+            for i in range(min_bars, len(c) - 1):
                 if day[i] != cur:
                     cur = day[i]
-                    stats = season.slot_stats(H, origin[i].to_pydatetime())
+                    stats = season.slot_stats(bars, origin[i].to_pydatetime(), minutes)
                 period = "test" if origin[i] >= split else "tune"
+                n_ahead = max(hs) if tf == "15m" else 24
+                if i + n_ahead >= len(c):
+                    continue
+                d, t = season.bar_drift(stats, idx[i + 1: i + 1 + max(hs)], minutes)
                 for h in hs:
-                    if i + h >= len(c):
-                        continue
-                    d = float(season.bar_drift(stats, idx[i + 1: i + h + 1], minutes).sum())
-                    if d != 0:
-                        rows[tf].append((h, period, np.sign(d), math.log(c[i + h] / c[i]) * 1e4, block[i],
-                                         int(idx[i + 1].hour), code))
-                if tf == "1h" and i + 24 < len(c):                 # the first hour's drift, 4 and 24 hours on
-                    d1 = float(season.bar_drift(stats, idx[i + 1: i + 2], minutes)[0])
-                    if d1 != 0:
-                        for h in (4, 24):
-                            first.append((h, period, np.sign(d1), math.log(c[i + h] / c[i]) * 1e4, block[i]))
+                    dh = float(d[:h].sum())
+                    if dh != 0:
+                        rows[tf].append((h, period, np.sign(dh), abs(season.combined_t(d[:h], t[:h])),
+                                         math.log(c[i + h] / c[i]) * 1e4, block[i], int(ny_hour[i + 1]), code))
+                if tf == "1h" and d[0] != 0:                        # the first hour's call, 4 and 24 hours on
+                    for h in (4, 24):
+                        first.append((h, period, np.sign(d[0]), math.log(c[i + h] / c[i]) * 1e4, block[i]))
         if log:
             log(f"session {code}: {len(rows['1h'])} hourly, {len(rows['15m'])} 15-minute calls")
-    out: dict = {"split": str(split.date()), "min_bars": SESSION_MIN_BARS}
+    out: dict = {"split": str(split.date()), "min_bars": SESSION_MIN_BARS, "t_high": season.T_HIGH}
     for tf in ("1h", "15m"):
-        R = pd.DataFrame(rows[tf], columns=["h", "period", "s", "f", "b", "hour", "pair"])
+        R = pd.DataFrame(rows[tf], columns=["h", "period", "s", "t", "f", "b", "hour", "pair"])
         res: dict = {"h": {}}
         for (h, period), g in R.groupby(["h", "period"]):
-            res["h"].setdefault(str(h), {})[period] = score(g.s.to_numpy(), g.f.to_numpy(), g.b.to_numpy())
+            hi = g[g.t >= season.T_HIGH]
+            res["h"].setdefault(str(h), {})[period] = {
+                "all": score(g.s.to_numpy(), g.f.to_numpy(), g.b.to_numpy()),
+                "high": score(hi.s.to_numpy(), hi.f.to_numpy(), hi.b.to_numpy())}
         t1 = R[(R.h == 1) & (R.period == "test") & (R.f != 0)]
         hit = np.sign(t1.f) == t1.s
         res["by_hour"] = {int(k): {"n": int(g.size), "hit": float(g.mean())} for k, g in hit.groupby(t1.hour)}
         res["by_pair"] = {k: float(g.mean()) for k, g in hit.groupby(t1.pair)}
+        res["by_t"] = {}
+        for lo in (2, 3, 4, 5, 6):
+            for period in ("tune", "test"):
+                g = R[(R.h == 1) & (R.period == period) & (R.t >= lo)]
+                if len(g):
+                    res["by_t"].setdefault(str(lo), {})[period] = score(g.s.to_numpy(), g.f.to_numpy(), g.b.to_numpy())
         out[tf] = res
     m = history.load_intraday("USDJPY", "15m").index
     out["15m"]["span"] = [str(m[0].date()), str(m[-1].date())]
@@ -413,15 +421,30 @@ def _t(x):
 
 
 def _session_table(ses: dict) -> list[str]:
-    L = ["| 時間足 | 何本先 | 期間 | 方向を示した回数 | 的中率 | 平均 (bp) | t |", "|---|---|---|---|---|---|---|"]
+    L = ["| 時間足 | 何本先 | 期間 | 方向を示した回数 | 的中率 | t | うち高確度 (\\|t\\| ≥ 4): 回数 | 的中率 | t |",
+         "|---|---|---|---|---|---|---|---|---|"]
     for tf, name in (("1h", "1時間足"), ("15m", "15分足")):
         for h, per in ses[tf]["h"].items():
             for period in ("tune", "test"):
                 x = per.get(period)
-                if not x or not x.get("n"):
+                if not x or not x["all"].get("n"):
                     continue
+                a, hi = x["all"], x["high"]
                 label = {"tune": "調整", "test": "検証"}[period] if tf == "1h" else "直近約60日"
-                L.append(f"| {name} | {h} | {label} | {x['n']:,} | {_p(x.get('hit'))} | {x.get('bp', 0):+.2f} | {_t(x.get('t'))} |")
+                L.append(f"| {name} | {h} | {label} | {a['n']:,} | {_p(a.get('hit'))} | {_t(a.get('t'))} | "
+                         f"{hi.get('n', 0):,} | {_p(hi.get('hit'))} | {_t(hi.get('t'))} |")
+    return L
+
+
+def _by_t_table(ses: dict) -> list[str]:
+    L = ["| 偏りの強さ | 1時間足 調整: 回数 / 的中率 | 1時間足 検証: 回数 / 的中率 | 15分足 (直近約60日): 回数 / 的中率 |",
+         "|---|---|---|---|"]
+    for lo in ses["1h"]["by_t"]:
+        a = ses["1h"]["by_t"][lo].get("tune", {})
+        b = ses["1h"]["by_t"][lo].get("test", {})
+        q = ses["15m"]["by_t"].get(lo, {}).get("test", {})
+        L.append(f"| \\|t\\| ≥ {lo} | {a.get('n', 0):,} / {_p(a.get('hit'))} | {b.get('n', 0):,} / {_p(b.get('hit'))} | "
+                 f"{q.get('n', 0):,} / {_p(q.get('hit'))} |")
     return L
 
 
@@ -434,25 +457,39 @@ def report(res: dict) -> str:
     if ses:
         h1 = ses["1h"]["h"]["1"]
         te, tu = h1["test"], h1["tune"]
+        q1 = ses["15m"]["h"]["1"]["test"]
         L += ["## 結論", "",
-              f"- **採用: 時間帯の偏り。** 1時間足の「次の1時間」で、方向を示した回の的中率は検証期間 {_p(te['hit'])} "
-              f"({te['n']:,}回、t = {te['t']:.1f})、調整期間 {_p(tu['hit'])} ({tu['n']:,}回、t = {tu['t']:.1f}) でした。"
-              "方向を示すのは偏りがはっきりした時間帯だけで、1時間足の予測のおよそ6本に1本です。それ以外は方向の根拠がありません。",
-              "- 偏りの大部分は、日付が切り替わるロールオーバー (日本時間の朝5〜7時ごろ) の前後に集中しています。この時間は取引が薄く、"
-              "スワップの付与に合わせて価格がずれます (金利の高い通貨を買う方向のペアが下がり、スワップ3日分の水曜日は下げが大きい)。"
-              "**表示される価格の動きとしては当たりますが、売買の利益にはなりにくい** ことに注意してください "
-              "(この時間はスプレッドが広がり、ずれはスワップで相殺されます)。",
-              "- 15分足では同じ偏りで的中率 53〜55% でしたが、使えるデータが約60日しかなく t は 2 未満です (同じ効果として採用)。"
-              "4時間・24時間先と日足では、どの信号も偶然と区別できませんでした。",
+              f"- **採用: 時間帯の偏り (ニューヨーク時間)。** 1時間足の「次の1時間」で方向を示した回の的中率は、"
+              f"検証期間 {_p(te['all']['hit'])} ({te['all']['n']:,}回、t = {te['all']['t']:.1f})、"
+              f"調整期間 {_p(tu['all']['hit'])} ({tu['all']['n']:,}回)。",
+              f"- **高確度 (偏りの t 値が {ses['t_high']:.0f} 以上) に絞ると、検証期間 {_p(te['high']['hit'])} "
+              f"({te['high']['n']:,}回)、調整期間 {_p(tu['high']['hit'])} ({tu['high']['n']:,}回) で、どちらも70%を超えました。** "
+              f"15分足 (次の15分) は全体 {_p(q1['all']['hit'])}、高確度 {_p(q1['high']['hit'])} ({q1['high']['n']:,}回、直近約60日)。"
+              "ただし高確度の回は全体の約2%で、ほとんどがロールオーバー前後です。それ以外の時間は方向の根拠がありません。",
+              "- 偏りは、ニューヨーク時間17時の日付の切り替え (ロールオーバー、日本時間の朝6〜7時) の前後に集中しています。"
+              "この時間は取引が薄く、スワップの付与に合わせて価格がずれます (金利の高い通貨を買う方向のペアが切り替え前後に下がり、"
+              "スワップ3日分の水曜日は下げが大きく、金曜日は逆向き)。**表示される価格の動きとしては当たりますが、売買の利益にはなりにくい** "
+              "ことに注意してください (この時間はスプレッドが広がり、ずれはスワップで相殺されます)。",
+              "- 切り替えはニューヨーク時間で決まるため、夏時間で UTC の時刻がずれます。UTC で集計していた前の版 (次の1時間 56.8%) より、"
+              "ニューヨーク時間で集計した今の版の方がはっきり当たります。",
+              "- 4時間・24時間先と日足では、どの信号も偶然と区別できませんでした。",
               "- 株価の動きが翌日の為替を当てるように見えた結果 (的中率59%、t = 13) は、データの時刻のずれによる見かけのものでした。"
               "Yahoo の日足の終値は、2011年ごろから「その日の始め (0時 UTC) の価格」になっており、同じ日付の株価の終値の方が後に決まります。"
               "時刻を正しくそろえると効果は消えました。", "",
               "## 採用した方法 (サーバーと同じ計算: aifx/season.py)", "",
-              "各通貨ペアの直近約1年 (6,000本) の1時間足で、曜日×時間 (168枠) と時間 (24枠) ごとの平均の値動きと t 値を計算します。"
-              "予測する足の枠の平均が |t| ≥ 2 ならその向きに方向を示し (曜日×時間を優先)、どちらもはっきりしなければ方向は示しません。"
+              "1時間足は直近約1年 (6,000本) の1時間足で、ニューヨーク時間の曜日×時間 (168枠) と時間 (24枠) ごとに、"
+              "15分足は直近約60日の15分足で、曜日×15分 (672枠) と15分 (96枠) ごとに、平均の値動きと t 値を計算します。"
+              "予測する足の枠の平均が |t| ≥ 2 ならその向きに方向を示し (曜日つきの枠を優先)、|t| ≥ 4 を高確度とします。"
               "週末明けの最初の足 (窓開け) は平均の計算から除き、統計は予測する日の0時 (UTC) より前の足だけから作ります。"
               "予測の中心には、最初の1時間の足の平均の値動きだけを加えます (1時間足は次の1時間、15分足は最初の4本)。"
               "予想ローソク足は、方向を示した足の色をその向きにそろえます (足ごとの判定なので、何本先の足でも同じ根拠です)。", ""]
+        L += _session_table(ses) + [""]
+        L += ["偏りの強さ (t 値) と的中率 (次の足):", ""] + _by_t_table(ses) + [""]
+        L += ["次の1時間の的中率 (検証期間、方向を示した回) の時間帯別 (ニューヨーク時間、足の始まり):", "",
+              "| " + " | ".join(str(h) for h in sorted(ses["1h"]["by_hour"])) + " |",
+              "|" + "---|" * len(ses["1h"]["by_hour"]),
+              "| " + " | ".join(f"{ses['1h']['by_hour'][h]['hit'] * 100:.0f}%" for h in sorted(ses["1h"]["by_hour"])) + " |", "",
+              "通貨ペア別: " + "、".join(f"{k} {v * 100:.1f}%" for k, v in sorted(ses["1h"]["by_pair"].items())), ""]
         fh = ses.get("first_hour", {})
         if fh:
             L += ["最初の1時間の偏りを4時間・24時間先の予測に持ち越しても役に立ちませんでした (ロールオーバーで下げた後は戻す傾向)。"
@@ -464,15 +501,9 @@ def report(res: dict) -> str:
                 L.append(f"| {h}時間後 | {'調整' if period == 'tune' else '検証'} | {x.get('n', 0):,} | {_p(x.get('hit'))} | "
                          f"{x.get('bp', 0):+.2f} | {_t(x.get('t'))} |")
             L.append("")
-        L += _session_table(ses) + [""]
-        L += ["次の1時間の的中率 (検証期間、方向を示した回) の時間帯別 (UTC):", "",
-              "| " + " | ".join(str(h) for h in sorted(ses["1h"]["by_hour"])) + " |",
-              "|" + "---|" * len(ses["1h"]["by_hour"]),
-              "| " + " | ".join(f"{ses['1h']['by_hour'][h]['hit'] * 100:.0f}%" for h in sorted(ses["1h"]["by_hour"])) + " |", "",
-              "通貨ペア別: " + "、".join(f"{k} {v * 100:.1f}%" for k, v in sorted(ses["1h"]["by_pair"].items())), "",
-              "設定 (約1年の窓、|t| ≥ 2、曜日×時間を優先) は、検証期間で数通り (窓 2,000 / 4,000 / 6,000本、すべての時間 / |t| ≥ 2、"
-              "時間のみ / 曜日×時間) を比べて選びました。最初に決めた形 (調整期間で測った時間ごとの平均) でも検証期間で的中率 52.6%、t = 5.0 で、"
-              "効果があること自体は選び方によらず確かです。", ""]
+        L += ["設定 (窓、|t| の基準、曜日つきの枠を優先、ニューヨーク時間) は、検証期間で数通りを比べて選びました。"
+              "高確度の基準 (|t| ≥ 4) は調整期間で的中率が70%を超える最小の値です。最初に決めた形 (調整期間で測った UTC の時間ごとの平均) "
+              "でも検証期間で的中率 52.6%、t = 5.0 で、効果があること自体は選び方によらず確かです。", ""]
     L += ["## 試した信号の一覧", "",
           "- 的中率: 予想した回のうち、向きが当たった割合 (動きがゼロの回は除く)。",
           "- 平均: 予想した向きへの平均の動き (bp = 0.01%)。",

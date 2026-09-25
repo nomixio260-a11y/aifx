@@ -14,49 +14,59 @@ from .conftest import run_session
 UTC = timezone.utc
 
 
-def _hourly(n=4000, seed=2, drift_hour=21, drift_bp=4.0, weekend_jump_bp=0.0):
-    """Hourly bars on the trading calendar, 5 bp noise, a steady move at ``drift_hour`` UTC and an
-    optional jump at the first bar after each weekend."""
+def _bars(n=4000, minutes=60, seed=2, drift_ny=(16, 0), drift_bp=4.0, weekend_jump_bp=0.0, start=datetime(2025, 6, 2)):
+    """Bars of ``minutes`` on the trading calendar, 5 bp noise, a steady move in the bar starting at
+    ``drift_ny`` (hour, minute) New York time, and an optional jump at the first bar after each weekend."""
     rng = np.random.default_rng(seed)
-    t = datetime(2025, 6, 2, tzinfo=UTC)
+    t = start.replace(tzinfo=UTC)
     starts = []
     while len(starts) < n:
-        t = add_trading_minutes(t, 1, 60)
-        starts.append(t - timedelta(hours=1))
+        t = add_trading_minutes(t, 1, minutes)
+        starts.append(t - timedelta(minutes=minutes))
     idx = pd.DatetimeIndex(starts)
-    r = rng.normal(0, 5.0, n) + np.where(idx.hour == drift_hour, drift_bp, 0.0)
-    after_pause = np.concatenate([[False], np.diff(idx.as_unit("ns").asi8) > 3600e9])
+    ny = idx.tz_convert(season.NEW_YORK)
+    at = (ny.hour == drift_ny[0]) & (ny.minute == drift_ny[1])
+    r = rng.normal(0, 5.0, n) + np.where(at, drift_bp, 0.0)
+    after_pause = np.concatenate([[False], np.diff(idx.as_unit("ns").asi8) > minutes * 60e9])
     r = r + np.where(after_pause, weekend_jump_bp, 0.0)
     c = 150 * np.exp(np.cumsum(r) / 1e4)
     o = np.concatenate([[150.0], c[:-1]])
     return pd.DataFrame({"open": o, "high": np.maximum(o, c) * 1.0003, "low": np.minimum(o, c) * 0.9997, "close": c}, index=idx)
 
 
-def test_the_drift_finds_a_steady_hour_and_uses_only_earlier_days():
-    bars = _hourly()
-    origin = datetime(2026, 1, 14, 20, tzinfo=UTC)               # a Wednesday, 20:00 UTC
-    d = season.step_drift(60, bars, origin, 6)
-    assert 2.0 < d[1] < 6.5                                      # the bar starting at 21:00 (a Wednesday slot: ~35 bars)
+def test_the_drift_finds_a_steady_new_york_hour_and_uses_only_earlier_days():
+    bars = _bars()                                               # June to January: across the change of US daylight time
+    origin = datetime(2026, 1, 14, 20, tzinfo=UTC)               # a Wednesday, 15:00 in New York
+    d, t = season.step_drift(60, bars, origin, 6)
+    assert 2.0 < d[1] < 6.5 and abs(t[1]) >= season.T_MIN       # the bar starting 16:00 New York (21:00 UTC in winter)
     assert np.count_nonzero(d) <= 2
     # bars from the origin's day on do not matter
     later = bars.copy()
     later.loc[later.index >= pd.Timestamp("2026-01-14", tz="UTC"), "close"] *= 1.05
-    assert np.array_equal(season.step_drift(60, later, origin, 6), d)
-    # 15-minute bars get a quarter of the hour's move
-    d15 = season.step_drift(15, bars, datetime(2026, 1, 14, 21, tzinfo=UTC), 4)
-    assert np.allclose(d15, d[1] / 4)
-    assert not season.step_drift(0, bars, origin, 5).any()        # daily bars: none
+    d2, t2 = season.step_drift(60, later, origin, 6)
+    assert np.array_equal(d2, d) and np.array_equal(t2, t)
+    assert not season.step_drift(0, bars, origin, 5)[0].any()    # daily bars: none
+    assert season.tier(t[1]) in ("mid", "high") and season.tier(0.5) is None and season.tier(-4.5) == "high"
+
+
+def test_15_minute_bars_use_their_own_quarter_hours():
+    bars = _bars(n=5000, minutes=15, drift_ny=(17, 0), drift_bp=6.0, start=datetime(2026, 7, 20))
+    origin = datetime(2026, 9, 16, 20, 45, tzinfo=UTC)          # Wednesday 16:45 New York (daylight time)
+    d, t = season.step_drift(15, bars, origin, 4)
+    assert d[1] > 1.0 and not d[0] and not d[2]                  # only the quarter starting 17:00 New York
+    assert season.centre_t(d, t, 15)[3] == pytest.approx(season.combined_t(d, t))
 
 
 def test_the_centre_keeps_the_first_hour_only():
     assert list(season.centre_drift(np.array([1.0, 2.0, 3.0]), 60)) == [1.0, 0.0, 0.0]
     assert list(season.centre_drift(np.array([1.0, 1.0, 1.0, 1.0, 5.0]), 15)) == [1.0, 2.0, 3.0, 4.0, 0.0]
     assert not season.centre_drift(np.array([1.0, 2.0]), 0).any()
+    assert season.combined_t(np.array([2.0, 2.0]), np.array([2.0, 2.0])) == pytest.approx(4 / np.sqrt(2))
 
 
 def test_weekend_gaps_do_not_make_a_drift():
-    bars = _hourly(drift_bp=0.0, weekend_jump_bp=40.0)
-    st = season.slot_stats(bars, datetime(2026, 1, 14, tzinfo=UTC))
+    bars = _bars(drift_bp=0.0, weekend_jump_bp=40.0)
+    st = season.slot_stats(bars, datetime(2026, 1, 14, tzinfo=UTC), 60)
     mu, t = st["slot"]
     assert np.abs(mu).max() < 5.0                               # the 40 bp jumps are left out
 
@@ -76,7 +86,7 @@ def test_learning_leaves_the_drift_out_of_the_gain_and_news_tilt():
 
 
 def test_called_candles_point_the_called_way():
-    bars = _hourly(n=3000)
+    bars = _bars(n=3000)
     drift = np.zeros(24)
     drift[[0, 5, 9]] = [2.0, -2.0, 3.0]
     p0 = float(bars["close"].iloc[-1])
@@ -97,6 +107,7 @@ def test_forecasts_carry_the_drift_and_audit_rebuilds_it(tmp_path, monkeypatch):
     preds = ledger.of_type("prediction")
     intraday = [f for p in preds if p["tf"] in ("15m", "1h") for f in p["fc"]]
     assert intraday and any(f["d"] != 0 for f in intraday)
+    assert all((f["d"] == 0) == (f["dt"] == 0) for f in intraday)
     assert all(f["d"] == 0 for p in preds if p["tf"] == "1d" for f in p["fc"])
     # the centre uses the first hour only: 1 hour ahead on 15-minute bars, the next hour on hourly bars
     assert all(f["d"] == 0 for p in preds for f in p["fc"] if (p["tf"], f["h"]) in (("15m", 16), ("1h", 4), ("1h", 24)))
