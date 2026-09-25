@@ -194,7 +194,6 @@ def evaluate(tf: str, log=print) -> dict:
     data, feats = build(tf)
     times = data.index.unique().sort_values()
     split = pd.Timestamp(cfg["split"]) if "split" in cfg else times[int(len(times) * cfg["tune_share"])]
-    bar = times[1] - times[0] if len(times) > 1 else pd.Timedelta(hours=1)
     out = {"tf": tf, "start": str(times[0]), "split": str(split), "end": str(times[-1]), "features": feats,
            "rows": int(len(data)), "h": {}}
     months = pd.date_range(split, times[-1] + pd.Timedelta(days=1), freq=cfg["retrain"])
@@ -207,7 +206,9 @@ def evaluate(tf: str, log=print) -> dict:
                 test = data[(data.index >= a) & (data.index < b)]
                 if not len(test):
                     continue
-                train = data[data.index < a - bar * (H + 1)]
+                # leave H + 1 bars (counted in bars, so across weekends too) between training targets and the test
+                cut = times[max(0, int(times.searchsorted(a)) - (H + 1))]
+                train = data[data.index < cut]
                 p = _fit_predict(kind, train, test, feats, H)
                 preds.append(pd.Series(p, index=test.index))
             test_all = data[data.index >= split]
