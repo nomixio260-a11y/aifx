@@ -82,6 +82,8 @@
 - 複数のサイトに配信された同じ記事は、見出しの文字の重なりでまとめ、1本として数えます (同じ記事が5サイトに載っても5倍にはなりません)。
 - 通貨ごとの「ニュース圧力」は、新しい見出しほど重く (半減期 約8時間) 平均した値です。ペアの信号は「基軸通貨の圧力 − 決済通貨の圧力」です。
 - 予測に使えるのは、**予測の起点時刻より前に取得・保存済みの見出しだけ**です。
+- **見出しの読み取りの改善 (lexicon-v3):** 過去3か月分の見出し (GDELT の公開データ、約4万本) で分析を点検し、手で読んだ60本と照らして次を直しました: 戦争・政治の記事の「war」「tensions」などは、株・債券・為替・原油などの市場の語がある見出しでだけリスク回避と数える / 「停戦が崩れた」はリスク回避 / 新興国通貨の「対ドルで下落」から米ドルの動きを推定しない / 「上昇・下落」は通貨の名前にだけ付け、「円がドルに対して上昇」ではドルを逆向きに / 否定や期待の後退 (「didn't raise」「rate hike bets douse」「odds fall」) / 2026年の要人名 (Warsh、Bessent、片山など) と「eases」「edges lower」などの動詞。正しく読めた見出しは、修正を作った期間の30本で 11 → 20本、別の期間の30本で 9 → 18本になりました。
+- **予測への使い方:** 同じ3か月で、記事の時刻を守ってニュースの信号と1・4・24時間後の値動きを比べたところ、期間によって向きが入れ替わり、方向の情報はありませんでした (GDELT のトーン・報道量も同じ。[research/news.md](research/news.md))。そのためニュースは予測の中心を初めからは動かさず (学習の初期値 0)、実績で効果がはっきりしたときだけ学習で反映します。ニュースは主に「いま何が起きているか」の表示に使います。
 
 ニュースの取得先はすべて無料で公開されているRSSとカレンダーです。
 
@@ -190,6 +192,7 @@ aifx research --trade                   # 売買ルールの検証 (コスト込
 aifx research --candles                 # 予想ローソク足の精度の検証
 aifx research --direction               # 方向の予測の検証 (時間帯の偏り、株価・金利、月末など)
 aifx research --dl                      # ディープラーニングによる方向予測の検証 (PyTorch が必要)
+aifx research --news                    # ニュース (GDELT の過去の見出し) で方向を予測できるかの検証
 aifx research --ml                      # 機械学習による方向予測の検証 (scikit-learn と lightgbm が必要)
 ```
 
@@ -262,6 +265,7 @@ aifx research --trade      # 売買ルールの検証 (research/trade.md)
 aifx research --candles    # 予想ローソク足の精度 (research/candles.md)
 aifx research --direction  # 方向の予測 (research/direction.md、株価指数などは --download で取得)
 aifx research --dl         # ディープラーニング (research/dl.md、pip install torch、約45分)
+aifx research --news       # ニュースの検証 (research/news.md、GDELT の公開ファイル 約9GB を取得)
 aifx research --ml         # 機械学習による方向予測 (research/ml.md、pip install scikit-learn lightgbm)
 ```
 
@@ -291,8 +295,9 @@ aifx/
   research_trade.py  売買ルールの検証 (aifx research --trade)
   scenario.py     予想ローソク足 (足の大きさ・形・水準)
   season.py       時間帯の偏り (方向の予測、予測の中心と予想ローソク足の向き)
-  research_candles.py research_ml.py research_direction.py research_dl.py  予想ローソク足・機械学習・方向・ディープラーニングの検証
-                  (aifx research --candles / --ml / --direction / --dl)
+  research_candles.py research_ml.py research_direction.py research_dl.py research_news.py
+                  予想ローソク足・機械学習・方向・ディープラーニング・ニュースの検証
+                  (aifx research --candles / --ml / --direction / --dl / --news)
   history.py research.py research_intraday.py  過去データの取得と検証 (aifx research)
   analysis.py     市場分析 (通貨の強さ・値動きの荒さ・トレンドの状態)
   api.py site.py  API (JSON) とWebページの書き出し

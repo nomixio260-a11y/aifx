@@ -31,7 +31,7 @@ def test_parses_rss_atom_and_rdf():
 @pytest.mark.parametrize("title,lang,expect", [
     ("USD/JPY outlook: Hawkish Fed recalibration pressures the yen", "en", {"USD": 1, "JPY": -1}),
     ("GBP/USD forecast: US dollar surges as bonds implode", "en", {"USD": 1}),
-    ("Rupee falls against the US dollar", "en", {"USD": 1}),
+    ("Rupee falls against the US dollar", "en", {}),          # emerging-market moves say little about the majors
     ("USD/JPY rises above 158", "en", {"USD": 1, "JPY": -1}),
     ("ECB signals rate cuts ahead; euro slides", "en", {"EUR": -1}),
     ("Missile attack sparks safe-haven demand", "en", {"JPY": 1, "AUD": -1}),
@@ -123,3 +123,30 @@ def test_syndicated_copies_count_as_one_story():
     one = news.pressures(copies[:1] + [other], NOW)["USD"]
     assert three["n"] == one["n"] == 2
     assert three["w"] == pytest.approx(one["w"], rel=0.05)
+
+
+def _sign(title, lang="en"):
+    return {c: (1 if v > 0 else -1) for c, v in news.analyze_lexicon(title, lang)["cur"].items()}
+
+
+@pytest.mark.parametrize("title, want", [
+    # risk words count only in market headlines (war and politics stories are not market news)
+    ("Hegseth estimates Iran war has cost $48.5b so far", {}),
+    ("Mortgage Rates Rise as Iran Ceasefire Crumbles", {}),
+    ("Dow drops 500 points as oil nears $100 amid Iran war", {"JPY": 1, "AUD": -1, "USD": 1}),
+    # an undone ceasefire is risk-off
+    ("Oil prices rise 7%, and Dow drops 600 points after Trump says ceasefire with Iran is 'over'", {"JPY": 1, "AUD": -1, "USD": 1}),
+    # emerging-market currencies say nothing about the dollar against the majors
+    ("Rupee falls 13 paise to 95.56 against U.S. dollar in early trade", {}),
+    # negation and fading expectations turn a policy cue around
+    ("Fed Didn't Raise Rates After All — Will Mortgage Rates Fall? | National", {"USD": -1}),
+    ("Asian markets choppy as US jobs data douse Fed rate hike bets", {"USD": -1}),
+    # a move verb moves only a currency named as a currency
+    ("Cotality Report: Australian property resale gains hit record $377,000", {}),
+    ("World stocks are mixed as yen jumps against the dollar, while oil prices slip", {"JPY": 1, "USD": -1}),
+    # names in office in 2026, and quieter move verbs
+    ("U.S. Dollar Moves Lower As Bessent Boosts Bond Buybacks", {"USD": -1}),
+    ("Why Treasury yields are ripping higher", {"USD": 1}),
+])
+def test_headline_reading_fixes(title, want):
+    assert _sign(title) == want

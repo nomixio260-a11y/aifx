@@ -31,7 +31,7 @@ from .data import CURRENCIES, http_get
 from .store import stable_id
 from .timeutil import UTC, iso, parse_iso
 
-ANALYZER = "lexicon-v2"
+ANALYZER = "lexicon-v3"
 TAU_HOURS = 12.0
 LOOKBACK_HOURS = 48.0
 SHRINK = 3.0
@@ -157,15 +157,16 @@ def normalise(entries: list[dict], source: tuple, now: datetime) -> list[dict]:
 EN_ENT = {
     "USD": [r"\bu\.?s\.? dollars?\b", r"\bgreenback\b", r"(?<!australian )(?<!canadian )(?<!zealand )(?<!hong kong )(?<!singapore )(?<!taiwan )\bdollar\b",
             r"\busd\b", r"\bdxy\b", r"\bfed\b", r"\bfederal reserve\b", r"\bfomc\b", r"\bpowell\b",
-            r"\btreasur(?:y|ies)\b", r"\bnonfarm\b", r"\bpayrolls\b", r"\bu\.?s\.?\b", r"\bamerica\b", r"\btrump\b"],
+            r"\btreasur(?:y|ies)\b", r"\bnonfarm\b", r"\bpayrolls\b", r"\bu\.?s\.?\b", r"\bamerica\b", r"\btrump\b",
+            r"\bwarsh\b", r"\bbessent\b", r"\bgreenback'?s?\b"],
     "JPY": [r"\byen\b", r"\bjpy\b", r"\bbank of japan\b", r"\bboj\b", r"\bueda\b", r"\bjapan(?:ese|'s)?\b", r"\bjgbs?\b",
-            r"\btakaichi\b"],
+            r"\btakaichi\b", r"\bkatayama\b", r"\bmimura\b"],
     "EUR": [r"\beuros?\b(?!pe)", r"\beur\b", r"\becb\b", r"\blagarde\b", r"\beuro ?zone\b", r"\beuro area\b", r"\bbunds?\b",
             r"\bgerman(?:y|'s)?\b", r"\bfrance\b", r"\bfrench\b"],
     "GBP": [r"\bpound\b", r"\bsterling\b", r"\bgbp\b", r"\bcable\b", r"\bbank of england\b", r"\bboe\b", r"\bbailey\b",
-            r"\bgilts?\b", r"\bu\.?k\.?\b", r"\bbritain\b", r"\bbritish\b"],
+            r"\bgilts?\b", r"\bu\.?k\.?\b", r"\bbritain\b", r"\bbritish\b", r"\breeves\b"],
     "AUD": [r"\baussie\b", r"\baustralian dollar\b", r"\baud\b", r"\brba\b", r"\breserve bank of australia\b",
-            r"\bbullock\b", r"\baustralia(?:n|'s)?\b"],
+            r"\bbullock\b", r"\baustralia(?:n|'s)?\b", r"\bchalmers\b"],
     "OTHER": [r"\brupee\b", r"\byuan\b", r"\brenminbi\b", r"\bwon\b", r"\bpeso\b", r"\blira\b", r"\bro?ubles?\b",
               r"\bloonie\b", r"\bcanadian dollar\b", r"\bkiwi\b", r"\bnew zealand dollar\b", r"\bfranc\b",
               r"\bringgit\b", r"\bbaht\b", r"\brupiah\b", r"\breal\b", r"\bbitcoin\b", r"\bgold\b", r"\boil\b",
@@ -177,14 +178,21 @@ EN_DOWN = r"(?:falls|fell|falling|drops|dropped|slides|slid|slips|slipped|sinks|
 EN_VERB = None  # compiled below
 EN_OBJ_DOWN = r"(?:pressures?|pressured|weighs? on|weighed on|hurts?|drags?(?: down)?|knocks?|hammers?|batters?)\s+(?:the\s+)?"
 EN_OBJ_UP = r"(?:lifts?|boosts?|supports?|buoys?|props? up|underpins?|bolsters?)\s+(?:the\s+)?"
-EN_VERB = re.compile(r"\b(?:(?P<up>" + EN_UP + r")|(?P<down>" + EN_DOWN + r"))")
+EN_UP_MORE = r"edges? (?:up|higher)|inch(?:es|ed)? (?:up|higher)|ticks? (?:up|higher)|steadies|recoups|holds gains"
+EN_DOWN_MORE = (r"eases|eased|softens|softened|edges? (?:down|lower)|inch(?:es|ed)? (?:down|lower)|ticks? (?:down|lower)|"
+                r"pares gains|gives up gains|(?:hovers|holds|trades|stays) (?:near|around|at) [\w\- ]{0,15}lows?")
+EN_VERB = re.compile(r"\b(?:(?P<up>" + EN_UP_MORE + "|" + EN_UP + r")|(?P<down>" + EN_DOWN_MORE + "|" + EN_DOWN + r"))")
 EN_PAIR_VERB = re.compile(r"[\s:,\-]*(?:(?:rate|pair|exchange rate|price)\s+)?(?:(?P<up>" + EN_UP + r")|(?P<down>" + EN_DOWN + r"))")
 EN_HAWK = r"\b(?:hikes?|hiking|hiked|raises? rates|rate (?:rise|increase|hike)s?|tighten(?:s|ing)?|hawkish|higher for longer|inflation (?:rises|jumps|accelerates|surges|heats|hotter)|sticky inflation)\b"
 EN_DOVE = r"\b(?:rate cuts?|cuts? rates|cutting|lowers? rates|easing|eases policy|dovish|stimulus|recession|slowdown|inflation (?:cools|eases|slows|falls)|disinflation)\b"
 EN_BEAT = r"\b(?:beats?|tops) (?:expectations|estimates|forecasts)\b|\b(?:better|stronger)[- ]than[- ]expected\b|\babove (?:expectations|forecasts|estimates)\b"
 EN_MISS = r"\bmiss(?:es|ed)? (?:expectations|estimates|forecasts)\b|\b(?:worse|weaker|softer)[- ]than[- ]expected\b|\bbelow (?:expectations|forecasts|estimates)\b"
-EN_YIELD_UP = r"\b(?:treasury|u\.?s\.?|us|10-year|bond) yields? (?:rise|rises|rose|jump|jumps|jumped|climb|climbs|surge|surges|surged|soar|soars|higher|spike|spikes|hit)"
-EN_YIELD_DOWN = r"\b(?:treasury|u\.?s\.?|us|10-year|bond) yields? (?:fall|falls|fell|drop|drops|dropped|slide|slides|lower|tumble|tumbles|ease|eases)"
+EN_YIELD_UP = (r"\b(?:treasury|u\.?s\.?|us|10-year|bond) yields? (?:(?:are|were|is|keep|kept) )?(?:[\w\-]+ing )?"
+               r"(?:rise|rises|rose|jump|jumps|jumped|climb|climbs|surge|surges|surged|soar|soars|higher|spike|spikes|hit)"
+               r"|\b(?:higher|rising|surging|soaring) (?:u\.?s\.? |us |treasury |bond |10-year )?yields\b")
+EN_YIELD_DOWN = (r"\b(?:treasury|u\.?s\.?|us|10-year|bond) yields? (?:(?:are|were|is|keep|kept) )?(?:[\w\-]+ing )?"
+                 r"(?:fall|falls|fell|drop|drops|dropped|slide|slides|lower|tumble|tumbles|ease|eases)"
+                 r"|\b(?:lower|falling|sliding|tumbling) (?:u\.?s\.? |us |treasury |bond |10-year )?yields\b")
 EN_RISK_OFF = r"\b(?:war|attacks?|missiles?|airstrikes?|conflict|invasion|sanctions|crisis|turmoil|sell-?off|crash|panic|safe[- ]haven|geopolitic\w*|tensions|escalat\w*|trade war|shutdown|default)\b"
 EN_RISK_ON = r"\b(?:stocks? rally|risk appetite|risk-on|ceasefire|truce|trade deal|deal reached)\b"
 EN_INTERVENE = r"\b(?:interven\w+|rate checks?)\b"
@@ -197,6 +205,35 @@ EN_REVERSE_AFTER = re.compile(r"[\s\-]*(?:[\w\-]+\s+){0,2}(?:bets?|expectations?
                               r"(?:fade[sd]?|recede[sd]?|wane[sd]?|dwindl\w*|diminish\w*|evaporat\w*|pared|trimmed|scaled back|unwound|"
                               r"off the table|priced out|ruled out)")
 EN_POLITICS = r"\b(?:election|snap poll|resign\w*|no-confidence|political (?:crisis|turmoil|uncertainty)|government collapse|impeach\w*)\b"
+# Fixes checked on hand-read GDELT headlines (research/news.md: correct readings 11 -> 20 of 30 on the
+# tune sample, 9 -> 18 of 30 on the test sample):
+# a move verb does not move a currency when it is negated ("yen fails to rally", "dollar not falling")
+EN_NEG_MOVE = re.compile(r"\b(?:fails? to|failed to|struggles? to|struggled to|unable to|not|no longer|yet to|"
+                         r"refuses? to|little|barely|hardly)\b|n't\b")
+# a policy cue is turned around by a negation before it ("no rate cut", "not hawkish") ...
+EN_NEG_CUE = re.compile(r"(?:\b(?:no|not|without|never|nor)|n't)\s+(?:[\w\-]+\s+){0,2}$")
+# ... by its expectation fading ("rate hike odds fall") ...
+EN_REVERSE_AFTER_FADE = re.compile(r"[\s\-]*(?:[\w\-]+\s+){0,2}(?:bets?|expectations?|hopes?|odds|pricing|fears?|chances?)\s+"
+                                   r"(?:fall|falls|fell|drop|drops|dropped|decline|declines|declined|ease|eases|eased|slip|slips|"
+                                   r"shrink|shrinks|diminish|recede|recedes|fade|fades|faded|cool|cools)")
+# ... or by a verb that deflates it ("jobs data douse rate hike bets")
+EN_REVERSE_BEFORE_DEFLATE = re.compile(r"\b(?:douse[sd]?|dampen\w*|tempers?|tempered|curb\w*|dash\w*|cool(?:s|ed|ing)?|erode[sd]?)\s+"
+                                       r"(?:[\w\-']+\s+){0,3}$")
+# a risk-on word that is undone ("ceasefire with Iran is 'over'", "truce crumbles") is risk-off
+EN_RISK_ON_UNDONE = re.compile(r"(?:[\s\W]+[\w'\-]+){0,4}?[\s\W]+(?:over|crumbl\w*|collaps\w*|ends?|ended|breaks? down|broke down|"
+                               r"fails?|failed|falters?|violat\w*|in doubt|jeopardi\w*|shattered|unravel\w*)\b")
+# a move verb only moves a currency named as a currency ("Australian property gains" and "US payroll gains"
+# are not currency moves); "A rises against the dollar" moves the dollar the other way
+EN_CUR_WORD = re.compile(r"(?:u\.?s\.? )?dollars?|greenback'?s?|usd|dxy|yen|jpy|euros?|eur|pound|sterling|gbp|cable|aussie|"
+                         r"australian dollar|aud")
+EN_AGAINST = re.compile(r"\b(?:against|versus|vs\.?)\s+(?:the\s+)?(?:u\.?s\.?\s+)?(dollar|greenback|yen|euro|pound|sterling|aussie)\b")
+EN_AGAINST_CUR = {"dollar": "USD", "greenback": "USD", "yen": "JPY", "euro": "EUR", "pound": "GBP", "sterling": "GBP", "aussie": "AUD"}
+# risk-off and risk-on words count only in a market headline (war and politics stories are not market news)
+EN_MARKET_CTX = re.compile(r"\b(?:markets?|stocks?|shares|equities|investors|traders|safe[- ]haven|risk[- ](?:off|on|appetite|"
+                           r"sentiment|aversion|assets)|currenc\w*|forex|fx|yields?|bonds?|treasur\w*|dollar|yen|euro|sterling|"
+                           r"pound|aussie|gold|oil|wall street|nikkei|s&p|ftse|dow|nasdaq|dax|sensex|nifty|hang seng|asx|"
+                           r"kospi|stoxx)\b")
+JA_MARKET_CTX = re.compile(r"株|相場|市場|円|ドル|ユーロ|ポンド|金利|為替|投資家|リスク")
 
 JA_ENT = {
     "USD": ["米ドル", "米国", "米連邦", "FRB", "FOMC", "パウエル", "米金利", "米長期金利", "米国債", "米雇用", "米CPI",
@@ -348,6 +385,7 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
                 (JA_MISS, -0.6, "data"), (JA_POLITICS, -0.3, "politics")]
         yield_up, yield_down = JA_YIELD_UP, JA_YIELD_DOWN
         risk_off, risk_on, intervene, verbal = JA_RISK_OFF, JA_RISK_ON, JA_INTERVENE, JA_VERBAL
+        market_ctx = JA_MARKET_CTX
 
         def reversed_at(m):
             return bool(JA_REVERSE.match(t, m.end()))
@@ -357,10 +395,14 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
         # Tokens inside "USD/JPY" belong to the pair, not to one currency.
         ents = [e for e in _entities_en(t) if not any(p.start() <= e[0] < p.end() for p in pairs)]
         for s, e, cur in ents:
+            if cur in CURRENCIES and not EN_CUR_WORD.fullmatch(t[s:e]):
+                continue                                    # "Fed", "Australian", "US": not the currency itself
             d = 0
             m = EN_VERB.search(t, e, e + 40)
             if m and m.start() - e <= 25 and not any(e <= s2 < m.start() for s2, _, _ in ents):
                 d = 1 if m.group("up") else -1
+                if EN_NEG_MOVE.search(t[e:m.start()]):
+                    d = 0                                   # "yen fails to rally", "dollar not falling"
             before = t[max(0, s - 14):s]
             if re.search(r"\b(?:stronger|firmer)\s+(?:the\s+)?$", before):
                 d = 1
@@ -373,11 +415,10 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
             if not d:
                 continue
             if cur == "OTHER":
-                # "rupee falls against the dollar": the dollar moved the other way.
-                if re.search(r"against (?:the )?(?:u\.?s\.? |us )?dollar", t[e:e + 60]):
-                    add("USD", -0.5 * d, "fx_move")
-                continue
+                continue                    # "rupee falls against the dollar" says little about the majors
             add(cur, d, "fx_move")
+            if (a := EN_AGAINST.search(t, e, e + 70)) and EN_AGAINST_CUR[a.group(1)] != cur:
+                add(EN_AGAINST_CUR[a.group(1)], -d, "fx_move")      # "yen jumps against the dollar"
         for p in pairs:
             m = EN_PAIR_VERB.match(t, p.end(), p.end() + 40)
             if not m:
@@ -390,9 +431,13 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
                 (EN_MISS, -0.6, "data"), (EN_POLITICS, -0.4, "politics")]
         yield_up, yield_down = EN_YIELD_UP, EN_YIELD_DOWN
         risk_off, risk_on, intervene, verbal = EN_RISK_OFF, EN_RISK_ON, EN_INTERVENE, EN_VERBAL
+        market_ctx = EN_MARKET_CTX
 
         def reversed_at(m):
-            return bool(EN_REVERSE_BEFORE.search(t[max(0, m.start() - 40):m.start()]) or EN_REVERSE_AFTER.match(t, m.end()))
+            before = t[max(0, m.start() - 40):m.start()]
+            return bool(EN_REVERSE_BEFORE.search(before) or EN_REVERSE_AFTER.match(t, m.end())
+                        or EN_NEG_CUE.search(t[max(0, m.start() - 30):m.start()]) or EN_REVERSE_AFTER_FADE.match(t, m.end())
+                        or EN_REVERSE_BEFORE_DEFLATE.search(before))
 
     for pattern, value, topic in cues:
         for m in re.finditer(pattern, t):
@@ -406,12 +451,15 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
         add("USD", 0.6, "yields")
     if re.search(yield_down, t):
         add("USD", -0.6, "yields")
-    if re.search(risk_off, t):
-        for cur, v in RISK_OFF_EFFECT.items():
-            add(cur, v, "risk")
-    if re.search(risk_on, t):
-        for cur, v in RISK_ON_EFFECT.items():
-            add(cur, v, "risk")
+    if market_ctx.search(t):
+        on = re.search(risk_on, t)
+        undone = bool(on) and lang != "ja" and bool(EN_RISK_ON_UNDONE.match(t, on.end()))
+        if re.search(risk_off, t) or undone:
+            for cur, v in RISK_OFF_EFFECT.items():
+                add(cur, v, "risk")
+        if on and not undone:
+            for cur, v in RISK_ON_EFFECT.items():
+                add(cur, v, "risk")
     mentioned = sorted({c for _, _, c in ents if c in CURRENCIES} | ({default_cur} if default_cur else set()))
     # An intervention mention supports the yen unless the headline already says how the yen moved.
     if re.search(intervene, t) and "JPY" in mentioned and "fx_move" not in topics:

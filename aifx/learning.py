@@ -15,9 +15,10 @@ pooled across pairs:
   near "no change"; a negative gain means the signal has been working in
   reverse (e.g. hourly trends tending to fade);
 * news coefficient beta: how much the news signal should tilt the forecast,
-  in units of the forecast's standard deviation. It starts from a small prior
-  and only moves when live results support it; news can't be backtested
-  honestly because historical headlines were not collected point-in-time.
+  in units of the forecast's standard deviation. It starts at 0 and only
+  moves when live results support it: on three months of point-in-time
+  GDELT headlines the news signal had no directional value (its sign flipped
+  between periods, research/news.md).
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ from .engine import BAND_Z, MODEL_KEYS
 
 PRIOR_N_MSE = 40.0
 PRIOR_N_K = 30.0
-BETA_PRIOR = 0.05
+BETA_PRIOR = 0.0
 BETA_LAMBDA = 20.0
 K_BOUNDS = (0.6, 2.5)
 # Gain prior: centred on "no skill" with a spread of about 0.14 (lambda = 1 / 0.14^2).
