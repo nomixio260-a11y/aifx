@@ -32,7 +32,7 @@ from .forecaster import model_version
 from .learning import learn, samples_from_ledger
 from .models import default_models
 from .pipeline import State
-from .timeutil import iso, london_date, parse_iso, utcnow
+from .timeutil import iso, london_date, market_open_mask, parse_iso, utcnow
 
 HISTORY = {"15m": 288, "1h": 240, "1d": 520}
 PAST = {"15m": 96, "1h": 96, "1d": 40}
@@ -138,6 +138,8 @@ def candle_eval(tf, bars: pd.DataFrame, now) -> list[tuple]:
     14-bar average size, direction called by the drift, |t| of that call)."""
     window, every = CANDLE_EVAL[tf.key]
     steps = max(tf.horizons)
+    if tf.minutes:     # bars the forecasts can target (Yahoo sometimes prints one after the Friday close)
+        bars = bars[market_open_mask(bars.index)]
     if len(bars) < 400:
         return []
     o, h, lo, c = (bars[k].to_numpy(float) for k in ("open", "high", "low", "close"))

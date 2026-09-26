@@ -12,6 +12,8 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import numpy as np
+
 UTC = timezone.utc
 NEW_YORK = ZoneInfo("America/New_York")
 LONDON = ZoneInfo("Europe/London")
@@ -46,6 +48,13 @@ def is_market_open(t: datetime) -> bool:
     if wd == 4:
         return ny.hour < 17
     return True
+
+
+def market_open_mask(starts) -> np.ndarray:
+    """``is_market_open`` for every time of a pandas DatetimeIndex (tz-aware), vectorised."""
+    ny = starts.tz_convert(NEW_YORK)
+    wd, hour = np.asarray(ny.weekday), np.asarray(ny.hour)
+    return ~((wd == 5) | ((wd == 6) & (hour < 17)) | ((wd == 4) & (hour >= 17)))
 
 
 def add_trading_minutes(t: datetime, n: int, minutes: int) -> datetime:

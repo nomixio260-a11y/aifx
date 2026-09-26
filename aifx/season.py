@@ -1,10 +1,13 @@
 """Time-of-day drift: the direction effect that held out of sample (research/direction.md).
 
 Quoted prices move in a consistent direction at some times of the week, above
-all around the daily rollover at 17:00 New York time, when the value date
-changes, swap points are applied and liquidity is thin: pairs whose base
-currency pays the higher rate tend to dip in the hour into the roll, three
-times as much on Wednesdays (the weekend's swap), and to recover after it.
+all around the daily rollover at 17:00 New York time. Twenty years of bid-ask
+mid prices (research/season_long.md) show two parts: at the roll the value
+date moves a day on (three on Wednesdays), so a pair whose base currency pays
+the higher rate is quoted lower by that interest (a real move, offset by the
+swap for anyone holding it); and in the JPY pairs the hours either side of it
+(16:00 and 18:00) move because Yahoo quotes the bid, which drops as the spread
+widens and recovers as it narrows.
 Because the roll follows New York time, the slots are New York weekday-and-hour
 (hourly bars) or weekday-and-quarter-hour (15-minute bars), measured on the
 timeframe's own last ``WINDOW`` bars; failing that, the hour (quarter-hour)
@@ -12,12 +15,14 @@ of the day. A slot whose average move is clearly not zero (|t| >= ``T_MIN``)
 gives the expected move of a bar in it; the larger |t|, the more reliable
 (``T_HIGH`` marks the high-confidence calls). Other slots give none.
 
-On the test period, next-hour calls were right 61 % of the time overall and
-80 % for |t| >= 4 (about 2 % of hours); 15-minute calls 57 % and 86 % (last
-~55 days). It is a regularity of quoted prices, not a trading edge: at the
-roll the spread widens and the swap offsets the move.
+On the test period (bars the server forecasts, i.e. while the market is open),
+next-hour calls were right about 61 % of the time overall and 78 % for
+|t| >= 4 (about 2 % of hours); 15-minute calls somewhat more (last ~60 days).
+It is a regularity of quoted prices, not a trading edge: after the spread and
+the swap the calls lose money.
 
-The statistics use only bars that started before the origin's UTC day, so
+Bars that start while the market is closed (Yahoo sometimes prints one after
+the Friday close) are left out. The statistics use only bars that started before the origin's UTC day, so
 everything can be rebuilt from the committed prices and is the same for all
 origins of a day.
 """
@@ -30,7 +35,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from .timeutil import add_trading_minutes
+from .timeutil import add_trading_minutes, market_open_mask
 
 NEW_YORK = ZoneInfo("America/New_York")
 WINDOW = 6000        # bars: about a year of hourly bars, the ~60 days kept of 15-minute bars
@@ -65,6 +70,7 @@ def slot_stats(bars: pd.DataFrame, origin: datetime, minutes: int) -> dict:
     r = np.diff(np.log(c)) * 1e4 if len(c) > 1 else np.array([])
     if len(r):                                             # a bar after a pause (weekend, missing bars) carries its gap
         r[np.diff(t.as_unit("ns").asi8) > minutes * 60_000_000_000] = np.nan
+        r[~market_open_mask(t[1:])] = np.nan               # a tick Yahoo prints after the Friday close
     week, tod, per_day = _slots(t[1:], minutes) if len(r) else (np.array([], int), np.array([], int), 24 * 60 // minutes)
     out = {"slot": _stats(r, week, 7 * per_day), "tod": _stats(r, tod, per_day)}
     if len(_CACHE) > 4096:

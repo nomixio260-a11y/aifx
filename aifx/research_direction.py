@@ -336,6 +336,13 @@ def evaluate(tf: str, log=print) -> dict:
 
 # ------------------------------------------------------------------ the live method
 
+def _open_bars(bars: pd.DataFrame) -> pd.DataFrame:
+    """Bars that start while the market is open: Yahoo sometimes prints a one-tick bar after the Friday
+    close, which the server never forecasts (its targets follow the trading calendar)."""
+    from .timeutil import market_open_mask
+    return bars[market_open_mask(bars.index)]
+
+
 def session_eval(log=print) -> dict:
     """The time-of-day drift exactly as the server computes it (season.py: New York time slots, each
     timeframe's own bars) for the forecasts that carry it: hourly bars 1 hour ahead, 15-minute bars 1 and 4
@@ -354,7 +361,8 @@ def session_eval(log=print) -> dict:
     for code, H in hourly.items():
         m15 = history.load_intraday(code, "15m")
         m15 = m15[~m15.index.duplicated()].sort_index()
-        for tf, bars, minutes, hs, min_bars in (("1h", H, 60, (1,), SESSION_MIN_BARS), ("15m", m15, 15, (1, 4), 500)):
+        for tf, full, minutes, hs, min_bars in (("1h", H, 60, (1,), SESSION_MIN_BARS), ("15m", m15, 15, (1, 4), 500)):
+            bars = _open_bars(full)          # origins and targets; the statistics see every stored bar, as live
             c = bars["close"].to_numpy(float)
             idx = bars.index
             origin = idx + pd.Timedelta(minutes=minutes)
@@ -366,7 +374,7 @@ def session_eval(log=print) -> dict:
             for i in range(min_bars, len(c) - 1):
                 if day[i] != cur:
                     cur = day[i]
-                    stats = season.slot_stats(bars, origin[i].to_pydatetime(), minutes)
+                    stats = season.slot_stats(full, origin[i].to_pydatetime(), minutes)
                 period = "test" if origin[i] >= split else "tune"
                 n_ahead = max(hs) if tf == "15m" else 24
                 if i + n_ahead >= len(c):
