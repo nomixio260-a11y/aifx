@@ -14,7 +14,7 @@ Data (all free, analysed locally):
 Features, per currency and hour, known at the forecast origin (the end of an hourly bar):
 (a) GDELT tone and coverage share: the average tone of the articles about the currency in the last k
     hours, its change against the trailing week ("surprise") and the coverage spike.
-(b) The live analyzer (news.analyze_lexicon, via an identical copy with switches) on every page title,
+(b) The analyzer of the time (news_v3.analyze_lexicon, via an identical copy with switches) on every page title,
     aggregated exactly as news.pressures does (recency weight, 48 h lookback, shrinkage, syndicated
     copies grouped into stories). A headline counts from 10 minutes after its GDELT batch time.
 Pair signal = base minus quote. Targets: the sign of the log move 1, 4 and 24 hourly bars after the
@@ -47,6 +47,7 @@ import pandas as pd
 
 from . import history
 from . import news as N
+from . import news_v3 as V3
 from .data import CURRENCIES, PAIRS, USER_AGENT
 
 REPORT_DIR = Path("research")
@@ -158,8 +159,8 @@ def attempt_summary() -> dict:
 
 # ------------------------------------------------------------ analyzer variants
 #
-# A copy of news.analyze_lexicon with switches for the variants tested here.
-# With no option set it returns exactly what news.analyze_lexicon returns
+# A copy of news_v3.analyze_lexicon (the analyzer of that study) with switches for the variants tested here.
+# With no option set it returns exactly what news_v3.analyze_lexicon returns
 # (checked on every headline by ``check_identical``).
 
 VARIANT_OPTS = ("us_case", "neg", "attr", "risk_ctx", "no_risk", "no_em", "ent", "move_cur")
@@ -168,11 +169,11 @@ EXTRA_EN_ENT = {"USD": [r"\bwarsh\b", r"\bbessent\b", r"\bgreenback'?s?\b"],
                 "JPY": [r"\bkatayama\b", r"\bmimura\b"],
                 "GBP": [r"\breeves\b"],
                 "AUD": [r"\bchalmers\b"]}
-_EN_ENT_PLUS = {cur: pats + EXTRA_EN_ENT.get(cur, []) for cur, pats in N.EN_ENT.items()}
+_EN_ENT_PLUS = {cur: pats + EXTRA_EN_ENT.get(cur, []) for cur, pats in V3.EN_ENT.items()}
 EXTRA_UP = r"edges? (?:up|higher)|inch(?:es|ed)? (?:up|higher)|ticks? (?:up|higher)|steadies|recoups|holds gains"
 EXTRA_DOWN = (r"eases|eased|softens|softened|edges? (?:down|lower)|inch(?:es|ed)? (?:down|lower)|ticks? (?:down|lower)|"
               r"pares gains|gives up gains|(?:hovers|holds|trades|stays) (?:near|around|at) [\w\- ]{0,15}lows?")
-_EN_VERB_PLUS = re.compile(r"\b(?:(?P<up>" + EXTRA_UP + "|" + N.EN_UP + r")|(?P<down>" + EXTRA_DOWN + "|" + N.EN_DOWN + r"))")
+_EN_VERB_PLUS = re.compile(r"\b(?:(?P<up>" + EXTRA_UP + "|" + V3.EN_UP + r")|(?P<down>" + EXTRA_DOWN + "|" + V3.EN_DOWN + r"))")
 # "rate cut odds fall", "hike bets drop": the expectation turned around
 _REVERSE_AFTER_PLUS = re.compile(r"[\s\-]*(?:[\w\-]+\s+){0,2}(?:bets?|expectations?|hopes?|odds|pricing|fears?|chances?)\s+"
                                  r"(?:fall|falls|fell|drop|drops|dropped|decline|declines|declined|ease|eases|eased|slip|slips|"
@@ -230,7 +231,7 @@ def _clause_bounds(t: str, pos: int) -> tuple[int, int]:
 
 
 def analyze(title: str, lang: str, default_cur: str | None = None, opts: frozenset = frozenset()) -> dict:
-    """news.analyze_lexicon with optional changes (``opts`` from VARIANT_OPTS)."""
+    """news_v3.analyze_lexicon with optional changes (``opts`` from VARIANT_OPTS)."""
     effects: dict[str, float] = {}
     topics: set[str] = set()
 
@@ -241,46 +242,46 @@ def analyze(title: str, lang: str, default_cur: str | None = None, opts: frozens
 
     if lang == "ja":
         t = title
-        ents = N._entities_ja(t)
+        ents = V3._entities_ja(t)
         masked = t
-        for word, eff in N.JA_MOVES:
+        for word, eff in V3.JA_MOVES:
             while (i := masked.find(word)) >= 0:
-                if not N.JA_NOT_MOVE.match(t, i + len(word)):
+                if not V3.JA_NOT_MOVE.match(t, i + len(word)):
                     for cur, v in eff.items():
                         add(cur, v, "fx_move")
                 masked = masked[:i] + "＿" * len(word) + masked[i + len(word):]
         single = masked
-        for word, _, _ in N.JA_PAIRS:
+        for word, _, _ in V3.JA_PAIRS:
             single = single.replace(word, "＿" * len(word))
-        for m in N.JA_CUR_MOVE.finditer(single):
-            cur = N.JA_CUR_CODE[m.group(1)]
+        for m in V3.JA_CUR_MOVE.finditer(single):
+            cur = V3.JA_CUR_CODE[m.group(1)]
             if cur == "USD" and m.start() > 0 and single[m.start() - 1] in "豪米加":
                 cur = "USD" if single[m.start() - 1] == "米" else None
             add(cur, 1 if m.group("up") else -1, "fx_move")
-        for m in N.JA_YEN_RATE.finditer(single):
+        for m in V3.JA_YEN_RATE.finditer(single):
             add("JPY", 1 if m.group("up") else -1, "fx_move")
-        for word, base, quote in N.JA_PAIRS:
+        for word, base, quote in V3.JA_PAIRS:
             start = 0
             while (i := t.find(word, start)) >= 0:
                 rest = t[i + len(word): i + len(word) + 8]
-                d = 1 if N.JA_PAIR_UP.match(rest) else -1 if N.JA_PAIR_DOWN.match(rest) else 0
+                d = 1 if V3.JA_PAIR_UP.match(rest) else -1 if V3.JA_PAIR_DOWN.match(rest) else 0
                 if d:
                     add(base, d, "fx_move")
                     add(quote, -d, "fx_move")
                 start = i + len(word)
-        cues = [(N.JA_HAWK, 0.8, "policy"), (N.JA_DOVE, -0.8, "policy"), (N.JA_BEAT, 0.6, "data"),
-                (N.JA_MISS, -0.6, "data"), (N.JA_POLITICS, -0.3, "politics")]
-        yield_up, yield_down = N.JA_YIELD_UP, N.JA_YIELD_DOWN
-        risk_off, risk_on, intervene, verbal = N.JA_RISK_OFF, N.JA_RISK_ON, N.JA_INTERVENE, N.JA_VERBAL
+        cues = [(V3.JA_HAWK, 0.8, "policy"), (V3.JA_DOVE, -0.8, "policy"), (V3.JA_BEAT, 0.6, "data"),
+                (V3.JA_MISS, -0.6, "data"), (V3.JA_POLITICS, -0.3, "politics")]
+        yield_up, yield_down = V3.JA_YIELD_UP, V3.JA_YIELD_DOWN
+        risk_off, risk_on, intervene, verbal = V3.JA_RISK_OFF, V3.JA_RISK_ON, V3.JA_INTERVENE, V3.JA_VERBAL
         market_ctx = _MARKET_CTX_JA
 
         def reversed_at(m):
-            return bool(N.JA_REVERSE.match(t, m.end()))
+            return bool(V3.JA_REVERSE.match(t, m.end()))
     else:
         t = title.lower()
-        pairs = list(N.EN_PAIR.finditer(t))
-        ents_all = _entities_en_plus(t) if "ent" in opts else N._entities_en(t)
-        verb = _EN_VERB_PLUS if "ent" in opts else N.EN_VERB
+        pairs = list(V3.EN_PAIR.finditer(t))
+        ents_all = _entities_en_plus(t) if "ent" in opts else V3._entities_en(t)
+        verb = _EN_VERB_PLUS if "ent" in opts else V3.EN_VERB
         ents = [e for e in ents_all if not any(p.start() <= e[0] < p.end() for p in pairs)]
         if "us_case" in opts and len(t) == len(title):
             # "us" is only the United States when written "US" or "U.S." (not the pronoun in "tell us")
@@ -299,9 +300,9 @@ def analyze(title: str, lang: str, default_cur: str | None = None, opts: frozens
                 d = 1
             elif re.search(r"\b(?:weaker|softer)\s+(?:the\s+)?$", before):
                 d = -1
-            if re.search(N.EN_OBJ_DOWN + r"$", t[max(0, s - 24):s]):
+            if re.search(V3.EN_OBJ_DOWN + r"$", t[max(0, s - 24):s]):
                 d = -1
-            elif re.search(N.EN_OBJ_UP + r"$", t[max(0, s - 24):s]):
+            elif re.search(V3.EN_OBJ_UP + r"$", t[max(0, s - 24):s]):
                 d = 1
             if not d:
                 continue
@@ -315,21 +316,21 @@ def analyze(title: str, lang: str, default_cur: str | None = None, opts: frozens
             if "move_cur" in opts and (a := _AGAINST.search(t, e, e + 70)) and _AGAINST_CUR[a.group(1)] != cur:
                 add(_AGAINST_CUR[a.group(1)], -d, "fx_move")
         for p in pairs:
-            m = N.EN_PAIR_VERB.match(t, p.end(), p.end() + 40)
+            m = V3.EN_PAIR_VERB.match(t, p.end(), p.end() + 40)
             if not m:
                 continue
             d = 1 if m.group("up") else -1
             base, quote = p.group(1).upper(), p.group(2).upper()
             add(base, d, "fx_move")
             add(quote, -d, "fx_move")
-        cues = [(N.EN_HAWK, 0.8, "policy"), (N.EN_DOVE, -0.8, "policy"), (N.EN_BEAT, 0.6, "data"),
-                (N.EN_MISS, -0.6, "data"), (N.EN_POLITICS, -0.4, "politics")]
-        yield_up, yield_down = N.EN_YIELD_UP, N.EN_YIELD_DOWN
-        risk_off, risk_on, intervene, verbal = N.EN_RISK_OFF, N.EN_RISK_ON, N.EN_INTERVENE, N.EN_VERBAL
+        cues = [(V3.EN_HAWK, 0.8, "policy"), (V3.EN_DOVE, -0.8, "policy"), (V3.EN_BEAT, 0.6, "data"),
+                (V3.EN_MISS, -0.6, "data"), (V3.EN_POLITICS, -0.4, "politics")]
+        yield_up, yield_down = V3.EN_YIELD_UP, V3.EN_YIELD_DOWN
+        risk_off, risk_on, intervene, verbal = V3.EN_RISK_OFF, V3.EN_RISK_ON, V3.EN_INTERVENE, V3.EN_VERBAL
         market_ctx = _MARKET_CTX
 
         def reversed_at(m):
-            rev = bool(N.EN_REVERSE_BEFORE.search(t[max(0, m.start() - 40):m.start()]) or N.EN_REVERSE_AFTER.match(t, m.end()))
+            rev = bool(V3.EN_REVERSE_BEFORE.search(t[max(0, m.start() - 40):m.start()]) or V3.EN_REVERSE_AFTER.match(t, m.end()))
             if "neg" in opts and not rev and _NEG_CUE.search(t[max(0, m.start() - 30):m.start()]):
                 rev = True                                  # "no rate cut", "not hawkish"
             if "neg" in opts and not rev and _REVERSE_AFTER_PLUS.match(t, m.end()):
@@ -343,9 +344,9 @@ def analyze(title: str, lang: str, default_cur: str | None = None, opts: frozens
             if "attr" in opts and lang != "ja":
                 lo, hi = _clause_bounds(t, m.start())
                 inside = [x for x in ents if lo <= x[0] < hi]
-                cur = N._nearest(inside, m.start()) or N._nearest(ents, m.start()) or default_cur
+                cur = V3._nearest(inside, m.start()) or V3._nearest(ents, m.start()) or default_cur
             else:
-                cur = N._nearest(ents, m.start()) or default_cur
+                cur = V3._nearest(ents, m.start()) or default_cur
             if topic == "policy" and reversed_at(m):
                 value_m = -value
             else:
@@ -359,10 +360,10 @@ def analyze(title: str, lang: str, default_cur: str | None = None, opts: frozens
     on = re.search(risk_on, t) if risk_ok else None
     undone = bool(on) and "neg" in opts and lang != "ja" and bool(_RISK_ON_UNDONE.match(t, on.end()))
     if risk_ok and (re.search(risk_off, t) or undone):
-        for cur, v in N.RISK_OFF_EFFECT.items():
+        for cur, v in V3.RISK_OFF_EFFECT.items():
             add(cur, v, "risk")
     if on and not undone:
-        for cur, v in N.RISK_ON_EFFECT.items():
+        for cur, v in V3.RISK_ON_EFFECT.items():
             add(cur, v, "risk")
     mentioned = sorted({c for _, _, c in ents if c in CURRENCIES} | ({default_cur} if default_cur else set()))
     if re.search(intervene, t) and "JPY" in mentioned and "fx_move" not in topics:
@@ -370,7 +371,7 @@ def analyze(title: str, lang: str, default_cur: str | None = None, opts: frozens
     elif re.search(verbal, t) and "JPY" in mentioned and "fx_move" not in topics:
         add("JPY", 0.5, "intervention")
     scores = {c: round(math.tanh(v / 1.5), 3) for c, v in sorted(effects.items()) if abs(v) > 1e-9}
-    return {"by": N.ANALYZER, "cur": scores, "men": mentioned, "top": sorted(topics)}
+    return {"by": V3.ANALYZER, "cur": scores, "men": mentioned, "top": sorted(topics)}
 
 # ------------------------------------------------------- GDELT GKG raw files
 #
@@ -614,8 +615,8 @@ def pressure_panel(items: list[dict], origins: pd.DatetimeIndex, story: np.ndarr
 
 
 def check_identical(heads: list[dict]) -> dict:
-    """Our analyzer copy against news.analyze_lexicon (must be identical)."""
-    bad = [h["title"] for h in heads if analyze(h["title"], h["lang"]) != N.analyze_lexicon(h["title"], h["lang"])]
+    """Our analyzer copy against news_v3.analyze_lexicon (must be identical)."""
+    bad = [h["title"] for h in heads if analyze(h["title"], h["lang"]) != V3.analyze_lexicon(h["title"], h["lang"])]
     return {"checked": len(heads), "different": len(bad), "examples": bad[:3]}
 
 

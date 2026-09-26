@@ -65,7 +65,7 @@ def test_parses_rss_atom_and_rdf():
 def test_keyword_analysis_directions(title, lang, expect):
     got = news.analyze_lexicon(title, lang)["cur"]
     if "円高につながらず" in title:
-        assert "JPY" not in got
+        assert got.get("JPY", 0) <= 0          # "does not lead to a stronger yen" is not yen up
     assert set(got) >= set(expect)
     for cur, sign in expect.items():
         assert got[cur] * sign > 0, (cur, got)
@@ -155,3 +155,22 @@ def test_headline_reading_fixes(title, want):
 def test_a_move_verb_in_another_clause_does_not_move_the_currency():
     t = "[Tokyo Forex] Dollar trades in the lower 158 yen range; falling U.S. long-term yields also exert downward pressure"
     assert "JPY" not in news.analyze_lexicon(t, "en")["cur"]
+
+
+@pytest.mark.parametrize("title,lang,expect", [
+    # lexicon-v4 fixes (research/news_v4.md)
+    ("Asian stocks rise as tensions ease", "en", {"AUD": 1, "JPY": -1}),    # easing tensions are risk-on
+    ("Sterling Heights council approves budget", "en", {}),                 # a place, not the pound
+    ("Trump calls for Fed to cut rates", "en", {}),                         # a demand, not a policy move
+    ("Will the Fed raise rates in December?", "en", {}),                    # a question
+    ("ASML tops forecasts as chip demand holds", "en", {}),                 # company earnings, not US data
+    ("Government announces defence spending hike", "en", {}),               # not a rate hike
+    ("USD/JPY forecast: yen keeps showing weakness", "en", {"JPY": -1, "USD": 1}),
+    ("EUR/AUD bullish breakout", "en", {"EUR": 1, "AUD": -1}),
+    ("Pound to Euro rate slides after BoE cut", "en", {"GBP": -1, "EUR": 1}),
+    ("ドル/円、163円目前で急反落", "ja", {"USD": -1, "JPY": 1}),
+])
+def test_lexicon_v4_fixes(title, lang, expect):
+    an = news.analyze_lexicon(title, lang)
+    assert {c: (1 if v > 0 else -1) for c, v in an["cur"].items()} == expect
+    assert an["by"] == "lexicon-v4"
