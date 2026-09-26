@@ -110,3 +110,40 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # GitHub runs the 15-minute schedule only every few hours when it is busy, so each run starts the
+  # next one itself at the next quarter hour while the market is open. The schedule above stays as
+  # the fallback that restarts the chain (for example after the weekend).
+  next:
+    needs: [cycle, deploy]
+    if: ${{ always() && needs.cycle.result != 'skipped' && github.ref_name == github.event.repository.default_branch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Start the next cycle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          now=$(date -u +%s)
+          # the next quarter hour plus 90 seconds, so the 15-minute bar has closed
+          next=$(( (now / 900 + 1) * 900 + 90 ))
+          # the FX market closes from Friday 17:00 to Sunday 17:00 New York time (one more run scores Friday's last bar)
+          read -r dow hm <<< "$(TZ=America/New_York date -d "@$next" +"%u %H%M")"
+          hm=$((10#$hm))
+          if { [ "$dow" = 5 ] && [ "$hm" -ge 1715 ]; } || [ "$dow" = 6 ] || { [ "$dow" = 7 ] && [ "$hm" -lt 1700 ]; }; then
+            open=$(TZ=America/New_York date -d "$(TZ=America/New_York date -d "@$next" +%Y-%m-%d) + $(( (7 - dow) % 7 )) days 17:00" +%s)
+            if [ $(( open - now )) -gt 19800 ]; then echo "market closed; the schedule restarts the chain"; exit 0; fi
+            next=$(( open + 90 ))
+          fi
+          sleep $(( next - $(date -u +%s) > 0 ? next - $(date -u +%s) : 0 ))
+          others=$(gh run list --repo "$REPO" --workflow server.yml --limit 20 --json databaseId,status \
+                   --jq "[.[] | select(.status != \"completed\" and .databaseId != $RUN_ID)] | length")
+          if [ "$others" != "0" ]; then echo "another run is queued or running; it continues the chain"; exit 0; fi
+          gh workflow run server.yml --repo "$REPO" --ref "$REF"
+          echo "::notice::next cycle started"

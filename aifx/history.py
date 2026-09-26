@@ -12,13 +12,14 @@ from __future__ import annotations
 import io
 import time
 import urllib.parse
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .data import PAIRS, Pair, _clean_daily, _yahoo_chart, http_get, parse_yahoo_chart, parse_yahoo_intraday
+from .data import PAIRS, USER_AGENT, Pair, _clean_daily, _yahoo_chart, http_get, parse_yahoo_chart, parse_yahoo_intraday
 from .timeutil import utcnow
 
 HIST_DIR = Path("data/history")
@@ -110,6 +111,83 @@ def download_extra(root: Path | None = None, log=print) -> None:
     for sid in EXTRA_RATES:
         fetch_fred(sid).to_csv(_path(f"rate_{sid}.csv", root), index_label="date")
         log(f"rate {sid}")
+
+
+# ------------------------------------------------------------------ Dukascopy
+# Free hourly bid and ask candles from 2003 (datafeed.dukascopy.com, one LZMA file per month):
+# about 20 years of hourly bars for research, against Yahoo's 730 days.
+DUKA_URL = "https://datafeed.dukascopy.com/datafeed/{pair}/{year}/{month:02d}/{side}_candles_hour_1.bi5"
+DUKA_START = 2003
+DUKA_DIR = "duka"
+
+
+def _duka_month(code: str, year: int, month: int, side: str, point: float) -> pd.DataFrame:
+    """One month of hourly candles (``month`` 1-12); empty if Dukascopy has none."""
+    import lzma
+    import urllib.error
+    url = DUKA_URL.format(pair=code, year=year, month=month - 1, side=side)
+    raw = b""
+    for attempt in range(6):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=40) as resp:
+                raw = resp.read()
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return pd.DataFrame()
+            time.sleep(2 ** attempt)            # 429 / 503: the feed asks callers to slow down
+        except Exception:
+            time.sleep(2 ** attempt)
+    else:
+        raise RuntimeError(f"Dukascopy: {url} failed")
+    if not raw:
+        return pd.DataFrame()
+    rec = np.frombuffer(lzma.decompress(raw), dtype=np.dtype([("t", ">i4"), ("o", ">i4"), ("c", ">i4"), ("l", ">i4"),
+                                                              ("h", ">i4"), ("v", ">f4")]))
+    start = pd.Timestamp(year=year, month=month, day=1, tz="UTC")
+    df = pd.DataFrame({k: rec[k].astype(float) * point for k in ("o", "c", "l", "h")},
+                      index=start + pd.to_timedelta(rec["t"].astype(np.int64), unit="s"))
+    df["v"] = rec["v"].astype(float)
+    return df
+
+
+def fetch_dukascopy_hourly(code: str, start_year: int = DUKA_START, until: datetime | None = None,
+                           workers: int = 4) -> pd.DataFrame:
+    """Hourly mid bars (the average of bid and ask) with the bid-ask spread, for every complete month
+    from ``start_year``. Hours without ticks (weekends, holidays) are left out."""
+    from concurrent.futures import ThreadPoolExecutor
+    pair = PAIRS[code]
+    point = 1e-3 if pair.quote == "JPY" else 1e-5
+    until = until or utcnow()
+    months = [(y, m) for y in range(start_year, until.year + 1) for m in range(1, 13) if (y, m) < (until.year, until.month)]
+    jobs = [(y, m, side) for y, m in months for side in ("BID", "ASK")]
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        parts = list(ex.map(lambda j: _duka_month(code, j[0], j[1], j[2], point), jobs))
+    bid = pd.concat([p for (y, m, side), p in zip(jobs, parts) if side == "BID" and len(p)])
+    ask = pd.concat([p for (y, m, side), p in zip(jobs, parts) if side == "ASK" and len(p)])
+    both = bid.join(ask, lsuffix="_b", rsuffix="_a", how="inner")
+    both = both[(both["v_b"] > 0) & (both["v_a"] > 0)]
+    out = pd.DataFrame({"open": (both["o_b"] + both["o_a"]) / 2, "high": (both["h_b"] + both["h_a"]) / 2,
+                        "low": (both["l_b"] + both["l_a"]) / 2, "close": (both["c_b"] + both["c_a"]) / 2,
+                        "spread": both["c_a"] - both["c_b"]}, index=both.index)
+    out["high"] = out[["open", "high", "close"]].max(axis=1)
+    out["low"] = out[["open", "low", "close"]].min(axis=1)
+    return out[~out.index.duplicated()].sort_index()
+
+
+def download_dukascopy(root: Path | None = None, log=print, start_year: int = DUKA_START) -> None:
+    root = (root or HIST_DIR) / DUKA_DIR
+    root.mkdir(parents=True, exist_ok=True)
+    for code in PAIRS:
+        df = fetch_dukascopy_hourly(code, start_year)
+        df.to_csv(root / f"{code}_1h.csv", index_label="time", float_format="%.6f")
+        log(f"Dukascopy {code}: {len(df):,} hourly bars {df.index[0]:%Y-%m-%d} .. {df.index[-1]:%Y-%m-%d}")
+
+
+def load_long_hourly(code: str, root: Path | None = None) -> pd.DataFrame:
+    """About 20 years of hourly mid bars (Dukascopy) with the bid-ask spread."""
+    return _load_times((root or HIST_DIR) / DUKA_DIR / f"{code}_1h.csv")
 
 
 def load_daily(code: str, root: Path | None = None) -> pd.DataFrame:

@@ -89,3 +89,49 @@ def test_daily_bars_are_rebuilt_for_the_london_day():
     # a day rebuilt from hourly bars only uses the bars of that day
     later = hourly[hourly.index < pd.Timestamp("2026-09-15 12:00", tz="UTC")]
     assert london_days(daily.loc[:"2026-09-14"], later).loc["2026-09-14"].equals(out.loc["2026-09-14"])
+
+
+def test_dukascopy_hourly_bars_are_the_mid_of_bid_and_ask(monkeypatch):
+    import io
+    import lzma
+    import urllib.error
+    import urllib.request
+    from datetime import datetime, timezone
+
+    import numpy as np
+    import pytest
+
+    from aifx import history
+
+    def blob(side):
+        rec = np.zeros(3, dtype=np.dtype([("t", ">i4"), ("o", ">i4"), ("c", ">i4"), ("l", ">i4"), ("h", ">i4"), ("v", ">f4")]))
+        add = 0 if side == "BID" else 8                      # ask 0.008 yen above bid
+        for i, (o, c, lo, hi, v) in enumerate([(150000, 150100, 149900, 150200, 5.0), (150100, 150100, 150100, 150100, 0.0),
+                                               (150100, 150300, 150050, 150400, 7.0)]):
+            rec[i] = (i * 3600, o + add, c + add, lo + add, hi + add, v)
+        return lzma.compress(rec.tobytes())
+
+    seen = []
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        url = req.full_url
+        seen.append(url)
+        if "/2026/08/" not in url:                           # only September 2026 (month 08 counts from 0)
+            raise urllib.error.HTTPError(url, 404, "not found", None, None)
+        return Resp(blob("BID" if "BID_" in url else "ASK"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    df = history.fetch_dukascopy_hourly("USDJPY", 2026, until=datetime(2026, 10, 5, tzinfo=timezone.utc), workers=1)
+    assert any("USDJPY/2026/08/BID_candles_hour_1.bi5" in u for u in seen)
+    assert not any("/2026/09/" in u for u in seen)          # October is not complete yet
+    assert len(df) == 2                                     # the hour without ticks is left out
+    assert df.index[0] == pd.Timestamp("2026-09-01 00:00", tz="UTC")
+    assert df["close"].iloc[0] == pytest.approx(150.104) and df["spread"].iloc[0] == pytest.approx(0.008)
+    assert (df["high"] >= df[["open", "close"]].max(axis=1)).all() and (df["low"] <= df[["open", "close"]].min(axis=1)).all()

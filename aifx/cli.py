@@ -153,6 +153,9 @@ def cmd_research(args) -> int:
     if args.download:
         history.download()
         return 0
+    if args.download_long:
+        history.download_dukascopy()
+        return 0
     if args.trade:
         research_trade.run()
         return 0
@@ -251,6 +254,8 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("research", help="過去データで検証し research/report.md を作成 (台帳とは別)")
     r.add_argument("--download", action="store_true",
                    help="過去の価格 (Yahoo Finance)、短期金利・米2年金利 (FRED)、株価指数を data/history/ に取得")
+    r.add_argument("--download-long", action="store_true",
+                   help="2003年からの1時間足 (Dukascopy の買値と売値の中間、無料) を data/history/duka/ に取得")
     r.add_argument("--intraday", action="store_true", help="15分足・5分足 (直近約60日) の検証 (research/intraday.md)")
     r.add_argument("--trade", action="store_true", help="売買ルールの検証 (コスト込み、research/trade.md)")
     r.add_argument("--ml", action="store_true", help="機械学習による方向予測の検証 (research/ml.md、scikit-learn と lightgbm が必要)")
