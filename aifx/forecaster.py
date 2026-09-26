@@ -128,7 +128,7 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
         "v": version,
         "fc": fc,
         # the trade plan: reference signal, stop, target and time limit (trade.py)
-        "trade": trade.plan(tf, pair, bars.iloc[-tf.fit_bars:], origin, p0, usable_rates(rate_items, origin)),
+        "trade": trade.plan(tf, pair, bars.iloc[-trade.history_bars(tf):], origin, p0, usable_rates(rate_items, origin)),
     }
     chart = chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, analog_idx, press, drift, bar_drift,
                          bar_t)

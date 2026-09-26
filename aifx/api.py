@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -45,26 +46,32 @@ RESEARCH_ROWS = {
 }
 
 
-TRADE_RESEARCH = RESEARCH.parent / "trade.json"
+SIGNALS_RESEARCH = RESEARCH.parent / "signals.json"
+# each live rule's 20-year test (research/signals.md): timeframe, variant and data source
+SIGNAL_VARIANT = {"carry": ("1d", "base", "duka_1d"), "carry_mom_vol": ("1h", "combo", "duka_1h")}
 TRADE_BT = {"1d": timedelta(days=365), "1h": timedelta(days=90)}
 TRADE_LIST = 40
 
 
-def trade_research(path: Path = TRADE_RESEARCH) -> dict:
-    """Tested numbers of each timeframe's reference rule (research/trade.md)."""
+def trade_research(path: Path = SIGNALS_RESEARCH) -> dict:
+    """Tested numbers of each timeframe's reference rule on 20 years of data (research/signals.md):
+    costs are the larger of the live spread and the recorded one; ``*_live`` with the live spread only."""
     try:
         res = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     out = {}
     for tf_key, rule in trade.RULES.items():
-        r = res.get(tf_key, {})
-        fam = r.get("families", {}).get(rule["key"])
-        if not fam or not fam.get("chosen"):
+        spec = SIGNAL_VARIANT.get(rule["key"])
+        v = ((res.get(spec[0]) or {}).get("variants") or {}).get(spec[1]) if spec else None
+        r = (v or {}).get("by_source", {}).get(spec[2]) if v else None
+        if not r:
             continue
-        keep = ("n", "win", "pips", "R", "pf", "t", "maxdd_R", "per_year")
-        out[tf_key] = {"tier": fam.get("tier"), "start": r.get("start"), "split": r.get("split"), "end": r.get("end"),
-                       **{part: {k: _r(fam["chosen"][part].get(k), 4) for k in keep} for part in ("tune", "test")}}
+        span = re.findall(r"\d{4}-\d{2}-\d{2}", (res.get("data") or {}).get(spec[2], ""))
+        keep = ("n", "win", "pips", "R", "pf", "t", "maxdd_R", "per_year", "t_live", "pips_live")
+        out[tf_key] = {"tier": "weak", "start": span[0] if span else None, "split": res.get("split"),
+                       "end": span[1] if len(span) > 1 else None, "label": v.get("label"),
+                       **{part: {k: _r(r[part].get(k), 4) for k in keep} for part in ("tune", "test")}}
     return out
 
 
@@ -85,11 +92,11 @@ def _trade_block(tf, pair, rec: dict, bars: pd.DataFrame, ref: pd.DataFrame, pre
     """The trade plan of the latest forecast, both-side levels, and how the rule has done."""
     dec = pair.decimals + 1
     tr = rec.get("trade")
-    recorded = tr is not None
-    if tr is None:      # made by an earlier version: the same plan, computed for display only
-        tr = trade.plan(tf, pair, bars_until(tf, bars, parse_iso(rec["origin"])).iloc[-tf.fit_bars:],
-                        parse_iso(rec["origin"]), rec["p0"], rate_item)
     rule = trade.RULES.get(tf.key)
+    recorded = tr is not None and (rule is None or tr.get("rule") == rule["key"])
+    if not recorded:    # made by an earlier version or rule: the current rule's plan, computed for display only
+        tr = trade.plan(tf, pair, bars_until(tf, bars, parse_iso(rec["origin"])).iloc[-trade.history_bars(tf):],
+                        parse_iso(rec["origin"]), rec["p0"], rate_item)
     out = {"cost_pips": trade.COST_PIPS.get(pair.code), "swap_markup": trade.SWAP_MARKUP,
            "plan": {"origin": rec["origin"], "p0": rec["p0"], "dir": tr.get("dir", 0), "sl": tr.get("sl"), "tp": tr.get("tp"),
                     "until": tr.get("until"), "diff": tr.get("diff"), "atr": tr.get("atr"),
@@ -100,11 +107,13 @@ def _trade_block(tf, pair, rec: dict, bars: pd.DataFrame, ref: pd.DataFrame, pre
         return out
     out["rule"] = {"key": rule["key"], "name": rule["name"], "desc": rule["desc"], "sl": rule["sl"], "tp": rule["tp"],
                    "hold": rule["hold"], "research": research.get(tf.key)}
-    live = trade.live_trades(preds, ref, TIMEFRAMES[tf.ref].minutes, pair)
+    # the signals recorded under this rule (plans made with a retired rule keep their own results in the ledger)
+    live = trade.live_trades([p for p in preds if (p.get("trade") or {}).get("rule") == rule["key"]], ref,
+                             TIMEFRAMES[tf.ref].minutes, pair)
     done = [dict(t["result"], R=t["result"].get("R")) for t in live if t["result"]]
     out["live"] = {"stats": trade.stats(done), "trades": [_trade_item(tf.key, t, dec) for t in live[-TRADE_LIST:]],
                    "open": next((_trade_item(tf.key, t, dec) for t in reversed(live) if not t["result"]), None)}
-    window = bars.iloc[-(int(TRADE_BT[tf.key].days * (24 if tf.key == "1h" else 1)) + 400):]
+    window = bars.iloc[-(int(TRADE_BT[tf.key].days * (24 if tf.key == "1h" else 1)) + 400 + trade.history_bars(tf)):]
     bt = trade.backtest(tf, pair, window, rate_item, since=now - TRADE_BT[tf.key])
     out["bt"] = {"days": TRADE_BT[tf.key].days, "stats": trade.stats(bt),
                  "trades": [_trade_item(tf.key, t, dec) for t in bt[-TRADE_LIST:]]}

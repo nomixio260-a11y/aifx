@@ -149,10 +149,51 @@ def test_api_shows_the_plan_levels_and_rule_record(session):
     out = build_api(root)
     blk = out["pair/USDJPY.json"]["tf"]["1h"]
     T = blk["trade"]
-    assert T["rule"]["key"] == "carry_mom" and T["cost_pips"] == trade.COST_PIPS["USDJPY"]
+    assert T["rule"]["key"] == "carry_mom_vol" and T["rule"]["hold"] == 120 and T["cost_pips"] == trade.COST_PIPS["USDJPY"]
     lv = T["plan"]["levels"]
     p0 = T["plan"]["p0"]
     assert lv["buy"]["sl"] < p0 < lv["buy"]["tp"] and lv["sell"]["tp"] < p0 < lv["sell"]["sl"]
     assert T["plan"]["x_until"] and "stats" in T["bt"] and "stats" in T["live"]
     assert out["pair/USDJPY.json"]["tf"]["15m"]["trade"]["rule"] is None
     assert any(p.get("signal") is not None for p in out["meta.json"]["pairs"])
+
+
+def test_volatility_filter_blocks_signals_in_rough_markets():
+    rng = np.random.default_rng(3)
+    n = 2500
+    scale = np.where(np.arange(n) > 2300, 12e-4, 4e-4)       # the last 200 bars three times as rough
+    c = 150 * np.exp(np.cumsum(rng.normal(2e-5, scale)))
+    allow = trade.vol_allowed(c, n=120, window=2000, q=0.8)
+    assert allow[:620].all()                                    # not blocking before a quarter of the window
+    assert not allow[-1] and allow[2200]
+    # the single-close call and the whole-series call agree, and the filter only removes signals
+    for i in (2200, 2499):
+        closes = c[: i + 1]
+        diff = 2.0 if closes[-1] > closes[-121] else -2.0     # carry agrees with the 120-bar move
+        one = trade.rule_signal("1h", closes, diff)
+        assert one == trade.rule_signal("1h", closes, diff, bool(trade.vol_allowed(closes, **trade.RULES["1h"]["vol"])[-1]))
+    assert trade.rule_signal("1h", c, 2.0 if c[-1] > c[-121] else -2.0) == 0
+
+
+def test_plans_of_the_retired_rule_keep_their_time_limit():
+    assert trade.exits("1h", "carry_mom")["hold"] == 24
+    assert trade.exits("1h", "carry_mom_vol")["hold"] == trade.exits("1h")["hold"] == 120
+    tf = TIMEFRAMES["1h"]
+    assert trade.history_bars(tf) >= 120 + 6000 + 1 > tf.fit_bars
+
+
+def test_the_live_rules_are_the_tested_ones():
+    """trade.RULES must be the rules research/signals.md tested (and the page shows those numbers)."""
+    import json
+    from pathlib import Path
+
+    from aifx.api import trade_research
+    res = json.loads(Path("research/signals.json").read_text(encoding="utf-8"))
+    combo = res["1h"]["variants"]["combo"]
+    r = trade.RULES["1h"]
+    assert {k: r[k] for k in ("thr", "L", "sl", "tp", "hold")} == combo["rule"] and combo["filters"] == ["vol80"]
+    assert r["vol"] == {"n": 120, "window": 250 * 24, "q": 0.8}
+    base = res["1d"]["base_rule"]
+    assert {k: trade.RULES["1d"][k] for k in base} == base
+    shown = trade_research()
+    assert shown["1h"]["test"]["n"] == combo["by_source"]["duka_1h"]["test"]["n"] and shown["1h"]["split"] == "2017-01-01"

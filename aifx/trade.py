@@ -45,33 +45,64 @@ def atr(h: np.ndarray, lo: np.ndarray, c: np.ndarray, n: int = 14) -> np.ndarray
 RULES = {
     "1d": {"key": "carry", "name": "金利差", "desc": "金利差が2%以上ある通貨ペアを、スワップがつく方向に持つ",
            "thr": 2.0, "sl": 4.0, "tp": 2.0, "hold": 5},
-    "1h": {"key": "carry_mom", "name": "金利差 + 5日間の流れ", "desc": "金利差が1%以上あり、過去120時間の値動きも同じ向きのときだけ、その方向に持つ",
-           "thr": 1.0, "L": 120, "sl": 3.0, "tp": 3.0, "hold": 24},
+    # research/signals.md (2003-2026): the earlier 1h rule (carry_mom, 24 hours) lost money over 2003-2016;
+    # a 120-hour limit and skipping entries while volatility is above its 1-year 80 % point held on both periods
+    "1h": {"key": "carry_mom_vol", "name": "金利差 + 5日間の流れ (荒い相場は見送り)",
+           "desc": "金利差が1%以上あり、過去120時間の値動きも同じ向きで、値動きの荒さが過去1年の80%点以下のときだけ、その方向に持つ",
+           "thr": 1.0, "L": 120, "vol": {"n": 120, "window": 6000, "q": 0.8}, "sl": 3.0, "tp": 3.0, "hold": 120},
 }
+# exits of rules used before: plans recorded with them keep their own time limit
+RETIRED = {"carry_mom": {"sl": 3.0, "tp": 3.0, "hold": 24}}
 # stop / target / time limit for the both-side levels where no rule is tested
 DEFAULT_EXITS = {"15m": {"sl": 3.0, "tp": 3.0, "hold": 16}, "1h": {"sl": 3.0, "tp": 3.0, "hold": 24},
                  "1d": {"sl": 4.0, "tp": 2.0, "hold": 5}}
 
 
-def exits(tf_key: str) -> dict:
+def exits(tf_key: str, rule_key: str | None = None) -> dict:
+    """Stop, target and time limit of the timeframe's rule (or of the retired rule a plan was made with)."""
+    if rule_key in RETIRED:
+        return dict(RETIRED[rule_key])
     r = RULES.get(tf_key)
     return {k: r[k] for k in ("sl", "tp", "hold")} if r else DEFAULT_EXITS[tf_key]
 
 
-def rule_signal(tf_key: str, closes: np.ndarray, diff: float | None) -> int:
-    """+1 buy, -1 sell, 0 none, from closes up to the origin and the known rate difference."""
+def history_bars(tf: Timeframe) -> int:
+    """Bars a plan is made from: the models' window, or what the rule's volatility filter needs."""
+    v = (RULES.get(tf.key) or {}).get("vol")
+    return max(tf.fit_bars, v["n"] + v["window"] + 1) if v else tf.fit_bars
+
+
+def vol_allowed(closes: np.ndarray, n: int, window: int, q: float) -> np.ndarray:
+    """Whether the volatility filter lets a signal through at each close: the standard deviation of the
+    last ``n`` log changes is not above the ``q`` quantile of the same value over the ``window`` closes
+    before (the filter does not block until a quarter of that window exists)."""
+    rv = pd.Series(np.log(np.asarray(closes, dtype=float))).diff().rolling(n, min_periods=n).std()
+    limit = rv.rolling(window, min_periods=window // 4).quantile(q).shift(1)
+    return ~(rv > limit).to_numpy()
+
+
+def rule_signal(tf_key: str, closes: np.ndarray, diff: float | None, allowed: bool | None = None) -> int:
+    """+1 buy, -1 sell, 0 none, from closes up to the origin and the known rate difference.
+    ``allowed``: the volatility filter's answer at this close, if already computed for a whole series."""
     r = RULES.get(tf_key)
     if not r or diff is None:
         return 0
     car = 1 if diff >= r["thr"] else -1 if diff <= -r["thr"] else 0
     if r["key"] == "carry":
         return car
-    if r["key"] == "carry_mom":
+    if r["key"] in ("carry_mom", "carry_mom_vol"):
         L = r["L"]
         if len(closes) <= L:
             return 0
         mom = np.sign(closes[-1] / closes[-1 - L] - 1)
-        return car if car != 0 and mom == car else 0
+        sig = car if car != 0 and mom == car else 0
+        if sig and "vol" in r:
+            if allowed is None:
+                v = r["vol"]
+                allowed = bool(vol_allowed(closes[-(v["n"] + v["window"] + 1):], **v)[-1])
+            if not allowed:
+                return 0
+        return sig
     return 0
 
 
@@ -176,13 +207,14 @@ def backtest(tf: Timeframe, pair: Pair, bars: pd.DataFrame, rates_item: dict | N
     days = sorted({e.date() for e in ends})
     diff_by_day = {d: rate_diff(rates_item, pair.base, pair.quote, d) for d in days}
     cost = COST_PIPS.get(pair.code, 1.0)
+    allow = vol_allowed(c, **r["vol"]) if "vol" in r else None
     out, i, n = [], 150, len(c)
     while i < n - 1:
         if since is not None and ends[i] < since:
             i += 1
             continue
         diff = diff_by_day[ends[i].date()]
-        d = rule_signal(tf.key, c[: i + 1], diff) if np.isfinite(a[i]) else 0
+        d = rule_signal(tf.key, c[: i + 1], diff, None if allow is None else bool(allow[i])) if np.isfinite(a[i]) else 0
         if not d:
             i += 1
             continue

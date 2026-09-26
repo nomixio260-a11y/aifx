@@ -191,7 +191,7 @@ def verify(root: Path | str) -> dict:
                 add("rule", f"{tag} h={f['h']}: a time-of-day drift on a daily forecast")
         tr = p.get("trade")
         if tr is not None:
-            ex = trade_exits(p["tf"])
+            ex = trade_exits(p["tf"], tr.get("rule"))
             if tr.get("dir") not in (-1, 0, 1) or tr["until"] != iso(target_times(tf, origin, (ex["hold"],))[0]):
                 add("rule", f"{tag}: trade plan time limit or direction breaks the rules")
             elif tr["dir"]:
