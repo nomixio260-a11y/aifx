@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, band_z, bar_end, bars_until, horizon_sigma,
-                     model_paths, prob_up, sigma_steps, target_times)
+                     model_paths, prob_up, sigma_steps, target_times, vol_bars)
 from . import season
 from .forecaster import model_version, origin_price
 from .learning import learn_arrays
@@ -101,7 +101,7 @@ def _forecast(tf: Timeframe, rows: dict, bars: pd.DataFrame, ref: pd.DataFrame, 
     H = max(tf.horizons)
     hist = bars.iloc[max(0, o + 1 - tf.fit_bars): o + 1]
     paths, _ = model_paths(np.log(hist["close"].to_numpy()), H)
-    var = sigma_steps(tf, hist, origin, H, None, hourly=ref_o if tf.key == "1d" else None)
+    var = sigma_steps(tf, bars.iloc[max(0, o + 1 - vol_bars(tf)): o + 1], origin, H, None, hourly=ref_o if tf.key == "1d" else None)
     sig = horizon_sigma(var, tf.horizons)
     targets = target_times(tf, origin)
     bar_d, bar_t = season.step_drift(tf.minutes, bars, origin, H)

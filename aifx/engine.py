@@ -110,6 +110,12 @@ def model_paths(y: np.ndarray, steps: int, models: list[Model] | None = None) ->
     return out, analogs
 
 
+def vol_bars(tf: Timeframe) -> int:
+    """How many bars ``sigma_steps`` is handed: the models' window, or for hourly bars the longer one
+    the time-of-day profile is measured over."""
+    return max(tf.fit_bars, HOURLY_PROFILE_WINDOW + 500 if tf.key == "1h" else 0)
+
+
 def sigma_steps(tf: Timeframe, bars: pd.DataFrame, origin: datetime, steps: int,
                 events: list[dict] | None = None, hourly: pd.DataFrame | None = None) -> np.ndarray:
     """Raw (uncalibrated) per-step variance in bp^2 for the next ``steps`` bars.
@@ -253,7 +259,7 @@ def bars_until(tf: Timeframe, bars: pd.DataFrame, cutoff: datetime) -> pd.DataFr
 def backtest_pair(tf: Timeframe, bars: pd.DataFrame, hourly: pd.DataFrame | None = None) -> dict:
     """Walk-forward test on one pair: every origin sees only bars up to itself."""
     H = max(tf.horizons)
-    bars = bars.iloc[-(tf.fit_bars + tf.backtest_origins * tf.backtest_step + H):]
+    bars = bars.iloc[-(vol_bars(tf) + tf.backtest_origins * tf.backtest_step + H):]
     y = np.log(bars["close"].to_numpy())
     n = len(y)
     last = n - 1 - H
@@ -265,7 +271,7 @@ def backtest_pair(tf: Timeframe, bars: pd.DataFrame, hourly: pd.DataFrame | None
         yy = y[: o + 1]
         paths, _ = model_paths(yy[-tf.fit_bars:], H)
         origin_t = bar_end(tf, hist.index[-1])
-        var = sigma_steps(tf, hist.iloc[-tf.fit_bars:], origin_t, H, hourly=hourly)
+        var = sigma_steps(tf, hist.iloc[-vol_bars(tf):], origin_t, H, hourly=hourly)
         sig = horizon_sigma(var, tf.horizons)
         for j, h in enumerate(tf.horizons):
             rows.append({

@@ -113,3 +113,22 @@ def test_research_summary_is_optional(tmp_path):
     if s is not None:
         assert {"1d", "1h"} <= set(s["tf"]) <= {"15m", "1d", "1h"}
         assert all(set(x["h"]) == set(s["tf"][tf]["ranges"]) for tf in s["tf"] for x in s["tf"][tf]["direction"])
+
+
+def test_hourly_ranges_are_measured_over_the_whole_profile_window(tmp_path, monkeypatch):
+    """The time-of-day profile needs about a year of hourly bars, more than the models are fitted on."""
+    from aifx import engine, forecaster
+
+    from .conftest import run_session
+    seen: dict[str, list[int]] = {}
+    real = forecaster.sigma_steps
+
+    def spy(tf, bars, *a, **k):
+        seen.setdefault(tf.key, []).append(len(bars))
+        return real(tf, bars, *a, **k)
+
+    monkeypatch.setattr(forecaster, "sigma_steps", spy)
+    run_session(tmp_path / "state", cycles=1)
+    assert min(seen["1h"]) > engine.TIMEFRAMES["1h"].fit_bars
+    assert max(seen["1h"]) <= engine.HOURLY_PROFILE_WINDOW + 500
+    assert max(seen["1d"]) <= engine.TIMEFRAMES["1d"].fit_bars

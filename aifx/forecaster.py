@@ -20,7 +20,7 @@ from . import news as newsmod
 from . import season, trade
 from .data import Pair
 from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, bar_end, combine, fan_z, horizon_sigma,
-                     model_paths, sigma_steps, step_ends, target_times)
+                     model_paths, sigma_steps, step_ends, target_times, vol_bars)
 from .learning import HorizonState
 from .rates import latest as rates_latest
 from .store import known_before
@@ -79,7 +79,7 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
     paths, analog_idx = model_paths(y, steps)
     ends = step_ends(tf, origin, steps)
     evs = newsmod.events_between(events, (pair.base, pair.quote), origin, ends[-1], origin)
-    var = sigma_steps(tf, bars.iloc[-tf.fit_bars:], origin, steps, evs, hourly=ref if tf.key == "1d" else None)
+    var = sigma_steps(tf, bars.iloc[-vol_bars(tf):], origin, steps, evs, hourly=ref if tf.key == "1d" else None)
     press = newsmod.pressures(news_items, origin)
     x = newsmod.pair_signal(press, pair.base, pair.quote)
     p0, p0_bar = origin_price(ref, origin, TIMEFRAMES[tf.ref].minutes)
