@@ -102,7 +102,8 @@ def test_chart_indicators_line_up_with_the_bars(session):
         blk = out["pair/USDJPY.json"]["tf"][tf]
         n, ind, steps = len(blk["bars"]["t"]), blk["ind"], len(blk["path"]["steps"])
         for k in ("sma20", "sma75", "bb_upper", "bb_mid", "bb_lower", "rsi14", "macd", "macd_signal",
-                  "ichi_tenkan", "ichi_kijun", "ichi_span_a", "ichi_span_b", "ichi_lag"):
+                  "ichi_tenkan", "ichi_kijun", "ichi_span_a", "ichi_span_b", "ichi_lag",
+                  "stoch_k", "stoch_d", "adx", "plus_di", "minus_di", "sar"):
             assert len(ind[k]) == n, (tf, k)
         # the leading spans reach into the forecast bars, the lagging span stops 26 bars before the end
         assert len(ind["ichi_span_a_ahead"]) == len(ind["ichi_span_b_ahead"]) == min(ICHI_SHIFT, steps)
@@ -110,3 +111,28 @@ def test_chart_indicators_line_up_with_the_bars(session):
         assert ind["ichi_lag"][-ICHI_SHIFT - 1] == pytest.approx(closes[-1], abs=1e-3)
         assert all(v is None for v in ind["ichi_lag"][-ICHI_SHIFT:])
         assert all(lo <= mid <= hi for lo, mid, hi in zip(ind["bb_lower"], ind["bb_mid"], ind["bb_upper"]) if lo is not None)
+        assert all(0 <= v <= 100 for k in ("stoch_k", "stoch_d", "adx", "plus_di", "minus_di") for v in ind[k] if v is not None)
+        pv = blk["pivots"]["levels"]
+        assert pv["S2"] < pv["S1"] < pv["P"] < pv["R1"] < pv["R2"] and blk["pivots"]["period"] in ("前日", "前週")
+
+
+def test_stochastics_adx_and_parabolic_sar():
+    from aifx import indicators
+    bars = _hourly(n=400)
+    k, d = indicators.stochastic(bars)
+    i = 300
+    lo, hi = bars["low"].iloc[i - 13 - 2:i + 1], bars["high"].iloc[i - 13 - 2:i + 1]
+    raw = [100 * (bars["close"].iloc[j] - bars["low"].iloc[j - 13:j + 1].min())
+           / (bars["high"].iloc[j - 13:j + 1].max() - bars["low"].iloc[j - 13:j + 1].min()) for j in (i - 2, i - 1, i)]
+    assert k.iloc[i] == pytest.approx(np.mean(raw)) and len(lo) == len(hi)
+    adx, pdi, mdi = indicators.adx(bars)
+    assert ((adx.dropna() >= 0) & (adx.dropna() <= 100)).all()
+    # a steady climb: +DI above -DI, and the SAR sits under the price
+    up = bars.copy()
+    up[["open", "high", "low", "close"]] = up[["open", "high", "low", "close"]].mul(np.exp(np.arange(len(up)) * 2e-4), axis=0)
+    a2, p2, m2 = indicators.adx(up)
+    sar = indicators.parabolic_sar(up)
+    assert p2.iloc[-50:].mean() > m2.iloc[-50:].mean()
+    assert (sar.iloc[-100:] < up["close"].iloc[-100:]).mean() > 0.7
+    pv = indicators.pivot_points(110.0, 100.0, 105.0)
+    assert pv["P"] == pytest.approx(105.0) and pv["R1"] == pytest.approx(110.0) and pv["S1"] == pytest.approx(100.0)

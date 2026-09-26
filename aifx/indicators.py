@@ -43,6 +43,68 @@ def ichimoku(df: pd.DataFrame, tenkan: int = 9, kijun: int = 26, span_b: int = 5
     return {"tenkan": t, "kijun": k, "span_a": (t + k) / 2, "span_b": mid(span_b)}
 
 
+def stochastic(df: pd.DataFrame, k: int = 14, smooth: int = 3, d: int = 3) -> tuple[pd.Series, pd.Series]:
+    """Slow stochastics: %K is the close's place in the ``k``-bar range, averaged over ``smooth`` bars,
+    and %D its ``d``-bar average (0..100)."""
+    lo = df["low"].rolling(k, min_periods=k).min()
+    hi = df["high"].rolling(k, min_periods=k).max()
+    raw = 100 * (df["close"] - lo) / (hi - lo).replace(0, np.nan)
+    slow = raw.rolling(smooth, min_periods=smooth).mean()
+    return slow, slow.rolling(d, min_periods=d).mean()
+
+
+def adx(df: pd.DataFrame, n: int = 14) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Wilder's directional movement: (ADX, +DI, -DI)."""
+    up = df["high"].diff()
+    down = -df["low"].diff()
+    plus_dm = up.where((up > down) & (up > 0), 0.0)
+    minus_dm = down.where((down > up) & (down > 0), 0.0)
+    tr = atr(df, n)
+
+    def wilder(x):
+        return x.ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    plus_di = 100 * wilder(plus_dm) / tr.replace(0, np.nan)
+    minus_di = 100 * wilder(minus_dm) / tr.replace(0, np.nan)
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    return wilder(dx), plus_di, minus_di
+
+
+def parabolic_sar(df: pd.DataFrame, step: float = 0.02, max_af: float = 0.2) -> pd.Series:
+    """Wilder's parabolic stop-and-reverse: below the price in an uptrend, above it in a downtrend."""
+    hi, lo = df["high"].to_numpy(float), df["low"].to_numpy(float)
+    n = len(hi)
+    out = np.full(n, np.nan)
+    if n < 3:
+        return pd.Series(out, index=df.index)
+    up = hi[1] >= hi[0]
+    sar = lo[0] if up else hi[0]
+    ep = hi[1] if up else lo[1]
+    af = step
+    for i in range(1, n):
+        sar = sar + af * (ep - sar)
+        if up:
+            sar = min(sar, lo[i - 1], lo[i - 2] if i > 1 else lo[i - 1])
+            if lo[i] < sar:                        # reversal
+                up, sar, ep, af = False, ep, lo[i], step
+            elif hi[i] > ep:
+                ep, af = hi[i], min(af + step, max_af)
+        else:
+            sar = max(sar, hi[i - 1], hi[i - 2] if i > 1 else hi[i - 1])
+            if hi[i] > sar:
+                up, sar, ep, af = True, ep, hi[i], step
+            elif lo[i] < ep:
+                ep, af = lo[i], min(af + step, max_af)
+        out[i] = sar
+    return pd.Series(out, index=df.index)
+
+
+def pivot_points(high: float, low: float, close: float) -> dict[str, float]:
+    """Classic floor pivots from the previous period's high, low and close."""
+    p = (high + low + close) / 3
+    return {"R3": high + 2 * (p - low), "R2": p + (high - low), "R1": 2 * p - low, "P": p,
+            "S1": 2 * p - high, "S2": p - (high - low), "S3": low - 2 * (high - p)}
+
+
 def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
     prev = df["close"].shift()
     tr = pd.concat(

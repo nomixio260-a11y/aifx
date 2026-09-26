@@ -269,7 +269,37 @@ def _indicators(df: pd.DataFrame, n: int, dec: int, ahead: int = 0) -> dict:
         out[f"ichi_{key}"] = [_r(v, dec) for v in shifted.iloc[-n:].to_numpy()]
         out[f"ichi_{key}_ahead"] = [_r(v, dec) for v in ichi[key].iloc[-ICHI_SHIFT:].to_numpy()[:ahead]]
     out["ichi_lag"] = [_r(v, dec) for v in df["close"].shift(-ICHI_SHIFT).iloc[-n:].to_numpy()]
+    k, d = indicators.stochastic(df)
+    a, pdi, mdi = indicators.adx(df)
+    for key, series, dd in (("stoch_k", k, 1), ("stoch_d", d, 1), ("adx", a, 1), ("plus_di", pdi, 1), ("minus_di", mdi, 1)):
+        out[key] = [_r(v, dd) for v in series.iloc[-n:].to_numpy()]
+    out["sar"] = [_r(v, dec) for v in indicators.parabolic_sar(df.iloc[-(n + 200):]).iloc[-n:].to_numpy()]
     return out
+
+
+def _pivots(tf_key: str, bars: pd.DataFrame, daily: pd.DataFrame, dec: int, now) -> dict | None:
+    """Classic pivots from the last complete London day (intraday charts) or week (daily chart). When the
+    market is closed (no bar for over an hour, e.g. the weekend) the last day or week counts as complete."""
+    if not len(bars) or len(daily) < 10:
+        return None
+    last_end = (daily.index[-1] + pd.Timedelta(days=1)).to_pydatetime() if not TIMEFRAMES[tf_key].minutes else \
+        bars.index[-1].to_pydatetime() + timedelta(minutes=TIMEFRAMES[tf_key].minutes)
+    closed = TIMEFRAMES[tf_key].minutes and now - last_end > timedelta(hours=1)
+    if TIMEFRAMES[tf_key].minutes:
+        today = london_date(last_end - timedelta(minutes=1))
+        prev = daily[daily.index.date <= today] if closed else daily[daily.index.date < today]
+        if not len(prev):
+            return None
+        row, label = prev.iloc[-1], "前日"
+        hi, lo, cl = float(row["high"]), float(row["low"]), float(row["close"])
+    else:
+        week = daily.index.to_period("W-FRI")
+        done = daily if daily.index[-1].dayofweek == 4 and now.weekday() >= 5 else daily[week < week[-1]]
+        if not len(done):
+            return None
+        last = done[done.index.to_period("W-FRI") == done.index.to_period("W-FRI")[-1]]
+        hi, lo, cl, label = float(last["high"].max()), float(last["low"].min()), float(last["close"].iloc[-1]), "前週"
+    return {"period": label, "levels": {k: _r(v, dec) for k, v in indicators.pivot_points(hi, lo, cl).items()}}
 
 
 QUANTILES = (0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975)
@@ -460,6 +490,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                 "bars": _bars(bars, HISTORY[tf_key], tf_key, dec),
                 "ind": _indicators(bars, HISTORY[tf_key], dec, max(tf.steps, max(tf.horizons))),
                 "past": _past(rows, code, tf_key, PAST[tf_key], dec),
+                "pivots": _pivots(tf_key, bars, daily, dec, now),
             }
             rec = last_pred.get((code, tf_key))
             chart = latest.get(code, {}).get(tf_key)

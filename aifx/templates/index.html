@@ -597,7 +597,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     view: "forecast", pair: "USDJPY", tf: "1h",
     range: { "15m": 32, "1h": 48, "1d": 40 },
     h: { "15m": 4, "1h": 24, "1d": 5 },
-    show: { ma: false, rsi: false, pred: true, trade: true, range: false, past: false, bb: false, ichi: false, macd: false }, ctype: "candle", pastSrc: "auto", sigSrc: "auto", lot: { balance: 1000000, risk: 1 },
+    show: { ma: false, rsi: false, pred: true, trade: true, range: false, past: false, bb: false, ichi: false, macd: false, stoch: false, adx: false, sar: false, pivot: false }, ctype: "candle", pastSrc: "auto", sigSrc: "auto", lot: { balance: 1000000, risk: 1 },
     trackTf: "1h", trackPair: "ALL", trackMetric: 1, newsCur: "ALL", learnTf: "1h", strengthWin: "24h",
     meta: null, pairs: {}, track: null, news: null, models: null, verify: null, market: null, status: null, rendered: {}
   };
@@ -857,7 +857,11 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       { key: "bb", label: "ボリンジャーバンド" },
       { key: "ichi", label: "一目均衡表" },
       { key: "rsi", label: "RSI" },
-      { key: "macd", label: "MACD" }] }
+      { key: "macd", label: "MACD" },
+      { key: "stoch", label: "ストキャスティクス" },
+      { key: "adx", label: "ADX・DMI" },
+      { key: "sar", label: "パラボリック" },
+      { key: "pivot", label: "ピボット" }] }
   ];
   // the latest 1-bar-ahead forecasts that have been scored, placed on the chart's bars
   function pastOnChart(blk) {
@@ -920,6 +924,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       key("key box", "background:" + alpha(t.good, 0.25), "雲 (先行A > B)"); key("key box", "background:" + alpha(t.bad, 0.22), "雲 (先行A < B)");
       key("key dash", "border-color:" + t.s5, "遅行スパン");
     }
+    if (S.show.sar) key("key dotk", "background:" + t.s4, "パラボリック SAR");
+    if (S.show.pivot && blk && blk.pivots) key("key dash", "border-color:" + t.muted, "ピボット (" + blk.pivots.period + "の高値・安値・終値から)");
   }
 
   /* ---------------- trade plan ---------------- */
@@ -1145,6 +1151,18 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series.push({ name: "基準線", type: "line", data: pad(I.ichi_kijun), symbol: "none", lineStyle: { width: 1.3, color: t.s1 }, silent: true, z: 2 });
       series.push({ name: "遅行スパン", type: "line", data: pad(I.ichi_lag), symbol: "none", lineStyle: { width: 1, color: alpha(t.s5, 0.8), type: [4, 3] }, silent: true, z: 2 });
     }
+    if (S.show.sar && I.sar) {
+      series.push({ name: "パラボリック SAR", type: "scatter", data: pad(I.sar), symbol: "circle", symbolSize: 3.5, silent: true, z: 4, itemStyle: { color: t.s4 } });
+    }
+    var PV = S.show.pivot && blk.pivots ? blk.pivots.levels : null;
+    if (PV) {
+      series.push({ name: "ピボット", type: "line", data: [], silent: true, z: 2,
+        markLine: { symbol: "none", silent: true, data: ["R2", "R1", "P", "S1", "S2"].map(function (k) {
+          var c = k === "P" ? t.ink2 : k.charAt(0) === "R" ? t.bad : t.good;
+          return { yAxis: PV[k], lineStyle: { color: alpha(c, 0.55), width: 1, type: k === "P" ? "solid" : [6, 4] },
+                   label: { show: true, position: "insideStartTop", formatter: k + " " + fmt(PV[k], p.decimals), color: alpha(c, 0.9), fontSize: 10.5, fontFamily: t.mono } };
+        }) } });
+    }
     // forecast range: 50 % and 80 % bands from the last price, and the centre line
     var p0 = blk.prediction ? blk.prediction.p0 : last;
     if (S.show.range && steps.length && steps[0].lo80 != null) {
@@ -1225,6 +1243,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var panes = [];
     if (S.show.rsi && I.rsi14) panes.push("rsi");
     if (S.show.macd && I.macd) panes.push("macd");
+    if (S.show.stoch && I.stoch_k) panes.push("stoch");
+    if (S.show.adx && I.adx) panes.push("adx");
     var mdec = p.decimals + 2;
     var hist = I.macd ? I.macd.map(function (v, i) { var s = I.macd_signal[i]; return v == null || s == null ? null : v - s; }) : [];
     panes.forEach(function (k, j) {
@@ -1233,6 +1253,16 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         series.push({ name: "RSI", type: "line", xAxisIndex: ax, yAxisIndex: ax, data: pad(I.rsi14), symbol: "none", lineStyle: { width: 1.5, color: t.ink2 }, silent: true,
           markArea: { silent: true, itemStyle: { color: alpha(t.muted, 0.06) }, data: [[{ yAxis: 30 }, { yAxis: 70 }]] },
           markLine: { symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: "solid" }, label: { show: false }, data: [{ yAxis: 30 }, { yAxis: 70 }] } });
+      } else if (k === "stoch") {
+        series.push({ name: "%K", type: "line", xAxisIndex: ax, yAxisIndex: ax, data: pad(I.stoch_k), symbol: "none", lineStyle: { width: 1.4, color: t.s1 }, silent: true,
+          markArea: { silent: true, itemStyle: { color: alpha(t.muted, 0.06) }, data: [[{ yAxis: 20 }, { yAxis: 80 }]] },
+          markLine: { symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: "solid" }, label: { show: false }, data: [{ yAxis: 20 }, { yAxis: 80 }] } });
+        series.push({ name: "%D", type: "line", xAxisIndex: ax, yAxisIndex: ax, data: pad(I.stoch_d), symbol: "none", lineStyle: { width: 1.2, color: t.s2 }, silent: true });
+      } else if (k === "adx") {
+        series.push({ name: "ADX", type: "line", xAxisIndex: ax, yAxisIndex: ax, data: pad(I.adx), symbol: "none", lineStyle: { width: 1.6, color: t.ink2 }, silent: true,
+          markLine: { symbol: "none", silent: true, lineStyle: { color: t.axis, width: 1, type: [4, 3] }, label: { show: false }, data: [{ yAxis: 25 }] } });
+        series.push({ name: "+DI", type: "line", xAxisIndex: ax, yAxisIndex: ax, data: pad(I.plus_di), symbol: "none", lineStyle: { width: 1.2, color: t.up }, silent: true });
+        series.push({ name: "-DI", type: "line", xAxisIndex: ax, yAxisIndex: ax, data: pad(I.minus_di), symbol: "none", lineStyle: { width: 1.2, color: t.down }, silent: true });
       } else {
         series.push({ name: "MACDヒストグラム", type: "bar", xAxisIndex: ax, yAxisIndex: ax, barMaxWidth: 6, silent: true,
           data: pad(hist).map(function (v) { return v == null ? null : { value: v, itemStyle: { color: alpha(v >= 0 ? t.up : t.down, 0.45) } }; }) });
@@ -1262,6 +1292,9 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         if (S.show.ichi && I.ichi_span_a && I.ichi_span_a[i] != null) tech.push(["先行スパンA", fmt(I.ichi_span_a[i], d)], ["先行スパンB", fmt(I.ichi_span_b[i], d)]);
         if (S.show.rsi && I.rsi14 && I.rsi14[i] != null) tech.push(["RSI (14)", fmt(I.rsi14[i], 1)]);
         if (S.show.macd && I.macd && I.macd[i] != null) tech.push(["MACD", fmt(I.macd[i], mdec), t.s1], ["シグナル", fmt(I.macd_signal[i], mdec), t.s2]);
+        if (S.show.stoch && I.stoch_k && I.stoch_k[i] != null) tech.push(["%K", fmt(I.stoch_k[i], 1), t.s1], ["%D", fmt(I.stoch_d[i], 1), t.s2]);
+        if (S.show.adx && I.adx && I.adx[i] != null) tech.push(["ADX", fmt(I.adx[i], 1), t.ink2], ["+DI / −DI", fmt(I.plus_di[i], 1) + " / " + fmt(I.minus_di[i], 1)]);
+        if (S.show.sar && I.sar && I.sar[i] != null) tech.push(["パラボリック SAR", fmt(I.sar[i], d), t.s4]);
         if (tech.length) { sep(); tech.forEach(function (r) { row(r[0], r[1], r[2]); }); }
         if ((sigAt[i] || []).length) { sep(); sigAt[i].forEach(function (txt) { row("シグナル", txt); }); }
       } else {
@@ -1295,13 +1328,17 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var graphic = [];
     panes.forEach(function (k, j) {
       var g = grids[j + 1];
-      yAxes.push(k === "rsi"
-        ? { gridIndex: j + 1, min: 0, max: 100, interval: 50, position: "right", axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10 } }
+      yAxes.push(k === "rsi" || k === "stoch" || k === "adx"
+        ? { gridIndex: j + 1, min: 0, max: k === "adx" ? function (v) { return Math.max(50, Math.ceil(v.max / 10) * 10); } : 100, interval: k === "adx" ? 25 : 50, position: "right", axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10 } }
         : { gridIndex: j + 1, scale: true, splitNumber: 2, position: "right", axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.hair } }, axisLabel: { color: t.muted, fontFamily: t.mono, fontSize: 10, formatter: function (v) { return v.toFixed(p.decimals > 3 ? 5 : 3); } } });
       var pill = { backgroundColor: alpha(t.surface, 0.85), padding: [1, 4], borderRadius: 3 };
-      graphic.push({ type: "text", left: 10, top: g.top + 2, silent: true, z: 20, style: Object.assign(pill, k === "rsi"
-        ? { text: "RSI (14)  30〜70 が中立", fill: t.muted, font: "500 11px " + t.sans }
-        : { text: "{a|MACD (12・26・9)}  {m|━ MACD}  {s|━ シグナル}  {h|棒: 差}", font: "500 11px " + t.sans,
+      var PANE_TITLE = {
+        rsi: { text: "RSI (14)  30〜70 が中立", fill: t.muted, font: "500 11px " + t.sans },
+        stoch: { text: "{a|ストキャスティクス (14・3・3)}  {m|━ %K}  {s|━ %D}  {a|20〜80 が中立}", font: "500 11px " + t.sans, rich: { a: { fill: t.muted }, m: { fill: t.s1 }, s: { fill: t.s2 } } },
+        adx: { text: "{a|ADX・DMI (14)}  {x|━ ADX}  {u|━ +DI}  {d|━ −DI}  {a|ADX 25 以上で流れが強い}", font: "500 11px " + t.sans, rich: { a: { fill: t.muted }, x: { fill: t.ink2 }, u: { fill: t.up }, d: { fill: t.down } } }
+      };
+      graphic.push({ type: "text", left: 10, top: g.top + 2, silent: true, z: 20, style: Object.assign(pill, PANE_TITLE[k] ||
+        { text: "{a|MACD (12・26・9)}  {m|━ MACD}  {s|━ シグナル}  {h|棒: 差}", font: "500 11px " + t.sans,
             rich: { a: { fill: t.muted }, m: { fill: t.s1 }, s: { fill: t.s2 }, h: { fill: t.muted } } }) });
     });
     var all = grids.map(function (_, g) { return g; });
@@ -1311,7 +1348,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: t.muted, width: 1 }, label: { backgroundColor: t.ink2, fontFamily: t.mono, fontSize: 11, formatter: function (o) {
         if (o.axisDimension === "x") return xlabel(o.value);
         var k = panes[(o.axisIndex || 0) - 1];
-        return Number(o.value).toFixed(k === "rsi" ? 1 : k === "macd" ? mdec : p.decimals); } } },
+        return Number(o.value).toFixed(k === "macd" ? mdec : k ? 1 : p.decimals); } } },
       tooltip: Object.assign(tipBox(t), { trigger: "axis", axisPointer: { type: "cross" }, formatter: tooltip, extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,0.15);border-radius:8px;min-width:190px" }),
       // phones: fixed window (period buttons) so a finger on the chart scrolls the page; desktop: drag to pan, Ctrl + wheel to zoom
       dataZoom: [{ type: "inside", xAxisIndex: all, startValue: start, endValue: N - 1, minValueSpan: 12, disabled: coarseMQ.matches, zoomOnMouseWheel: "ctrl", moveOnMouseWheel: false, moveOnMouseMove: true, preventDefaultMouseMove: false }],
@@ -1339,7 +1376,11 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     if (ctype === "heikin") more.push("平均足は、始値を1本前の平均足の始値と終値の中間、終値を4本値の平均にした足で、流れの向きが見やすくなります。実際の価格とは違うため、値はツールチップの始値〜終値を見てください。予想ローソク足は平均足にせずそのまま描いています。");
     if (S.show.bb) more.push("ボリンジャーバンドは20本の平均 ± 標準偏差の2倍です。");
     if (S.show.ichi) more.push("一目均衡表: 転換線 (9本の高値と安値の中間)、基準線 (26本)、雲 (先行スパンA・B を26本先にずらしたもの。右端の「これから」の部分にも描いています)、遅行スパン (終値を26本前にずらしたもの)。");
-    if (panes.length) more.push("下の段は " + panes.map(function (k) { return k === "rsi" ? "RSI (14本、70以上は買われすぎ・30以下は売られすぎの目安)" : "MACD (12本と26本の指数平均の差と、その9本平均のシグナル。棒は差)"; }).join("、") + " です。");
+    var PANE_NOTE = { rsi: "RSI (14本、70以上は買われすぎ・30以下は売られすぎの目安)", macd: "MACD (12本と26本の指数平均の差と、その9本平均のシグナル。棒は差)",
+      stoch: "ストキャスティクス (直近14本の値幅の中での終値の位置。80以上は買われすぎ・20以下は売られすぎの目安)", adx: "ADX・DMI (ADX は流れの強さ、+DI が −DI より上なら上向きの流れ)" };
+    if (panes.length) more.push("下の段は " + panes.map(function (k) { return PANE_NOTE[k]; }).join("、") + " です。");
+    if (S.show.sar) more.push("パラボリック SAR は、価格の下にあれば上昇の流れ、上にあれば下降の流れ (点に触れると反転) の目安です。");
+    if (PV) more.push("ピボットは" + blk.pivots.period + "の高値・安値・終値から計算した目安の水準で、P が中心、R1・R2 が上値の抵抗、S1・S2 が下値の支持の目安です。");
     if (S.show.trade) more.push("▲▼は過去のシグナル、●は利確、◆は損切り、■は期限での決済です。");
     if ((blk.path && blk.path.events || []).length) more.push("橙の点線は重要指標の発表時刻。");
     more.push("テクニカル指標は見やすさのための表示で、予測の計算には使っていません。");
