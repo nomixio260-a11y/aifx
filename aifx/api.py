@@ -24,7 +24,7 @@ import pandas as pd
 
 from . import analysis, backtest, indicators
 from . import news as newsmod
-from . import scenario, season, track, trade
+from . import scenario, season, technical, track, trade
 from .rates import latest as rates_latest
 from .data import CURRENCIES, PAIRS, london_days
 from .engine import (BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, bar_end, bars_until, dist_cdf, dist_pdf, dist_quantile, fan_z,
@@ -280,12 +280,77 @@ def _indicators(df: pd.DataFrame, n: int, dec: int, ahead: int = 0) -> dict:
         out[f"ichi_{key}"] = [_r(v, dec) for v in shifted.iloc[-n:].to_numpy()]
         out[f"ichi_{key}_ahead"] = [_r(v, dec) for v in ichi[key].iloc[-ICHI_SHIFT:].to_numpy()[:ahead]]
     out["ichi_lag"] = [_r(v, dec) for v in df["close"].shift(-ICHI_SHIFT).iloc[-n:].to_numpy()]
-    k, d = indicators.stochastic(df)
-    a, pdi, mdi = indicators.adx(df)
+    k, d = technical.stochastics(df)
+    a, pdi, mdi = technical.adx(df)
     for key, series, dd in (("stoch_k", k, 1), ("stoch_d", d, 1), ("adx", a, 1), ("plus_di", pdi, 1), ("minus_di", mdi, 1)):
         out[key] = [_r(v, dd) for v in series.iloc[-n:].to_numpy()]
-    out["sar"] = [_r(v, dec) for v in indicators.parabolic_sar(df.iloc[-(n + 200):]).iloc[-n:].to_numpy()]
+    out["sar"] = [_r(v, dec) for v in technical.parabolic_sar(df.iloc[-(n + 200):])[0].iloc[-n:].to_numpy()]
     return out
+
+
+TECH_RESEARCH = RESEARCH.parent / "technical.json"
+# chart timeframe -> tested timeframe in research/technical.md and the horizons shown (next bar, longer)
+TECH_TF = {"15m": (None, ()), "1h": ("1h", ("1", "24")), "1d": ("1d", ("1", "20"))}
+TECH_BARS = 1500           # bars the signals are computed from (SMA 200 and the EMA-type indicators settle)
+# indicator values shown next to each signal: label and how to round (p: price, o: oscillator, m: MACD)
+TECH_VALUES = {"sma20": ("20本平均", "p"), "sma75": ("75本平均", "p"), "sma200": ("200本平均", "p"),
+               "macd": ("MACD", "m"), "macd_signal": ("シグナル", "m"), "macd_hist": ("差", "m"), "rsi14": ("RSI", "o"),
+               "pctb": ("%b", "r"), "bb_lower": ("−2σ", "p"), "bb_upper": ("+2σ", "p"), "tenkan": ("転換線", "p"),
+               "kijun": ("基準線", "p"), "cloud_top": ("雲の上限", "p"), "cloud_bottom": ("雲の下限", "p"),
+               "close_26": ("26本前の終値", "p"), "stoch_k": ("%K", "o"), "stoch_d": ("%D", "o"), "adx": ("ADX", "o"),
+               "plus_di": ("+DI", "o"), "minus_di": ("−DI", "o"), "psar": ("SAR", "p"), "don_high": ("20本高値", "p"),
+               "don_low": ("20本安値", "p"), "pivot": ("P", "p"), "r1": ("R1", "p"), "s1": ("S1", "p"), "r2": ("R2", "p"),
+               "s2": ("S2", "p"), "roc12": ("ROC", "r"), "williams_r": ("%R", "o"), "cci": ("CCI", "o")}
+
+
+def technical_research(path: Path = TECH_RESEARCH) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _technical(tf_key: str, bars: pd.DataFrame, res: dict, dec: int) -> dict | None:
+    """Every textbook signal at the last bar (technical.py) with its hit rate on 20 years of data
+    (research/technical.md, test period 2017-), and the consensus of all signals."""
+    if TIMEFRAMES[tf_key].minutes:
+        bars = bars[market_open_mask(bars.index)]
+    if len(bars) < 400:
+        return None
+    rtf, hs = TECH_TF[tf_key]
+    R = ((res.get("tf") or {}).get(rtf) or {}) if rtf else {}
+    cons = (R.get("consensus") or {}).get("all") or {}
+    now = technical.signals_now(bars.iloc[-TECH_BARS:], daily=not TIMEFRAMES[tf_key].minutes,
+                                thresholds={"all": cons["thresholds"]} if cons.get("thresholds") else None)
+
+    def val(k, v):
+        label, kind = TECH_VALUES.get(k, (k, "p"))
+        d = dec if kind == "p" else dec + 2 if kind == "m" else 2 if kind == "r" else 1
+        return {"k": label, "v": _r(v, d)}
+
+    def rate(x):
+        return {"hit": _r(x.get("hit"), 4), "bp": _r(x.get("bp"), 3), "n": x.get("n"), "t": _r(x.get("t"), 2)} if x else None
+
+    items = []
+    for key, spec in technical.SIGNALS.items():
+        s = now["signals"][key]
+        tested = ((R.get("signals") or {}).get(key) or {}).get("h") or {}
+        items.append({"key": key, "label": spec["label"], "kind": spec["kind"], "signal": s["signal"],
+                      "buy": spec["buy"], "sell": spec["sell"],
+                      "values": [val(k, v) for k, v in s["values"].items() if v is not None],
+                      "test": {h: rate((tested.get(h) or {}).get("test")) for h in hs},
+                      "tune": {h: rate((tested.get(h) or {}).get("tune")) for h in hs}})
+    c = now["consensus"]["all"]
+    level_hit = {}
+    if "level" in c:
+        key = technical.LEVEL_KEYS[c["level"]]
+        level_hit = {h: rate((((cons.get("h") or {}).get(h) or {}).get("test") or {}).get(key)) for h in hs}
+    periods = res.get("periods") or {}
+    return {"tested": rtf, "h": list(hs), "h_labels": {h: (R.get("h_labels") or {}).get(h) for h in hs},
+            "period": {"tune": periods.get("tune"), "test": periods.get("test")},
+            "consensus": {"score": c["score"], "buy": c["buy"], "sell": c["sell"], "none": c["none"],
+                          "level": c.get("level"), "label": c.get("label"), "test": level_hit},
+            "signals": items}
 
 
 def _pivots(tf_key: str, bars: pd.DataFrame, daily: pd.DataFrame, dec: int, now) -> dict | None:
@@ -462,6 +527,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
     rate_item = rates_latest(state.rates.load(since=now - timedelta(days=40)))
     candle_rows: dict[str, list] = {}
     trade_res = trade_research()
+    tech_res = technical_research()
     preds_by = {}
     for p in preds:
         preds_by.setdefault((p["pair"], p["tf"]), []).append(p)
@@ -502,6 +568,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                 "ind": _indicators(bars, HISTORY[tf_key], dec, max(tf.steps, max(tf.horizons))),
                 "past": _past(rows, code, tf_key, PAST[tf_key], dec),
                 "pivots": _pivots(tf_key, bars, daily, dec, now),
+                "tech": _technical(tf_key, bars, tech_res, dec),
             }
             rec = last_pred.get((code, tf_key))
             chart = latest.get(code, {}).get(tf_key)

@@ -275,6 +275,14 @@ details.more > div { margin-top: 8px; display: grid; gap: 10px; }
 
 
 .tablebox { overflow-x: auto; border: 1px solid var(--hair); border-radius: 10px; }
+.techsum { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.techsum .verdict { font-size: 20px; font-weight: 700; padding: 6px 14px; border-radius: 10px; background: var(--surface-2); color: var(--ink); }
+.techsum .verdict.up { color: var(--up); background: color-mix(in srgb, var(--up) 12%, transparent); }
+.techsum .verdict.down { color: var(--down); background: color-mix(in srgb, var(--down) 12%, transparent); }
+.techsum .counts { font-size: 13px; color: var(--ink-2); }
+.techsum .acc { font-size: 12.5px; color: var(--muted); flex-basis: 100%; }
+td .vals { font-size: 11.5px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+td .kind { font-size: 11px; color: var(--muted); margin-left: 6px; }
 .tablebox.tall { max-height: 380px; overflow-y: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--hair); }
@@ -374,6 +382,9 @@ footer p { margin: 0; max-width: 95ch; }
   .chart { height: 380px; }
   .chart-head { align-items: center; }
   .opt { display: none; }
+  td .kind { display: none; }
+  #tech-body td:first-child { white-space: normal; min-width: 8.5em; line-height: 1.35; }
+  #tech-body td, #tech-panel th { padding: 6px 6px; font-size: 12.5px; }
   th, td { padding: 7px 8px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
@@ -411,6 +422,12 @@ footer p { margin: 0; max-width: 95ch; }
         <p class="note" id="chart-note"></p>
         <details class="note-more"><summary>チャートの見方と予想ローソク足の成績</summary><p class="note" id="chart-note-more"></p></details>
       </div>
+    </div>
+    <div class="panel" id="tech-panel">
+      <div class="section-head"><h3 id="tech-title">テクニカル分析</h3><p id="tech-caption"></p></div>
+      <div class="techsum" id="tech-sum"></div>
+      <div class="tablebox tall"><table><thead><tr><th class="l">指標</th><th class="l">今の判定</th><th class="l opt">値</th><th class="num" id="tech-h1">次の足</th><th class="num" id="tech-h2"></th></tr></thead><tbody id="tech-body"></tbody></table></div>
+      <p class="note" id="tech-note"></p>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -1463,7 +1480,43 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function renderPairAll() {
     if (S.view !== "forecast") return;
     if (S.meta) renderRail();
-    renderHead(); renderTrade(); renderToggles(); renderChart(); renderSignals(); renderLot(); renderPathTable(); renderDrivers();
+    renderHead(); renderTrade(); renderToggles(); renderChart(); renderTech(); renderSignals(); renderLot(); renderPathTable(); renderDrivers();
+  }
+
+  // textbook technical signals now, with how often each was right on 20 years of data (research/technical.md)
+  function renderTech() {
+    var p = curPair(); var blk = curBlock(); var T = blk && blk.tech; var panel = $("tech-panel");
+    if (!T) { panel.hidden = true; return; }
+    panel.hidden = false;
+    var d = p.decimals; var hs = T.h || [];
+    $("tech-title").textContent = "テクニカル分析 (" + TF_NAME[S.tf] + ")";
+    $("tech-caption").textContent = T.tested ? "判定の的中率は20年分 (7ペア) の検証期間 " + String(T.period.test.start).slice(0, 4) + "年〜" : "15分足は的中率の検証なし (判定のみ)";
+    var C = T.consensus, sum = clear($("tech-sum"));
+    var label = C.label || (C.score > 0 ? "買い寄り" : C.score < 0 ? "売り寄り" : "中立");
+    sum.appendChild(el("span", "verdict " + (C.level > 0 || (C.level == null && C.score > 0.24) ? "up" : C.level < 0 || (C.level == null && C.score < -0.24) ? "down" : ""), "総合: " + label));
+    sum.appendChild(el("span", "counts", "買い " + C.buy + " · 売り " + C.sell + " · 判定なし " + C.none + " (" + (C.buy + C.sell + C.none) + "指標)"));
+    var acc = hs.map(function (h) { var x = (C.test || {})[h]; return x && x.hit != null ? T.h_labels[h] + " " + pct(x.hit, 1) : null; }).filter(Boolean);
+    sum.appendChild(el("span", "acc", acc.length ? "この総合判定 (" + label + ") が出た足の、検証期間の的中率: " + acc.join(" · ") + " (偶然は約50%)" :
+      T.tested ? "中立のときは方向を示しません。" : "15分足は総合判定の成績も検証していません。"));
+    $("tech-h1").textContent = hs[0] ? T.h_labels[hs[0]] : "的中率"; $("tech-h2").textContent = hs[1] ? T.h_labels[hs[1]] : "";
+    var body = clear($("tech-body"));
+    var rows = T.signals.slice().sort(function (a, b) { return (a.kind === b.kind ? 0 : a.kind === "trend" ? -1 : 1); });
+    rows.forEach(function (x) {
+      var tr = el("tr"); tr.title = "買い: " + x.buy + " / 売り: " + x.sell;
+      var c0 = el("td", "l"); c0.appendChild(el("span", null, x.label.replace(/ \((順張り|逆張り)\)$/, ""))); c0.appendChild(el("span", "kind", x.kind === "trend" ? "順張り" : "逆張り")); tr.appendChild(c0);
+      var c1 = el("td", "l"); c1.appendChild(x.signal ? el("span", "chip " + (x.signal > 0 ? "up" : "down"), x.signal > 0 ? "▲ 買い" : "▼ 売り") : el("span", "muted", "—")); tr.appendChild(c1);
+      var c2 = el("td", "l opt"); c2.appendChild(el("span", "vals", (x.values || []).slice(0, 3).map(function (v) { return v.k + " " + (v.v == null ? "—" : v.v); }).join(" · "))); tr.appendChild(c2);
+      [0, 1].forEach(function (j) {
+        var h = hs[j], r = h ? x.test[h] : null, td = el("td", "num");
+        if (h && r && r.hit != null) { td.textContent = pct(r.hit, 1); td.title = r.n.toLocaleString() + "回、平均 " + signed(r.bp, 2, " bp") + "、t = " + fmt(r.t, 1); }
+        else td.textContent = h ? "—" : "";
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    $("tech-note").textContent = T.tested
+      ? "的中率は、その指標が買い・売りを出した足のうち実際にその向きに動いた割合です (2003〜2016年の調整期間と2017年以降の検証期間に分けて確認)。偶然は約50%で、25の指標のどれも、両方の期間で偶然と区別できる差 (t ≥ 2) はありませんでした。総合判定 (買いの数 − 売りの数) やロジスティック回帰で組み合わせても 49〜51% です。テクニカル指標は目安として表示しており、予測の計算には使っていません (research/technical.md)。"
+      : "15分足の判定は1時間足と同じ計算を15分足に当てたものです。的中率は1時間足・日足でしか検証していません (どちらもほぼ50%)。";
   }
 
   /* ---------------- market analysis ---------------- */

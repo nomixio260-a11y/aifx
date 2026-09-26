@@ -86,7 +86,8 @@ def test_ichimoku_lines_are_the_midpoints_of_their_windows():
     bars = _hourly(n=200)
     ichi = indicators.ichimoku(bars)
     i = 150
-    mid = lambda n: (bars["high"].iloc[i - n + 1:i + 1].max() + bars["low"].iloc[i - n + 1:i + 1].min()) / 2
+    def mid(n):
+        return (bars["high"].iloc[i - n + 1:i + 1].max() + bars["low"].iloc[i - n + 1:i + 1].min()) / 2
     assert ichi["tenkan"].iloc[i] == pytest.approx(mid(9))
     assert ichi["kijun"].iloc[i] == pytest.approx(mid(26))
     assert ichi["span_a"].iloc[i] == pytest.approx((mid(9) + mid(26)) / 2)
@@ -117,22 +118,41 @@ def test_chart_indicators_line_up_with_the_bars(session):
 
 
 def test_stochastics_adx_and_parabolic_sar():
-    from aifx import indicators
+    from aifx import indicators, technical
     bars = _hourly(n=400)
-    k, d = indicators.stochastic(bars)
+    k, d = technical.stochastics(bars)
     i = 300
     lo, hi = bars["low"].iloc[i - 13 - 2:i + 1], bars["high"].iloc[i - 13 - 2:i + 1]
     raw = [100 * (bars["close"].iloc[j] - bars["low"].iloc[j - 13:j + 1].min())
            / (bars["high"].iloc[j - 13:j + 1].max() - bars["low"].iloc[j - 13:j + 1].min()) for j in (i - 2, i - 1, i)]
     assert k.iloc[i] == pytest.approx(np.mean(raw)) and len(lo) == len(hi)
-    adx, pdi, mdi = indicators.adx(bars)
+    adx, pdi, mdi = technical.adx(bars)
     assert ((adx.dropna() >= 0) & (adx.dropna() <= 100)).all()
     # a steady climb: +DI above -DI, and the SAR sits under the price
     up = bars.copy()
     up[["open", "high", "low", "close"]] = up[["open", "high", "low", "close"]].mul(np.exp(np.arange(len(up)) * 2e-4), axis=0)
-    a2, p2, m2 = indicators.adx(up)
-    sar = indicators.parabolic_sar(up)
+    a2, p2, m2 = technical.adx(up)
+    sar = technical.parabolic_sar(up)[0]
     assert p2.iloc[-50:].mean() > m2.iloc[-50:].mean()
     assert (sar.iloc[-100:] < up["close"].iloc[-100:]).mean() > 0.7
     pv = indicators.pivot_points(110.0, 100.0, 105.0)
     assert pv["P"] == pytest.approx(105.0) and pv["R1"] == pytest.approx(110.0) and pv["S1"] == pytest.approx(100.0)
+
+
+def test_technical_panel_uses_the_tested_signals(session):
+    from aifx import technical
+    from aifx.api import build_api
+    root, _ = session
+    out = build_api(root)
+    for tf, tested in (("15m", None), ("1h", "1h"), ("1d", "1d")):
+        T = out["pair/USDJPY.json"]["tf"][tf]["tech"]
+        if T is None:                      # too few bars in the simulated session
+            continue
+        assert T["tested"] == tested and [x["key"] for x in T["signals"]] == list(technical.SIGNALS)
+        assert all(x["signal"] in (-1, 0, 1) for x in T["signals"])
+        C = T["consensus"]
+        assert C["buy"] + C["sell"] + C["none"] == len(technical.SIGNALS)
+        assert C["buy"] == sum(x["signal"] == 1 for x in T["signals"]) and C["sell"] == sum(x["signal"] == -1 for x in T["signals"])
+        if tested:
+            assert all(set(x["test"]) == set(T["h"]) for x in T["signals"])
+            assert any(r and 0.3 < r["hit"] < 0.7 for x in T["signals"] for r in x["test"].values())
