@@ -249,10 +249,27 @@ def _bars(df: pd.DataFrame, n: int, tf: str, dec: int) -> dict:
     return {"t": t, "ohlc": ohlc}
 
 
-def _indicators(df: pd.DataFrame, n: int, dec: int) -> dict:
-    ind = indicators.compute_all(df).iloc[-n:]
-    return {k: [_r(v, dec if k != "rsi14" else 2) for v in ind[k].to_numpy()] for k in
-            ("sma20", "sma75", "bb_upper", "bb_lower", "rsi14")}
+ICHI_SHIFT = 26
+
+
+def _indicators(df: pd.DataFrame, n: int, dec: int, ahead: int = 0) -> dict:
+    """Indicator lines for the last ``n`` bars (aligned with the chart's bars); the Ichimoku leading
+    spans also for the ``ahead`` future bars they reach."""
+    ind = indicators.compute_all(df)
+    ichi = indicators.ichimoku(df)
+    tail = ind.iloc[-n:]
+    out = {k: [_r(v, dec if k != "rsi14" else 2) for v in tail[k].to_numpy()] for k in
+           ("sma20", "sma75", "bb_upper", "bb_mid", "bb_lower", "rsi14")}
+    for k in ("macd", "macd_signal"):
+        out[k] = [_r(v, dec + 2) for v in tail[k].to_numpy()]
+    out["ichi_tenkan"] = [_r(v, dec) for v in ichi["tenkan"].iloc[-n:].to_numpy()]
+    out["ichi_kijun"] = [_r(v, dec) for v in ichi["kijun"].iloc[-n:].to_numpy()]
+    for key in ("span_a", "span_b"):
+        shifted = ichi[key].shift(ICHI_SHIFT)
+        out[f"ichi_{key}"] = [_r(v, dec) for v in shifted.iloc[-n:].to_numpy()]
+        out[f"ichi_{key}_ahead"] = [_r(v, dec) for v in ichi[key].iloc[-ICHI_SHIFT:].to_numpy()[:ahead]]
+    out["ichi_lag"] = [_r(v, dec) for v in df["close"].shift(-ICHI_SHIFT).iloc[-n:].to_numpy()]
+    return out
 
 
 QUANTILES = (0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975)
@@ -441,7 +458,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                 continue
             block = {
                 "bars": _bars(bars, HISTORY[tf_key], tf_key, dec),
-                "ind": _indicators(bars, HISTORY[tf_key], dec),
+                "ind": _indicators(bars, HISTORY[tf_key], dec, max(tf.steps, max(tf.horizons))),
                 "past": _past(rows, code, tf_key, PAST[tf_key], dec),
             }
             rec = last_pred.get((code, tf_key))

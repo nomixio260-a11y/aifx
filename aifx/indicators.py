@@ -34,6 +34,15 @@ def macd(s: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple
     return line, line.ewm(span=signal, adjust=False, min_periods=signal).mean()
 
 
+def ichimoku(df: pd.DataFrame, tenkan: int = 9, kijun: int = 26, span_b: int = 52) -> dict[str, pd.Series]:
+    """Ichimoku lines, unshifted: the leading spans are drawn ``kijun`` bars ahead, the lagging span
+    ``kijun`` bars behind."""
+    def mid(n):
+        return (df["high"].rolling(n, min_periods=n).max() + df["low"].rolling(n, min_periods=n).min()) / 2
+    t, k = mid(tenkan), mid(kijun)
+    return {"tenkan": t, "kijun": k, "span_a": (t + k) / 2, "span_b": mid(span_b)}
+
+
 def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
     prev = df["close"].shift()
     tr = pd.concat(

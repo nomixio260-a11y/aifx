@@ -79,3 +79,34 @@ def test_api_draws_forecast_candles_with_their_record(session):
         assert C["items"][0][0] == pytest.approx(blk["prediction"]["p0"], rel=1e-4)
         acc = C["accuracy"]
         assert acc["all"]["n"] > 0 and 0 <= acc["all"]["dir_hit"] <= 1 and acc["all"]["size_vs_atr"] is not None
+
+
+def test_ichimoku_lines_are_the_midpoints_of_their_windows():
+    from aifx import indicators
+    bars = _hourly(n=200)
+    ichi = indicators.ichimoku(bars)
+    i = 150
+    mid = lambda n: (bars["high"].iloc[i - n + 1:i + 1].max() + bars["low"].iloc[i - n + 1:i + 1].min()) / 2
+    assert ichi["tenkan"].iloc[i] == pytest.approx(mid(9))
+    assert ichi["kijun"].iloc[i] == pytest.approx(mid(26))
+    assert ichi["span_a"].iloc[i] == pytest.approx((mid(9) + mid(26)) / 2)
+    assert ichi["span_b"].iloc[i] == pytest.approx(mid(52))
+    assert np.isnan(ichi["span_b"].iloc[50])                         # not enough bars yet
+
+
+def test_chart_indicators_line_up_with_the_bars(session):
+    from aifx.api import ICHI_SHIFT, build_api
+    root, _ = session
+    out = build_api(root)
+    for tf in ("15m", "1h", "1d"):
+        blk = out["pair/USDJPY.json"]["tf"][tf]
+        n, ind, steps = len(blk["bars"]["t"]), blk["ind"], len(blk["path"]["steps"])
+        for k in ("sma20", "sma75", "bb_upper", "bb_mid", "bb_lower", "rsi14", "macd", "macd_signal",
+                  "ichi_tenkan", "ichi_kijun", "ichi_span_a", "ichi_span_b", "ichi_lag"):
+            assert len(ind[k]) == n, (tf, k)
+        # the leading spans reach into the forecast bars, the lagging span stops 26 bars before the end
+        assert len(ind["ichi_span_a_ahead"]) == len(ind["ichi_span_b_ahead"]) == min(ICHI_SHIFT, steps)
+        closes = [c[1] for c in blk["bars"]["ohlc"]]
+        assert ind["ichi_lag"][-ICHI_SHIFT - 1] == pytest.approx(closes[-1], abs=1e-3)
+        assert all(v is None for v in ind["ichi_lag"][-ICHI_SHIFT:])
+        assert all(lo <= mid <= hi for lo, mid, hi in zip(ind["bb_lower"], ind["bb_mid"], ind["bb_upper"]) if lo is not None)
