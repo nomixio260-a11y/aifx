@@ -55,7 +55,7 @@
 
 - **15分足:** 各15分足の高値・安値の幅から値動きの大きさを測り、時間帯ごとの違い (1時間単位で推定)、週末、重要指標の発表予定を反映します。設定は直近約60日分の15分足で選び、後半の期間で確認しました (下記)。
 - **1時間足:** 各1時間足の高値・安値の幅から値動きの大きさを測り、時間帯ごとの違い (ニューヨーク時間の曜日×時間、直近約1年。夏時間で動くロンドン・ニューヨークの取引時間とロールオーバー、静かな月曜のアジア時間や金曜の午後を反映)、週末の窓開けリスク、重要指標の発表予定を反映します。UTC の時間だけで測っていた前の版より、1時間先・4時間先の値動きの大きさの予測が調整期間・検証期間とも正確でした ([research/volatility.md](research/volatility.md))。
-- **日足:** 1時間足から各日の値動きの大きさ (実現ボラティリティ) を測ります。1時間足が足りない日は日足の変化を使います。
+- **日足:** 1時間足から各日の値動きの大きさ (実現ボラティリティ) を測ります。1時間足が足りない日は日足の変化を使います。日・週・月の実現分散から予測する HAR モデルとその変形 (9通り)、設定の変更 (50通り)、組み合わせとも比べましたが、1・5・10・20営業日先のすべてで調整期間・検証期間とも上回るものはなく、今の方法のままにしています (HAR は1営業日先では良いものの、10・20営業日先で悪くなりました。[research/har.md](research/har.md))。
 - **レンジの形:** 為替の値動きは正規分布より裾が太い (大きな動きが起きやすい) ため、t 分布の形にしています。80%レンジの幅は実績で補正し、50%・95%レンジはこの形に従います。
 
 ### 売買プラン
@@ -206,6 +206,7 @@ aifx research --direction               # 方向の予測の検証 (時間帯の
 aifx research --dl                      # ディープラーニングによる方向予測の検証 (PyTorch が必要)
 aifx research --news                    # ニュース (GDELT の過去の見出し) で方向を予測できるかの検証
 aifx research --vol                     # 1時間足の予測レンジの時間帯の測り方の比較
+aifx research --har                     # 日足の予測レンジ: HAR モデルとの比較
 aifx research --ml                      # 機械学習による方向予測の検証 (scikit-learn と lightgbm が必要)
 ```
 
@@ -280,6 +281,7 @@ aifx research --direction  # 方向の予測 (research/direction.md、株価指�
 aifx research --dl         # ディープラーニング (research/dl.md、pip install torch、約45分)
 aifx research --news       # ニュースの検証 (research/news.md、GDELT の公開ファイル 約9GB を取得)
 aifx research --vol        # 予測レンジの時間帯の測り方 (research/volatility.md)
+aifx research --har        # 日足の予測レンジと HAR モデル (research/har.md)
 aifx research --ml         # 機械学習による方向予測 (research/ml.md、pip install scikit-learn lightgbm)
 ```
 
@@ -311,7 +313,7 @@ aifx/
   season.py       時間帯の偏り (方向の予測、予測の中心と予想ローソク足の向き)
   research_candles.py research_ml.py research_direction.py research_dl.py research_news.py research_vol.py
                   予想ローソク足・機械学習・方向・ディープラーニング・ニュース・予測レンジの検証
-                  (aifx research --candles / --ml / --direction / --dl / --news / --vol)
+                  (aifx research --candles / --ml / --direction / --dl / --news / --vol / --har)
   history.py research.py research_intraday.py  過去データの取得と検証 (aifx research)
   analysis.py     市場分析 (通貨の強さ・値動きの荒さ・トレンドの状態)
   api.py site.py  API (JSON) とWebページの書き出し

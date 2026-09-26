@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import math
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -39,34 +40,44 @@ VARIANTS = {
     "ny_hour": ("ニューヨーク時間の時間、直近6,000本", dict(tail=6500, profile_window=6000, profile_tz=NY)),
     "ny_week_hour": ("ニューヨーク時間の曜日×時間、直近6,000本 (採用)",
                      dict(tail=6500, profile_window=6000, profile_tz=NY, profile_weekday=True)),
+    # what the server ran until the fix: the forecaster handed only the model window (3,000 bars) to the profile
+    "ny_week_hour_3000": ("ニューヨーク時間の曜日×時間、直近3,000本 (修正前の本番)",
+                          dict(tail=3000, profile_window=6000, profile_tz=NY, profile_weekday=True)),
 }
 H = (1, 4, 24)
 EVERY = 5
 TUNE_SHARE = 0.6
 
 
-def evaluate(log=print) -> dict:
+def _pair_rows(code: str) -> list[dict]:
+    df = history.load_hourly(code)
+    df = df[~df.index.duplicated()].sort_index()
+    n, c, idx = len(df), df["close"].to_numpy(float), df.index
+    split = int(n * TUNE_SHARE)
     rows = []
-    for code in PAIRS:
-        df = history.load_hourly(code)
-        df = df[~df.index.duplicated()].sort_index()
-        n, c, idx = len(df), df["close"].to_numpy(float), df.index
-        split = int(n * TUNE_SHARE)
-        for o in range(3000, n - max(H) - 1, EVERY):
-            origin = (idx[o] + pd.Timedelta(hours=1)).to_pydatetime()
-            row = {"test": o >= split, **{f"a{h}": math.log(c[o + h] / c[o]) * 1e4 for h in H}}
-            for name, (_, cfg) in VARIANTS.items():
-                cfg = dict(cfg)
-                tail = df.iloc[max(0, o + 1 - cfg.pop("tail")): o + 1]
-                yt = np.log(tail["close"].to_numpy(float))
-                sq = scale_proxy(range_variance(tail), np.diff(yt), RANGE_WINDOW)
-                var, _ = hourly_variance_path(list(tail.index.to_pydatetime()), yt, origin, max(H), None, sq=sq, **cfg)
-                cum = np.cumsum(var) * 1e8
-                for h in H:
-                    row[f"{name}_{h}"] = float(cum[h - 1])
-            rows.append(row)
-        if log:
-            log(f"{code}: {len(rows)} forecasts")
+    for o in range(3000, n - max(H) - 1, EVERY):
+        origin = (idx[o] + pd.Timedelta(hours=1)).to_pydatetime()
+        row = {"test": o >= split, **{f"a{h}": math.log(c[o + h] / c[o]) * 1e4 for h in H}}
+        for name, (_, cfg) in VARIANTS.items():
+            cfg = dict(cfg)
+            tail = df.iloc[max(0, o + 1 - cfg.pop("tail")): o + 1]
+            yt = np.log(tail["close"].to_numpy(float))
+            sq = scale_proxy(range_variance(tail), np.diff(yt), RANGE_WINDOW)
+            var, _ = hourly_variance_path(list(tail.index.to_pydatetime()), yt, origin, max(H), None, sq=sq, **cfg)
+            cum = np.cumsum(var) * 1e8
+            for h in H:
+                row[f"{name}_{h}"] = float(cum[h - 1])
+        rows.append(row)
+    return rows
+
+
+def evaluate(log=print, workers: int = 4) -> dict:
+    rows = []
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        for code, pr in zip(PAIRS, ex.map(_pair_rows, list(PAIRS))):
+            rows.extend(pr)
+            if log:
+                log(f"{code}: {len(pr)} forecasts")
     R = pd.DataFrame(rows)
     out = {"every": EVERY, "n_tune": int((~R.test).sum()), "n_test": int(R.test.sum()), "h": {}}
     tu, te = ~R.test, R.test
@@ -104,8 +115,8 @@ def report(res: dict) -> str:
     return "\n".join(L)
 
 
-def run(log=print) -> dict:
-    res = evaluate(log=log)
+def run(log=print, workers: int = 4) -> dict:
+    res = evaluate(log=log, workers=workers)
     REPORT_DIR.mkdir(exist_ok=True)
     (REPORT_DIR / "volatility.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     (REPORT_DIR / "volatility.md").write_text(report(res), encoding="utf-8")
