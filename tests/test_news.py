@@ -150,3 +150,8 @@ def _sign(title, lang="en"):
 ])
 def test_headline_reading_fixes(title, want):
     assert _sign(title) == want
+
+
+def test_a_move_verb_in_another_clause_does_not_move_the_currency():
+    t = "[Tokyo Forex] Dollar trades in the lower 158 yen range; falling U.S. long-term yields also exert downward pressure"
+    assert "JPY" not in news.analyze_lexicon(t, "en")["cur"]

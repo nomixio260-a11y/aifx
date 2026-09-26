@@ -161,6 +161,38 @@ def _fix_ohlc(df: pd.DataFrame) -> pd.DataFrame:
     return df[OHLC].astype("float64")
 
 
+def london_days(daily: pd.DataFrame, hourly: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Daily bars that end when the forecasts' London day ends.
+
+    Yahoo's daily FX bars have, since about 2011, a close equal to the price at
+    00:00 UTC at the start of the labelled day (open and close are nearly the
+    same; the high and low do cover the day). Each bar is rebuilt here from the
+    hourly bars of its London business day where they cover it (the Sunday
+    evening counts towards Monday), and elsewhere its close is taken from the
+    next bar's open (the price at the start of the next day). Only prices that
+    were known when the bar ended are used, so the same bars come back from the
+    committed data at any later time.
+    """
+    if not len(daily):
+        return daily
+    o, h, lo, c = (daily[k].to_numpy(dtype=float).copy() for k in OHLC)
+    c[:-1] = o[1:]                                        # the next day's opening price
+    if hourly is not None and len(hourly):
+        ends = pd.DatetimeIndex([london_day_end(d.date()) for d in daily.index])
+        h_end = (hourly.index + pd.Timedelta(hours=1)).as_unit("ns")
+        ho, hh, hl, hc = (hourly[k].to_numpy(dtype=float) for k in OHLC)
+        prev_end = ends[0] - pd.Timedelta(days=1)
+        for i, end in enumerate(ends):
+            a = int(h_end.searchsorted(prev_end, side="right"))
+            b = int(h_end.searchsorted(end, side="right"))
+            if b - a >= 12 and end - h_end[b - 1] <= pd.Timedelta(hours=3):
+                o[i], h[i], lo[i], c[i] = ho[a], hh[a:b].max(), hl[a:b].min(), hc[b - 1]
+            prev_end = end
+    out = pd.DataFrame({"open": o, "high": np.maximum.reduce([h, o, c]), "low": np.minimum.reduce([lo, o, c]),
+                        "close": c}, index=daily.index)
+    return out
+
+
 def completed_daily(df: pd.DataFrame, cutoff: datetime) -> pd.DataFrame:
     """Daily bars whose London day has ended (plus settling time) by ``cutoff``."""
     keep = [london_day_end(d.date()) + SETTLE <= cutoff for d in df.index]

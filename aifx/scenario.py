@@ -2,7 +2,7 @@
 
 Each future candle's size (high minus low) is the part that can be predicted:
 the current level of the bars' range (an exponentially weighted average)
-times the usual ratio of the range for that time of day and weekday
+times the usual ratio of the range for that New York time of day and weekday
 (intraday bars; the time of day alone when there are too few such bars) or
 weekday (daily bars) to the level before it, measured on the last
 ``PROFILE_N`` such bars. In the research this was more accurate than the plain
@@ -30,6 +30,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
+from .season import NEW_YORK
 from .timeutil import add_business_days, add_trading_minutes
 
 PATTERN = {"15m": 32, "1h": 24, "1d": 20}
@@ -51,8 +52,10 @@ def _sigma(r: np.ndarray, lam: float) -> np.ndarray:
 
 def _slots(times, minutes: int) -> list[np.ndarray]:
     """Keys that group bars with the same usual size, most specific first: time of day and weekday,
-    then time of day (intraday bars); weekday (daily bars)."""
+    then time of day (intraday bars, on New York time, whose daylight saving the market sessions
+    follow); weekday (daily bars)."""
     if minutes:
+        times = pd.DatetimeIndex(times).tz_convert(NEW_YORK)
         tod = np.asarray(times.hour) * 60 + np.asarray(times.minute)
         return [tod * 10 + np.asarray(times.dayofweek), tod]
     return [np.asarray(times.dayofweek)]

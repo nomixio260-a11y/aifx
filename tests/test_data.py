@@ -64,3 +64,28 @@ def test_synthetic_daily_prices_are_weekday_ohlc():
     assert (df["low"] <= df[["open", "close"]].min(axis=1)).all()
     assert isinstance(df.index, pd.DatetimeIndex)
     assert timedelta(days=1)
+
+
+def test_daily_bars_are_rebuilt_for_the_london_day():
+    import numpy as np
+
+    from aifx.data import london_days
+    # hourly bars Monday 2026-09-14 ... Wednesday (British summer time: the London day ends at 23:00 UTC)
+    idx = pd.date_range("2026-09-13 21:00", "2026-09-16 22:00", freq="h", tz="UTC")
+    close = 150 + np.arange(len(idx)) * 0.01
+    hourly = pd.DataFrame({"open": close - 0.005, "high": close + 0.02, "low": close - 0.02, "close": close}, index=idx)
+    # Yahoo-style daily bars: the close is the price at 00:00 UTC at the start of the day
+    days = pd.DatetimeIndex(["2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16"])
+    start = [149.0, 150.02, 150.26, 150.50]
+    daily = pd.DataFrame({"open": start, "high": [149.5, 150.3, 150.6, 150.8], "low": [148.9, 150.0, 150.2, 150.4],
+                          "close": start}, index=days)
+    out = london_days(daily, hourly)
+    ends = hourly.index + pd.Timedelta(hours=1)
+    mon = hourly[(ends > pd.Timestamp("2026-09-11 23:00", tz="UTC")) & (ends <= pd.Timestamp("2026-09-14 23:00", tz="UTC"))]
+    assert out.loc["2026-09-14", "close"] == mon["close"].iloc[-1]          # the hourly close at 23:00 UTC
+    assert out.loc["2026-09-14", "open"] == mon["open"].iloc[0]             # Sunday evening counts towards Monday
+    assert out.loc["2026-09-14", "high"] == mon["high"].max() and out.loc["2026-09-14", "low"] == mon["low"].min()
+    assert out.loc["2026-09-11", "close"] == 150.02                          # before the hourly bars: the next open
+    # a day rebuilt from hourly bars only uses the bars of that day
+    later = hourly[hourly.index < pd.Timestamp("2026-09-15 12:00", tz="UTC")]
+    assert london_days(daily.loc[:"2026-09-14"], later).loc["2026-09-14"].equals(out.loc["2026-09-14"])

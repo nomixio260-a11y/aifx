@@ -114,24 +114,46 @@ def daily_variance_inputs(daily: pd.DataFrame, hourly: pd.DataFrame | None,
     return (None, DAILY_LAM) if sq is None else (sq, DAILY_RV_LAM)
 
 
+def _slot_keys(times, slot_minutes: int, tz=None, weekday: bool = False) -> np.ndarray:
+    """Time-of-day slot (or weekday-and-time slot) of each bar start, in ``tz`` (default UTC)."""
+    idx = pd.DatetimeIndex(times)
+    if tz is not None:
+        idx = idx.tz_convert(tz)
+    tod = (idx.hour.to_numpy() * 60 + idx.minute.to_numpy()) // slot_minutes
+    return idx.dayofweek.to_numpy() * (1440 // slot_minutes) + tod if weekday else tod
+
+
 def slot_profile(times, sq: np.ndarray, window: int = 1500, smooth: float = 0.25,
-                 slot_minutes: int = 60) -> np.ndarray:
+                 slot_minutes: int = 60, tz=None, weekday: bool = False, shrink: float = 20.0) -> np.ndarray:
     """Relative variance by time of day in slots of ``slot_minutes`` (mean 1 over the sample).
 
     ``sq`` is the per-bar variance proxy (squared returns), aligned with ``times``.
-    ``smooth`` is the weight given to each neighbouring slot.
+    ``smooth`` is the weight given to each neighbouring slot. With ``weekday``
+    the slots are weekday-and-time (7 x slots per day), each pulled toward its
+    time of day with the weight of ``shrink`` bars; ``tz`` sets the clock the
+    slots follow (e.g. New York time, whose daylight saving the market follows).
     """
     n = 1440 // slot_minutes
-    slots = np.asarray([(t.hour * 60 + t.minute) // slot_minutes for t in times[-window:]])
-    ss = sq[-window:]
+    tod = _slot_keys(times[-window:], slot_minutes, tz)
+    ss = np.asarray(sq[-window:], dtype=float)
     prof = np.ones(n)
     for h in range(n):
-        sel = ss[slots == h]
+        sel = ss[tod == h]
         if len(sel) >= 5:
             prof[h] = np.mean(sel)
+    if weekday:
+        ok = np.isfinite(ss)
+        mean_all = float(np.mean(ss[ok])) if ok.any() else 1.0
+        base = prof / mean_all
+        keys = _slot_keys(times[-window:], slot_minutes, tz, weekday=True)
+        cnt = np.bincount(keys[ok], minlength=7 * n).astype(float)
+        tot = np.bincount(keys[ok], weights=ss[ok], minlength=7 * n)
+        out = (tot / mean_all + shrink * np.tile(base, 7)) / (cnt + shrink)
+        mean = float(np.sum(out * cnt) / max(cnt.sum(), 1))
+        return out / mean if mean > 0 else np.ones(7 * n)
     # Smooth over neighbouring slots (circular) to damp sampling noise.
     prof = smooth * np.roll(prof, 1) + (1 - 2 * smooth) * prof + smooth * np.roll(prof, -1)
-    counts = np.bincount(slots, minlength=n).astype(float)
+    counts = np.bincount(tod, minlength=n).astype(float)
     mean = float(np.sum(prof * counts) / max(counts.sum(), 1))
     return prof / mean if mean > 0 else np.ones(n)
 
@@ -141,35 +163,46 @@ def hour_profile(times, sq: np.ndarray, window: int = 1500, smooth: float = 0.25
     return slot_profile(times, sq, window, smooth, 60)
 
 
+def _ewma(x: np.ndarray, lam: float) -> float:
+    """EWMA of ``x`` started at the mean of its first 20 values (same as a loop, vectorised)."""
+    init = float(np.mean(x[:20]))
+    if len(x) <= 20:
+        return init
+    return float(pd.Series(np.concatenate([[init], x[20:]])).ewm(alpha=1 - lam, adjust=False).mean().iloc[-1])
+
+
 def intraday_variance_path(times, y: np.ndarray, origin: datetime, steps: int, minutes: int = 60,
                            events: list[dict] | None = None, lam: float = 0.97, reversion: float = 0.985,
                            seasonal: bool = True, sq: np.ndarray | None = None, profile_window: int = 1500,
                            smooth: float = 0.25, profile_minutes: int | None = None,
-                           long_window: int = 1500) -> tuple[np.ndarray, list[datetime]]:
+                           long_window: int = 1500, profile_tz=None,
+                           profile_weekday: bool = False) -> tuple[np.ndarray, list[datetime]]:
     """Per-step variance for the next ``steps`` open-market bars of ``minutes`` after ``origin``.
 
     ``times`` are bar open times aligned with ``y`` (log closes), all ending at or
     before ``origin``. ``sq`` optionally replaces the squared returns as the
     per-bar variance proxy. The time-of-day profile uses slots of
-    ``profile_minutes`` (default: the bar length). Weekend gaps and scheduled
-    events add variance measured in hours of normal trading, whatever the bar
-    length. Returns (variance per step, end time of each step).
+    ``profile_minutes`` (default: the bar length), on the clock of ``profile_tz``
+    and by weekday with ``profile_weekday``. Weekend gaps and scheduled events
+    add variance measured in hours of normal trading, whatever the bar length.
+    Returns (variance per step, end time of each step).
     """
     pm = profile_minutes or minutes
     per_hour = 60 / minutes
     r = np.diff(y)
     sq = r * r if sq is None else sq
     t_r = list(times[1:])
-    prof = slot_profile(t_r, sq, profile_window, smooth, pm) if seasonal else np.ones(1440 // pm)
+    if seasonal:
+        prof = slot_profile(t_r, sq, profile_window, smooth, pm, profile_tz, profile_weekday)
+    else:
+        prof = np.ones(7 * (1440 // pm) if profile_weekday else 1440 // pm)
 
-    def slot(t):
-        return (t.hour * 60 + t.minute) // pm
+    def slots_of(ts) -> np.ndarray:
+        return _slot_keys(ts, pm, profile_tz, profile_weekday)
 
-    u2 = sq / prof[[slot(t) for t in t_r]]
+    u2 = sq / prof[slots_of(t_r)]
     long_var = float(np.mean(u2[-long_window:]))
-    ewma = float(np.mean(u2[:20]))
-    for x in u2[20:]:
-        ewma = lam * ewma + (1 - lam) * x
+    ewma = _ewma(u2, lam)
     # Future open-market slots (start times) until we have enough steps.
     step = timedelta(minutes=minutes)
     slots: list[datetime] = []
@@ -178,10 +211,11 @@ def intraday_variance_path(times, y: np.ndarray, origin: datetime, steps: int, m
         horizon_end = horizon_end + max(24 * HOUR, steps * step)
         slots = trading_slots_between(origin, horizon_end, minutes)
     slots = slots[:steps]
+    fut = prof[slots_of(slots)]
     var = np.empty(steps)
     prev_end = origin
     for k, start in enumerate(slots, start=1):
-        v = (long_var + (ewma - long_var) * reversion ** k) * prof[slot(start)]
+        v = (long_var + (ewma - long_var) * reversion ** k) * fut[k - 1]
         if start > prev_end:  # the market was shut in between (weekend)
             v += WEEKEND_GAP_HOURS * per_hour * long_var
         var[k - 1] = v
@@ -194,7 +228,7 @@ def intraday_variance_path(times, y: np.ndarray, origin: datetime, steps: int, m
             continue
         for k, (start, end) in enumerate(zip(slots, ends)):
             if start <= t < end:
-                var[k] += kappa * per_hour * long_var * prof[slot(start)]
+                var[k] += kappa * per_hour * long_var * fut[k]
                 break
     return var, ends
 
@@ -203,10 +237,11 @@ def hourly_variance_path(times, y: np.ndarray, origin: datetime, steps: int,
                          events: list[dict] | None = None, lam: float = 0.97,
                          reversion: float = 0.985, seasonal: bool = True,
                          sq: np.ndarray | None = None, profile_window: int = 1500,
-                         smooth: float = 0.25) -> tuple[np.ndarray, list[datetime]]:
+                         smooth: float = 0.25, profile_tz=None,
+                         profile_weekday: bool = False) -> tuple[np.ndarray, list[datetime]]:
     """Per-step variance for the next ``steps`` open-market hours after ``origin``."""
     return intraday_variance_path(times, y, origin, steps, 60, events, lam, reversion, seasonal, sq,
-                                  profile_window, smooth)
+                                  profile_window, smooth, profile_tz=profile_tz, profile_weekday=profile_weekday)
 
 
 def add_daily_events(var: np.ndarray, day_ends: list[datetime], origin: datetime,

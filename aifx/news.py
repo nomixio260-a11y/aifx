@@ -226,6 +226,7 @@ EN_RISK_ON_UNDONE = re.compile(r"(?:[\s\W]+[\w'\-]+){0,4}?[\s\W]+(?:over|crumbl\
 # are not currency moves); "A rises against the dollar" moves the dollar the other way
 EN_CUR_WORD = re.compile(r"(?:u\.?s\.? )?dollars?|greenback'?s?|usd|dxy|yen|jpy|euros?|eur|pound|sterling|gbp|cable|aussie|"
                          r"australian dollar|aud")
+EN_CLAUSE_BREAK = re.compile(r"[;:|]|\s[-–—]\s")
 EN_AGAINST = re.compile(r"\b(?:against|versus|vs\.?)\s+(?:the\s+)?(?:u\.?s\.?\s+)?(dollar|greenback|yen|euro|pound|sterling|aussie)\b")
 EN_AGAINST_CUR = {"dollar": "USD", "greenback": "USD", "yen": "JPY", "euro": "EUR", "pound": "GBP", "sterling": "GBP", "aussie": "AUD"}
 # risk-off and risk-on words count only in a market headline (war and politics stories are not market news)
@@ -399,6 +400,8 @@ def analyze_lexicon(title: str, lang: str, default_cur: str | None = None) -> di
                 continue                                    # "Fed", "Australian", "US": not the currency itself
             d = 0
             m = EN_VERB.search(t, e, e + 40)
+            if m and EN_CLAUSE_BREAK.search(t, e, m.start()):
+                m = None                                    # "yen range; falling yields": another clause's verb
             if m and m.start() - e <= 25 and not any(e <= s2 < m.start() for s2, _, _ in ents):
                 d = 1 if m.group("up") else -1
                 if EN_NEG_MOVE.search(t[e:m.start()]):

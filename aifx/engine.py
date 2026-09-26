@@ -10,6 +10,7 @@ import math
 from dataclasses import dataclass
 from functools import lru_cache
 from statistics import NormalDist
+from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -20,6 +21,8 @@ from .timeutil import add_business_days, add_trading_minutes, london_date, londo
 from .volatility import (RANGE_WINDOW, add_daily_events, daily_step_variance, daily_variance_inputs,
                          hourly_variance_path, intraday_variance_path, range_variance, scale_proxy)
 
+NEW_YORK = ZoneInfo("America/New_York")
+HOURLY_PROFILE_WINDOW = 6000
 INTRADAY_VOL = {"lam": 0.97, "reversion": 0.997, "seasonal": True, "profile_window": 1920, "smooth": 0.25,
                 "profile_minutes": 60}
 
@@ -116,10 +119,12 @@ def sigma_steps(tf: Timeframe, bars: pd.DataFrame, origin: datetime, steps: int,
     """
     y = np.log(bars["close"].to_numpy())
     if tf.key == "1h":
-        tail = bars.iloc[-3000:]
+        # the time-of-day profile by New York weekday and hour over ~a year of bars (research/volatility.md)
+        tail = bars.iloc[-(HOURLY_PROFILE_WINDOW + 500):]
         yt = np.log(tail["close"].to_numpy())
         sq = scale_proxy(range_variance(tail), np.diff(yt), RANGE_WINDOW)
-        var, _ = hourly_variance_path(list(tail.index.to_pydatetime()), yt, origin, steps, events, sq=sq)
+        var, _ = hourly_variance_path(list(tail.index.to_pydatetime()), yt, origin, steps, events, sq=sq,
+                                      profile_window=HOURLY_PROFILE_WINDOW, profile_tz=NEW_YORK, profile_weekday=True)
     elif tf.minutes:
         # 15-minute bars: the high-low range as in hourly bars, a time-of-day profile in
         # hourly slots over 20 trading days, a faster-fading EWMA per bar (research/intraday.md).

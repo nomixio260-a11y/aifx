@@ -25,7 +25,7 @@ from . import analysis, backtest, indicators
 from . import news as newsmod
 from . import scenario, season, track, trade
 from .rates import latest as rates_latest
-from .data import CURRENCIES, PAIRS
+from .data import CURRENCIES, PAIRS, london_days
 from .engine import (BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, bar_end, bars_until, dist_cdf, dist_pdf, dist_quantile, fan_z,
                      step_ends)
 from .forecaster import model_version
@@ -413,7 +413,10 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
     for code, pair in PAIRS.items():
         dec = pair.decimals + 1
         hourly = state.prices.load(code, "1h")
-        daily = state.prices.load(code, "1d")
+        raw_daily = state.prices.load(code, "1d")
+        # for display: bars of the London day rebuilt from hourly bars (Yahoo's daily close is the day's
+        # opening price); the forecasts and trade plans keep the stored bars
+        daily = london_days(raw_daily, hourly)
         if not len(hourly):
             continue
         hourly_all[code], daily_all[code] = hourly, daily
@@ -450,7 +453,8 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                                                                  "lo80", "hi80")}
                                               for h in block["prediction"]["horizons"]]
                 ref_bars = hourly if tf.ref == "1h" else state.prices.load(code, tf.ref)
-                block["trade"] = _trade_block(tf, pair, rec, bars, ref_bars, preds_by.get((code, tf_key), []), rate_item,
+                block["trade"] = _trade_block(tf, pair, rec, raw_daily if tf_key == "1d" else bars, ref_bars,
+                                              preds_by.get((code, tf_key), []), rate_item,
                                               now, trade_res)
                 summary.setdefault("signal", {})[tf_key] = block["trade"]["plan"]["dir"] if block["trade"]["rule"] else None
                 if tf_key == "1h":

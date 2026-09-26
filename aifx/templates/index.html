@@ -257,8 +257,14 @@ td .chip { font-size: 11.5px; }
 .chart { width: 100%; height: 480px; touch-action: pan-y; }
 .chart.small { height: 260px; }
 .note { font-size: 12.5px; color: var(--muted); margin: 0; }
-.acc-line { font-size: 12.5px; color: var(--ink2); margin: -4px 0 0; }
-.acc-line:empty { display: none; }
+.acc-line { font-size: 12.5px; color: var(--muted); margin: -4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.acc-line:has(#next-call:empty):has(#chart-acc-txt:empty) { display: none; }
+.callchip { font-size: 13.5px; font-weight: 700; color: var(--ink); padding: 3px 10px; border-radius: 8px; background: var(--ground); border: 1px solid var(--hair); }
+.callchip:empty { display: none; }
+.callchip.up { color: var(--up); background: color-mix(in srgb, var(--up) 12%, transparent); }
+.callchip.down { color: var(--down); background: color-mix(in srgb, var(--down) 12%, transparent); }
+.note-more summary { font-size: 12.5px; color: var(--accent); cursor: pointer; }
+.note-more .note { margin-top: 6px; }
 details.more > summary { cursor: pointer; font-size: 13px; color: var(--ink-2); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; }
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "▸"; font-size: 11px; color: var(--muted); }
@@ -397,17 +403,18 @@ footer p { margin: 0; max-width: 95ch; }
         <div class="ctl"><span class="ctl-label" id="lbl-range">表示期間</span><div class="seg" id="seg-range" role="group" aria-labelledby="lbl-range"></div></div>
       </div>
       <div class="chart" id="chart" role="img" aria-label="ローソク足と売買プラン"></div>
-      <p class="acc-line" id="chart-acc"></p>
+      <div class="acc-line" id="chart-acc"><span class="callchip" id="next-call"></span><span id="chart-acc-txt"></span></div>
       <div class="chart-foot1">
         <div class="toggles" id="toggles"></div>
         <p class="note" id="chart-note"></p>
+        <details class="note-more"><summary>チャートの見方と予想ローソク足の成績</summary><p class="note" id="chart-note-more"></p></details>
       </div>
     </div>
     <div class="grid2">
       <div class="panel">
         <div class="section-head"><h3>これまでのシグナルと結果</h3><span class="seg" id="seg-sig-src"></span></div>
         <div class="tstats" id="sig-stats"></div>
-        <div class="tablebox tall"><table><thead><tr><th>エントリー</th><th class="l">売買</th><th class="num">価格</th><th class="num opt">決済</th><th class="l">結果</th><th class="num">損益 (pips)</th></tr></thead><tbody id="sig-body"></tbody></table></div>
+        <div class="tablebox tall"><table><thead><tr><th>エントリー</th><th class="l">売買</th><th class="num opt">価格</th><th class="num opt">決済</th><th class="l">結果</th><th class="num">損益 (pips)</th></tr></thead><tbody id="sig-body"></tbody></table></div>
         <p class="note" id="sig-note"></p>
       </div>
       <div class="panel">
@@ -820,8 +827,9 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var A = blk && blk.candles && blk.candles.accuracy; if (!A || !A.all || !A.all.n) return "";
     var sz = A.all.size_vs_atr, dh = A.all.dir_hit, callTxt = A.all.call_n ? "、うち時間帯の偏りで向きを決めた足 (" + pct(A.all.call_share, 0) + ") の陽線・陰線の的中率 " + pct(A.all.call_hit, 1) + " (" + A.all.call_n.toLocaleString() + "本)" +
       (A.all.high_n ? "、確度が高い足 (" + pct(A.all.high_share, 1) + ") は " + pct(A.all.high_hit, 1) + " (" + A.all.high_n.toLocaleString() + "本)" : "") : "";
-    if (short) return "予想ローソク足の直近" + A.window_days + "日の成績: 足の大きさの誤差は平均値幅 (ATR) より " +
-      (sz != null ? (sz <= 0 ? pct(-sz, 0) + " 小さい" : pct(sz, 0) + " 大きい") : "—") + "・陽線・陰線の的中率 " + pct(A.all.color_hit, 1) + callTxt + " (偶然は50%)";
+    if (short) return "直近" + A.window_days + "日の予想ローソク足: 大きさの誤差は平均値幅より " +
+      (sz != null ? (sz <= 0 ? pct(-sz, 0) + " 小さい" : pct(sz, 0) + " 大きい") : "—") +
+      (A.all.call_n ? "・○ 印の足の向き " + pct(A.all.call_hit, 0) + (A.all.high_n ? "・● 印 " + pct(A.all.high_hit, 0) : "") + " 的中" : "・陽線・陰線 " + pct(A.all.color_hit, 0) + " 的中") + " (偶然は50%)";
     return "予想ローソク足の成績 (直近" + A.window_days + "日・7ペア・" + A.all.n.toLocaleString() + "本): 足の大きさ (高値−安値) の誤差は、単純な平均値幅 (ATR) と比べて " + (sz != null ? signed(sz * 100, 0, "%") : "—") +
       "、終値の方向の的中率 " + pct(dh, 1) + "、陽線・陰線の的中率 " + pct(A.all.color_hit, 1) + callTxt + "。";
   }
@@ -829,7 +837,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function nextCallText(blk) {
     var C = blk && blk.candles; if (!C || !C.drift_bp || !TF_MIN[S.tf]) return "";
     var d = C.drift_bp[0], when = TF_MIN[S.tf] === 60 ? "次の1時間" : "次の15分";
-    if (!d) return when + ": 方向の根拠なし (この時間帯は上下どちらとも言えません)";
+    if (!d) return when + ": 方向の根拠なし";
     var R = (C.accuracy && C.accuracy.direction) || {}, high = (C.tier || [])[0] === 2, r = high ? R.high : R.all;
     return when + ": " + (d > 0 ? "▲ 上がりやすい" : "▼ 下がりやすい") + " (確度 " + (high ? "高" : "中") +
       (r && r.hit != null ? "・検証での的中率 " + pct(r.hit, 0) : "") + "、平均 " + signed(d, 1, "bp") + ")";
@@ -978,7 +986,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       var tr = el("tr");
       tr.appendChild(el("td", "num", TF_MIN[S.tf] ? jstShort(x.origin) : dayShort(x.x)));
       var c1 = el("td", "l"); c1.appendChild(el("span", "chip " + (x.dir > 0 ? "up" : "down"), x.dir > 0 ? "▲ 買い" : "▼ 売り")); tr.appendChild(c1);
-      tr.appendChild(el("td", "num", fmt(x.entry, d)));
+      tr.appendChild(el("td", "num opt", fmt(x.entry, d)));
       tr.appendChild(el("td", "num opt", x.exit != null ? fmt(x.exit, d) : "—"));
       var c2 = el("td", "l"); var hw = HOW[x.how] || ["保有中", "accent"]; c2.appendChild(el("span", "chip " + hw[1], hw[0])); tr.appendChild(c2);
       tr.appendChild(el("td", "num " + (x.pips > 0 ? "good" : x.pips < 0 ? "bad" : ""), x.pips != null ? signed(x.pips, 1) : "—"));
@@ -1143,15 +1151,19 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       series: series
     };
     chartOn("chart").setOption(option, true);
-    var nxt = nextCallText(blk);
-    $("chart-acc").textContent = S.show.pred && pc.length ? (nxt ? nxt + "。" : "") + candleAccText(blk, true) : "";
-    $("chart-note").textContent = (S.show.pred && pc.length ? "「これから」の範囲の薄い色のローソク足がサーバーの予想です。今と値動きの形・時間帯が似た過去の局面の続きを、今の値動きの大きさに合わせて描いています。" +
+    var nxt = nextCallText(blk), drift0 = blk.candles && blk.candles.drift_bp ? blk.candles.drift_bp[0] : 0;
+    var chip = $("next-call"); chip.textContent = S.show.pred && pc.length ? nxt : "";
+    chip.className = "callchip" + (drift0 > 0 ? " up" : drift0 < 0 ? " down" : "");
+    $("chart-acc-txt").textContent = S.show.pred && pc.length ? candleAccText(blk, true) : "";
+    $("chart-note").textContent = (S.show.pred && pc.length ? "薄い色のローソク足がサーバーの予想で、○ ● 印は向きに根拠のある足です。" : "") +
+      (S.show.trade ? "緑の帯が利確、赤の帯が損切り、右端が決済の期限。" : "") +
+      (coarseMQ.matches ? "期間はボタンで切り替えます。" : "ドラッグで移動、Ctrl+ホイールで拡大できます。");
+    $("chart-note-more").textContent = (S.show.pred && pc.length ? "予想ローソク足は、今と値動きの形・時間帯が似た過去の局面の続きを、今の値動きの大きさに合わせて描いたものです。" +
         (TF_MIN[S.tf] ? "足の大きさは当たりやすい一方、陽線か陰線か (方向) が偶然より当たるのは、○ 印の足 (時間帯の偏り、主にニューヨーク時間17時・日本時間の朝6〜7時ごろのロールオーバー前後) だけで、● 印は確度が高い足です。" +
           "ロールオーバーではスワップの付与に合わせて価格がずれるため、表示上の方向は当たっても売買の利益にはなりにくい点に注意してください。それ以外の足の向きは当てにできません。"
-          : "足の大きさは当たりやすい一方、日足の陽線・陰線 (方向) は検証で偶然と区別できず、当てにできません。") + candleAccText(blk, false) : "") +
-      (S.show.trade ? "緑の帯が利確、赤の帯が損切りまでの範囲で、右端が決済の期限です。▲▼は過去のシグナル、●は利確、◆は損切り、■は期限での決済。" : "") +
-      ((blk.path && blk.path.events || []).length ? "橙の点線は重要指標の発表時刻。" : "") +
-      (coarseMQ.matches ? "期間はボタンで切り替えます。" : "ドラッグで移動、Ctrl+ホイールで拡大できます。");
+          : "足の大きさは当たりやすい一方、日足の陽線・陰線 (方向) は検証で偶然と区別できず、当てにできません。日足の実際のローソク足は、1時間足からロンドン時間の1日ごとに作り直しています。") + candleAccText(blk, false) : "") +
+      (S.show.trade ? "▲▼は過去のシグナル、●は利確、◆は損切り、■は期限での決済です。" : "") +
+      ((blk.path && blk.path.events || []).length ? "橙の点線は重要指標の発表時刻。" : "");
   }
 
   function renderPathTable() {

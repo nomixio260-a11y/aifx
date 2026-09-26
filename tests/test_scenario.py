@@ -10,8 +10,9 @@ from aifx.timeutil import add_trading_minutes
 UTC = timezone.utc
 
 
-def _hourly(n=3000, seed=1, busy=13, quiet=3):
-    """Hourly bars on the trading calendar whose ranges are 3x larger at ``busy`` than at ``quiet`` o'clock."""
+def _hourly(n=3000, seed=1, busy=9, quiet=22):
+    """Hourly bars on the trading calendar whose ranges are 3x larger at ``busy`` than at ``quiet`` o'clock
+    New York time (the market's clock, across its daylight-saving change)."""
     rng = np.random.default_rng(seed)
     t = datetime(2026, 1, 5, tzinfo=UTC)
     idx = []
@@ -19,7 +20,8 @@ def _hourly(n=3000, seed=1, busy=13, quiet=3):
         t = add_trading_minutes(t, 1, 60)
         idx.append(t - pd.Timedelta(hours=1))
     idx = pd.DatetimeIndex(idx)
-    scale = np.where(idx.hour == busy, 3.0, np.where(idx.hour == quiet, 1.0, 1.5)) * 4e-4
+    ny = idx.tz_convert(scenario.NEW_YORK).hour
+    scale = np.where(ny == busy, 3.0, np.where(ny == quiet, 1.0, 1.5)) * 4e-4
     r = rng.normal(0, scale)
     c = 150 * np.exp(np.cumsum(r))
     o = np.concatenate([[150.0], c[:-1]])
@@ -48,9 +50,9 @@ def test_forecast_candles_are_real_candles_that_join_up_and_end_at_the_target():
 def test_candle_sizes_follow_the_time_of_day():
     bars = _hourly()
     size = scenario.sizes("1h", bars, 24, 60)
-    hours = scenario.future_times(bars.index, 24, 60).hour
-    busy = size[list(hours).index(13)]
-    quiet = size[list(hours).index(3)]
+    hours = scenario.future_times(bars.index, 24, 60).tz_convert(scenario.NEW_YORK).hour
+    busy = size[list(hours).index(9)]
+    quiet = size[list(hours).index(22)]
     assert busy > 2 * quiet
     cs, info = scenario.candles("1h", bars, 24, None, 60)
     for (o, h, lo, c), s in zip(cs, info["size"]):

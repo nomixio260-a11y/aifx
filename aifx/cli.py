@@ -176,6 +176,10 @@ def cmd_research(args) -> int:
         from . import research_news
         research_news.run()
         return 0
+    if args.vol:
+        from . import research_vol
+        research_vol.run()
+        return 0
     if args.intraday:
         research_intraday.run(workers=args.workers)
         return 0
@@ -248,6 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--ml", action="store_true", help="機械学習による方向予測の検証 (research/ml.md、scikit-learn と lightgbm が必要)")
     r.add_argument("--candles", action="store_true", help="予想ローソク足の精度の検証 (research/candles.md)")
     r.add_argument("--dl", action="store_true", help="ディープラーニング (CNN・GRU・Transformer) による方向予測の検証 (research/dl.md、PyTorch が必要)")
+    r.add_argument("--vol", action="store_true", help="1時間足の予測レンジの時間帯の測り方の比較 (research/volatility.md)")
     r.add_argument("--news", action="store_true", help="ニュース (GDELT の過去の見出し・トーン) で方向を予測できるかの検証 (research/news.md)")
     r.add_argument("--direction", action="store_true",
                    help="方向の予測の検証: 時間帯の偏り、株価・金利、月末など (research/direction.md)")
