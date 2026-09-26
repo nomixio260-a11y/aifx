@@ -189,11 +189,11 @@ def fetch_dukascopy_hourly(code: str, start_year: int = DUKA_START, until: datet
     return out[~out.index.duplicated()].sort_index()
 
 
-def download_dukascopy(root: Path | None = None, log=print, start_year: int = DUKA_START) -> None:
+def download_dukascopy(root: Path | None = None, log=print, start_year: int = DUKA_START, workers: int = 3) -> None:
     root = (root or HIST_DIR) / DUKA_DIR
     root.mkdir(parents=True, exist_ok=True)
     for code in PAIRS:
-        df = fetch_dukascopy_hourly(code, start_year, cache_dir=root / "raw")
+        df = fetch_dukascopy_hourly(code, start_year, workers=workers, cache_dir=root / "raw")
         df.to_csv(root / f"{code}_1h.csv", index_label="time", float_format="%.6f")
         log(f"Dukascopy {code}: {len(df):,} hourly bars {df.index[0]:%Y-%m-%d} .. {df.index[-1]:%Y-%m-%d}")
 
