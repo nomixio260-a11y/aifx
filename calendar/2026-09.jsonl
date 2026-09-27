@@ -16,3 +16,29 @@
 {"cur":"USD","fetched_at":"2026-09-24T06:14:21Z","forecast":"","id":"1ab4c64cdd223a97","impact":"Medium","previous":"4.6%","time":"2026-09-25T14:00:00Z","title":"Revised UoM Inflation Expectations"}
 {"cur":"USD","fetched_at":"2026-09-24T16:07:50Z","forecast":"","id":"9aebfc53647fde8b","impact":"Medium","previous":"","time":"2026-09-24T14:15:00Z","title":"President Trump Speaks"}
 {"cur":"USD","fetched_at":"2026-09-24T23:02:00Z","forecast":"","id":"9193434fb85e14f3","impact":"Medium","previous":"","time":"2026-09-24T23:55:00Z","title":"President Trump Speaks"}
+{"cur":"EUR","fetched_at":"2026-09-27T06:02:34Z","forecast":"","id":"c04b002f501e3772","impact":"Medium","previous":"","time":"2026-09-28T13:30:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"AUD","fetched_at":"2026-09-27T06:02:34Z","forecast":"4.60%","id":"8acb657db9cd67cf","impact":"High","previous":"4.35%","time":"2026-09-29T04:30:00Z","title":"Cash Rate"}
+{"cur":"AUD","fetched_at":"2026-09-27T06:02:34Z","forecast":"","id":"ac6e72b98cd0791a","impact":"High","previous":"","time":"2026-09-29T04:30:00Z","title":"RBA Rate Statement"}
+{"cur":"AUD","fetched_at":"2026-09-27T06:02:34Z","forecast":"","id":"8a2ba3abaf4ba5a7","impact":"Medium","previous":"","time":"2026-09-29T05:30:00Z","title":"RBA Press Conference"}
+{"cur":"EUR","fetched_at":"2026-09-27T06:02:34Z","forecast":"","id":"9f3ff3a5514645d6","impact":"Medium","previous":"","time":"2026-09-29T11:00:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"90.1","id":"8443088933828954","impact":"Medium","previous":"89.4","time":"2026-09-29T14:00:00Z","title":"CB Consumer Confidence"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"7.23M","id":"e79cde6b16db1eb2","impact":"Medium","previous":"7.27M","time":"2026-09-29T14:00:00Z","title":"JOLTS Job Openings"}
+{"cur":"AUD","fetched_at":"2026-09-27T06:02:34Z","forecast":"0.5%","id":"cd94f7a01dfdecf2","impact":"High","previous":"1.0%","time":"2026-09-30T01:30:00Z","title":"CPI m/m"}
+{"cur":"AUD","fetched_at":"2026-09-27T06:02:34Z","forecast":"4.1%","id":"d003a3b274cffe84","impact":"High","previous":"3.5%","time":"2026-09-30T01:30:00Z","title":"CPI y/y"}
+{"cur":"AUD","fetched_at":"2026-09-27T06:02:34Z","forecast":"0.3%","id":"9910048044219bb6","impact":"High","previous":"0.5%","time":"2026-09-30T01:30:00Z","title":"Trimmed Mean CPI m/m"}
+{"cur":"EUR","fetched_at":"2026-09-27T06:02:34Z","forecast":"0.5%","id":"3ff42b0ff77c9b99","impact":"Medium","previous":"0.2%","time":"2026-09-30T06:29:00Z","title":"German Prelim CPI m/m"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"70K","id":"7955229b65ca8486","impact":"Medium","previous":"38K","time":"2026-09-30T12:15:00Z","title":"ADP Non-Farm Employment Change"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"0.3%","id":"bed43edef89e88d4","impact":"High","previous":"0.2%","time":"2026-09-30T12:30:00Z","title":"Core PCE Price Index m/m"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"1.5%","id":"0007e02c3cc1e7cc","impact":"High","previous":"1.5%","time":"2026-09-30T12:30:00Z","title":"Final GDP q/q"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"6.4%","id":"6ece9580ad790ceb","impact":"Medium","previous":"6.4%","time":"2026-09-30T12:30:00Z","title":"Final GDP Price Index q/q"}
+{"cur":"GBP","fetched_at":"2026-09-27T06:02:34Z","forecast":"","id":"2fedc41a1b987c13","impact":"Medium","previous":"","time":"2026-10-01T08:00:00Z","title":"BOE Gov Bailey Speaks"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"199K","id":"88a8906e964d16d2","impact":"Medium","previous":"197K","time":"2026-10-01T12:30:00Z","title":"Unemployment Claims"}
+{"cur":"EUR","fetched_at":"2026-09-27T06:02:34Z","forecast":"","id":"a42b611495e1851b","impact":"Medium","previous":"","time":"2026-10-01T13:30:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"","id":"7bf428fdc1d19586","impact":"Medium","previous":"","time":"2026-10-01T14:00:00Z","title":"FOMC Member Waller Speaks"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"55.0","id":"b6c38c713337f373","impact":"Medium","previous":"54.6","time":"2026-10-01T14:00:00Z","title":"ISM Manufacturing PMI"}
+{"cur":"JPY","fetched_at":"2026-09-27T06:02:34Z","forecast":"2.4%","id":"bb3d9b4d8189c10d","impact":"Medium","previous":"1.8%","time":"2026-10-01T23:30:00Z","title":"Tokyo Core CPI y/y"}
+{"cur":"EUR","fetched_at":"2026-09-27T06:02:34Z","forecast":"2.5%","id":"4606a1b29b6adf85","impact":"Medium","previous":"2.4%","time":"2026-10-02T09:00:00Z","title":"Core CPI Flash Estimate y/y"}
+{"cur":"EUR","fetched_at":"2026-09-27T06:02:34Z","forecast":"3.7%","id":"9fbe59f5cb1faeb4","impact":"Medium","previous":"3.3%","time":"2026-10-02T09:00:00Z","title":"CPI Flash Estimate y/y"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"0.3%","id":"588507832c3ac67b","impact":"High","previous":"0.3%","time":"2026-10-02T12:30:00Z","title":"Average Hourly Earnings m/m"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"98K","id":"7ef3a19d0a72384b","impact":"High","previous":"162K","time":"2026-10-02T12:30:00Z","title":"Non-Farm Employment Change"}
+{"cur":"USD","fetched_at":"2026-09-27T06:02:34Z","forecast":"4.1%","id":"8ba1afcf3485a202","impact":"High","previous":"4.1%","time":"2026-10-02T12:30:00Z","title":"Unemployment Rate"}
