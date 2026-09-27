@@ -72,12 +72,18 @@ def history_bars(tf: Timeframe) -> int:
     return max(tf.fit_bars, v["n"] + v["window"] + 1) if v else tf.fit_bars
 
 
-def vol_allowed(closes: np.ndarray, n: int, window: int, q: float) -> np.ndarray:
-    """Whether the volatility filter lets a signal through at each close: the standard deviation of the
-    last ``n`` log changes is not above the ``q`` quantile of the same value over the ``window`` closes
-    before (the filter does not block until a quarter of that window exists)."""
+def vol_levels(closes: np.ndarray, n: int, window: int, q: float) -> tuple[pd.Series, pd.Series]:
+    """The volatility filter's inputs at each close: the standard deviation of the last ``n`` log changes,
+    and the ``q`` quantile of the same value over the ``window`` closes before (NaN until a quarter of
+    that window exists)."""
     rv = pd.Series(np.log(np.asarray(closes, dtype=float))).diff().rolling(n, min_periods=n).std()
-    limit = rv.rolling(window, min_periods=window // 4).quantile(q).shift(1)
+    return rv, rv.rolling(window, min_periods=window // 4).quantile(q).shift(1)
+
+
+def vol_allowed(closes: np.ndarray, n: int, window: int, q: float) -> np.ndarray:
+    """Whether the volatility filter lets a signal through at each close: the volatility is not above
+    its limit (vol_levels; the filter does not block while the limit is unknown)."""
+    rv, limit = vol_levels(closes, n, window, q)
     return ~(rv > limit).to_numpy()
 
 

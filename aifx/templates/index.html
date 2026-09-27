@@ -275,6 +275,12 @@ details.more > div { margin-top: 8px; display: grid; gap: 10px; }
 
 
 .tablebox { overflow-x: auto; border: 1px solid var(--hair); border-radius: 10px; }
+.basis { display: grid; grid-template-columns: minmax(7em, auto) minmax(0, 1fr); gap: 10px 16px; margin: 0; }
+.basis dt { font-size: 13px; font-weight: 600; color: var(--ink); }
+.basis dd { margin: 0; font-size: 13.5px; color: var(--ink-2); display: grid; gap: 3px; }
+.basis dd .main { color: var(--ink); font-weight: 600; }
+.basis dd .main.up { color: var(--up); } .basis dd .main.down { color: var(--down); }
+.basis dd .rec { font-size: 12.5px; color: var(--muted); }
 .techsum { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .techsum .verdict { font-size: 20px; font-weight: 700; padding: 6px 14px; border-radius: 10px; background: var(--surface-2); color: var(--ink); }
 .techsum .verdict.up { color: var(--up); background: color-mix(in srgb, var(--up) 12%, transparent); }
@@ -383,6 +389,7 @@ footer p { margin: 0; max-width: 95ch; }
   .chart-head { align-items: center; }
   .opt { display: none; }
   td .kind { display: none; }
+  .basis { grid-template-columns: 1fr; gap: 4px; } .basis dd { margin-bottom: 8px; }
   #tech-body td:first-child { white-space: normal; min-width: 8.5em; line-height: 1.35; }
   #tech-body td, #tech-panel th { padding: 6px 6px; font-size: 12.5px; }
   th, td { padding: 7px 8px; }
@@ -422,6 +429,10 @@ footer p { margin: 0; max-width: 95ch; }
         <p class="note" id="chart-note"></p>
         <details class="note-more"><summary>チャートの見方と予想ローソク足の成績</summary><p class="note" id="chart-note-more"></p></details>
       </div>
+    </div>
+    <div class="panel" id="basis-panel">
+      <div class="section-head"><h3>この予測の根拠</h3><p id="basis-caption"></p></div>
+      <dl class="basis" id="basis-list"></dl>
     </div>
     <div class="panel" id="tech-panel">
       <div class="section-head"><h3 id="tech-title">テクニカル分析</h3><p id="tech-caption"></p></div>
@@ -859,6 +870,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function nextCallText(blk) {
     var C = blk && blk.candles; if (!C || !C.drift_bp || !TF_MIN[S.tf]) return "";
     var d = C.drift_bp[0], when = TF_MIN[S.tf] === 60 ? "次の1時間" : "次の15分";
+    if (blk.basis && blk.basis.reopen) return when + ": 週明け最初の足は方向の根拠なし";
     if (!d) return when + ": 方向の根拠なし";
     var R = (C.accuracy && C.accuracy.direction) || {}, high = (C.tier || [])[0] === 2, r = high ? R.high : R.all;
     return when + ": " + (d > 0 ? "▲ 上がりやすい" : "▼ 下がりやすい") + " (確度 " + (high ? "高" : "中") +
@@ -1483,7 +1495,82 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function renderPairAll() {
     if (S.view !== "forecast") return;
     if (S.meta) renderRail();
-    renderHead(); renderTrade(); renderToggles(); renderChart(); renderTech(); renderSignals(); renderLot(); renderPathTable(); renderDrivers();
+    renderHead(); renderTrade(); renderToggles(); renderChart(); renderBasis(); renderTech(); renderSignals(); renderLot(); renderPathTable(); renderDrivers();
+  }
+
+  // why the latest forecast says what it says, each part with how it has done (season.py, research/*.md)
+  var NY_DAY = ["月", "火", "水", "木", "金", "土", "日"];
+  function renderBasis() {
+    var p = curPair(); var blk = curBlock(); var box = clear($("basis-list")); var panel = $("basis-panel");
+    if (!p || !blk || !blk.prediction) { panel.hidden = true; return; }
+    panel.hidden = false;
+    var H0 = blk.prediction.horizons[0], B = blk.basis, C = blk.candles || {}, A = (C.accuracy || {}).direction || {};
+    $("basis-caption").textContent = "起点 " + (TF_MIN[S.tf] ? jstShort(blk.prediction.origin) : dayShort(blk.prediction.origin)) + " の予測";
+    function item(title, main, cls, lines) {
+      box.appendChild(el("dt", null, title));
+      var dd = el("dd"); if (main) dd.appendChild(el("span", "main" + (cls ? " " + cls : ""), main));
+      (lines || []).forEach(function (l) { if (l) dd.appendChild(el("span", l.rec ? "rec" : null, l.rec || l)); });
+      box.appendChild(dd);
+    }
+    // 1. direction of the next bar
+    var when = TF_MIN[S.tf] === 60 ? "次の1時間" : TF_MIN[S.tf] ? "次の15分" : "翌営業日";
+    if (!TF_MIN[S.tf]) {
+      item(when + "の方向", "方向の根拠なし", null, ["日足で上がるか下がるかを偶然より当てる方法は、20年分の検証でも見つかっていません (金利差・モメンタム・テクニカル・機械学習・ニュース)。"]);
+    } else if (B) {
+      var d0 = C.drift_bp ? C.drift_bp[0] : 0, high = (C.tier || [])[0] === 2;
+      var slot = B.used === "slot" ? B.slot : B.tod;
+      var nyName = (B.used === "tod" ? "毎日の" : NY_DAY[B.weekday] + "曜の") + Math.floor(B.minute / 60) + "時" + (B.minute % 60 ? B.minute % 60 + "分" : "") + "台";
+      var lines = [];
+      if (B.reopen) {
+        item(when + "の方向", "方向の根拠なし", null, ["週明け最初の足は週末の値動きの窓を含み、時間帯の統計では測れないため方向を出しません。"]);
+      } else if (d0) {
+        lines.push("根拠: ニューヨーク時間の" + nyName + " (日本時間 " + jstShort(B.start).split(" ")[1] + " 始まり) の過去約1年 " + slot.n + "本の平均 " + signed(slot.mean_bp, 2, " bp")
+          + "、t = " + fmt(slot.t, 1) + " (|t| ≥ 2 で方向、≥ 4 で確度: 高)" + (B.used === "tod" ? "。曜日別では決め手がないため毎日の同じ時間帯を使っています。" : "。"));
+        if (B.roll) lines.push("ロールオーバー: 受け渡し日が " + B.roll.days + "日延び、金利差 (" + p.label.replace("/", " − ") + ") " + signed(B.roll.diff, 2, "%") + " から "
+          + signed(B.roll.e_bp, 2, " bp") + " ずれる見込み" + (Math.abs(B.roll.e_bp) >= B.roll.promote_bp && B.roll.e_bp * d0 > 0 ? " (向きが同じで " + B.roll.promote_bp + " bp 以上のため確度: 高)" : "") + "。");
+        var r = high ? A.high : A.all;
+        if (r && r.hit != null) lines.push({ rec: "検証での的中率: " + (high ? "確度: 高" : "方向を示した回") + " " + pct(r.hit, 1) + " (" + r.n.toLocaleString() + "回、Yahoo の過去データ)。表示される価格の規則性で、スプレッドとスワップを引くと売買の利益にはなりません。" });
+        item(when + "の方向", (d0 > 0 ? "▲ 上がりやすい" : "▼ 下がりやすい") + " (確度: " + (high ? "高" : "中") + ")", d0 > 0 ? "up" : "down", lines);
+      } else {
+        var sl = B.slot.n >= 15 ? B.slot : B.tod;
+        item(when + "の方向", "方向の根拠なし", null, ["ニューヨーク時間の" + (B.slot.n >= 15 ? NY_DAY[B.weekday] + "曜の" : "毎日の") + Math.floor(B.minute / 60) + "時台 (過去約1年 " + sl.n + "本) の平均 " + signed(sl.mean_bp, 2, " bp") + "、t = " + fmt(sl.t, 1) + " で、偶然と区別できません (|t| < 2)。",
+          { rec: "この時間帯以外の値動きの方向は、20年分の検証でも偶然 (約50%) と区別できませんでした。" }]);
+      }
+    }
+    // 2. centre
+    var drift = C.drift_bp && TF_MIN[S.tf] ? C.drift_bp.slice(0, 60 / TF_MIN[S.tf]).reduce(function (a, b) { return a + b; }, 0) : 0;
+    item("予測の中心", H0.label + " " + fmt(H0.price, p.decimals) + " (" + signed(H0.change_pips, 1, " pips") + ")", null,
+      [(drift ? "今の価格に、最初の1時間の時間帯の偏り (" + signed(drift, 2, " bp") + ") だけを加えています。" : "ほぼ今の価格のままです。") +
+       "6つの予測モデル (ランダムウォーク・トレンド・自己回帰・回帰・パターン類似など) の方向は検証で当たらないため、実績から学ぶ採用率は " + fmt(H0.gain, 2) + " (ほぼ0) です。"]);
+    // 3. range
+    var half = (H0.hi80 - H0.lo80) / 2 / p.pip, bt = S.backtest && S.backtest.tf && S.backtest.tf[S.tf], cov = null;
+    if (bt && bt.by_h && bt.by_h[String(H0.h)] && bt.by_h[String(H0.h)].all && bt.by_h[String(H0.h)].all.cover) cov = bt.by_h[String(H0.h)].all.cover["80"];
+    item("予測レンジ", H0.label + "の80%レンジ ±" + fmt(half, 1) + " pips", null,
+      [TF_MIN[S.tf] ? "直近の値動きの大きさ (各足の高値・安値の幅から) × ニューヨーク時間の曜日・時間ごとの平均的な大きさ × 実績による補正 ×" + fmt(H0.k, 2) + "。重要指標の発表があればその分を加えます。"
+        : "1時間足から測った日々の値動きの大きさ (直近ほど重く、長い目では過去500日の平均に戻る) × 実績による補正 ×" + fmt(H0.k, 2) + "。裾の太さは20年分のデータで決めています。",
+       cov != null ? { rec: "直近" + bt.window_days + "日のバックテストで、80%レンジに入った割合 " + pct(cov, 1) + " (目標80%)。" } : null]);
+    // 4. trade plan
+    var T = blk.trade;
+    if (T && T.rule) {
+      var R = T.rule, P = T.plan, lines4 = [];
+      lines4.push("今の条件: " + ruleReason(R, P, blk, p) + "。");
+      if (R.vol_now) lines4.push("値動きの荒さ: 直近" + R.vol_now.n + "時間の変化の標準偏差 " + fmt(R.vol_now.rv_pct, 3) + "%" + (R.vol_now.limit_pct != null ? "、過去1年の80%点 " + fmt(R.vol_now.limit_pct, 3) + "% (" + (R.vol_now.rv_pct <= R.vol_now.limit_pct ? "以下なので入れる" : "超えているので見送り") + ")" : "") + "。");
+      var rs = R.research;
+      if (rs && rs.test) lines4.push({ rec: "20年分の検証 (" + String(rs.split).slice(0, 4) + "年〜): " + Math.round(rs.test.n).toLocaleString() + "回、勝率 " + pct(rs.test.win) + "、1回平均 " + signed(rs.test.pips, 1) + " pips (コスト込み、t = " + fmt(rs.test.t, 2) + ")。参考シグナル (信頼度: 弱)。" });
+      item("売買プラン", P.dir > 0 ? "▲ 買い" : P.dir < 0 ? "▼ 売り" : "見送り", P.dir > 0 ? "up" : P.dir < 0 ? "down" : null, lines4);
+    }
+    // 5. technical and news
+    var TC = blk.tech && blk.tech.consensus;
+    if (TC) {
+      var th = blk.tech.h && TC.test && TC.test[blk.tech.h[0]];
+      item("テクニカル", "総合: " + (TC.label || "—") + " (買い " + TC.buy + "・売り " + TC.sell + ")", null,
+        [{ rec: (th && th.hit != null ? "この総合判定の検証での的中率 " + pct(th.hit, 1) + "。" : "") + "25の指標のどれも20年分の検証で偶然と区別できなかったため、予測には使っていません。" }]);
+    }
+    var pr = p.pressure;
+    if (pr) item("ニュース", "ペアの信号 " + signed(pr.signal, 2), null,
+      [{ rec: "見出しの読み取り (lexicon-v4) は手で確かめて改善していますが、見出しから先の値動きを当てる力は確認できないため、予測への重みは 0 です。" }]);
+    var ev = (blk.path && blk.path.events) || [];
+    if (ev.length) item("重要指標", ev.length + "件 (予測の期間内)", null, [ev.slice(0, 3).map(function (e) { return e.cur + " " + (e.title || "") + " " + jstShort(e.time); }).join("、") + "。発表時の値動きの大きさをレンジに加えています。"]);
   }
 
   // textbook technical signals now, with how often each was right on 20 years of data (research/technical.md)

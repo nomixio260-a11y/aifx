@@ -24,8 +24,9 @@ import pandas as pd
 
 from . import analysis, backtest, indicators
 from . import news as newsmod
-from . import scenario, season, technical, track, trade
+from . import fxcalendar, scenario, season, technical, track, trade
 from .rates import latest as rates_latest
+from .rates import rate_diff
 from .data import CURRENCIES, PAIRS, london_days
 from .engine import (BP, FAN_LEVELS, MODEL_KEYS, TIMEFRAMES, bar_end, bars_until, dist_cdf, dist_pdf, dist_quantile, fan_z,
                      step_ends)
@@ -33,7 +34,7 @@ from .forecaster import model_version
 from .learning import learn, samples_from_ledger
 from .models import default_models
 from .pipeline import State
-from .timeutil import is_market_open, iso, london_date, market_open_mask, parse_iso, utcnow
+from .timeutil import add_trading_minutes, is_market_open, iso, london_date, market_open_mask, parse_iso, utcnow
 
 HISTORY = {"15m": 288, "1h": 240, "1d": 520}
 PAST = {"15m": 96, "1h": 96, "1d": 40}
@@ -107,6 +108,14 @@ def _trade_block(tf, pair, rec: dict, bars: pd.DataFrame, ref: pd.DataFrame, pre
         return out
     out["rule"] = {"key": rule["key"], "name": rule["name"], "desc": rule["desc"], "sl": rule["sl"], "tp": rule["tp"],
                    "hold": rule["hold"], "research": research.get(tf.key)}
+    if rule.get("vol"):             # the volatility filter at the forecast's origin (trade.vol_levels)
+        v = rule["vol"]
+        closes = bars_until(tf, bars, parse_iso(rec["origin"]))["close"].to_numpy(float)[-(v["n"] + v["window"] + 1):]
+        rv, limit = trade.vol_levels(closes, **v)
+        if len(rv) and np.isfinite(rv.iloc[-1]):
+            out["rule"]["vol_now"] = {"rv_pct": _r(float(rv.iloc[-1]) * 100, 4),
+                                      "limit_pct": _r(float(limit.iloc[-1]) * 100, 4) if np.isfinite(limit.iloc[-1]) else None,
+                                      "q": v["q"], "n": v["n"]}
     # the signals recorded under this rule (plans made with a retired rule keep their own results in the ledger)
     live = trade.live_trades([p for p in preds if (p.get("trade") or {}).get("rule") == rule["key"]], ref,
                              TIMEFRAMES[tf.ref].minutes, pair)
@@ -353,6 +362,30 @@ def _technical(tf_key: str, bars: pd.DataFrame, res: dict, dec: int) -> dict | N
             "signals": items}
 
 
+def _basis(tf, pair, bars: pd.DataFrame, rec: dict | None, rate_item: dict | None) -> dict | None:
+    """The grounds of the latest forecast's next-bar call: the time-of-day slot behind it (average move,
+    t, number of bars in the last year) and, at the 17:00 New York roll, the value days and the expected
+    shift from the rate difference (season.py, research/direction.md, research/rollover.md)."""
+    if not tf.minutes or rec is None:
+        return None
+    origin = parse_iso(rec["origin"])
+    hist = bars_until(tf, bars, origin)
+    if len(hist) < 200:
+        return None
+    start = add_trading_minutes(origin, 1, tf.minutes) - timedelta(minutes=tf.minutes)
+    ex = season.explain(season.slot_stats(hist, origin, tf.minutes), start, tf.minutes)
+    out = {"start": iso(start), "weekday": ex["weekday"], "minute": ex["minute"], "used": ex["used"], "reopen": ex["reopen"],
+           **{k: {"mean_bp": _r(ex[k]["mean_bp"], 2), "t": _r(ex[k]["t"], 2), "n": ex[k]["n"]} for k in ("slot", "tod")},
+           "roll": None}
+    ny = pd.Timestamp(start).tz_convert(season.NEW_YORK)
+    diff = rate_diff(rate_item, pair.base, pair.quote, origin.date()) if rate_item else None
+    if ny.hour == 17 and ny.minute == 0 and ny.dayofweek <= 3 and diff is not None:
+        out["roll"] = {"days": fxcalendar.roll_days(ny.date(), pair.base, pair.quote), "diff": _r(diff, 3),
+                       "e_bp": _r(float(season.roll_shift([start], pair.base, pair.quote, diff)[0]), 3),
+                       "promote_bp": season.ROLL_E_HIGH}
+    return out
+
+
 def _pivots(tf_key: str, bars: pd.DataFrame, daily: pd.DataFrame, dec: int, now) -> dict | None:
     """Classic pivots from the last complete London day (intraday charts) or week (daily chart). When the
     market is closed (no bar for over an hour, e.g. the weekend) the last day or week counts as complete."""
@@ -595,6 +628,7 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                                               preds_by.get((code, tf_key), []), rate_item,
                                               now, trade_res)
                 summary.setdefault("signal", {})[tf_key] = block["trade"]["plan"]["dir"] if block["trade"]["rule"] else None
+                block["basis"] = _basis(tf, pair, bars, rec, rate_item)
                 if tf_key == "1h":
                     h24 = block["prediction"]["horizons"][-1]
                     ranges24[code] = {"h": h24["h"], "lo80": h24["lo80"], "hi80": h24["hi80"],

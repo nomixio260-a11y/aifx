@@ -75,7 +75,10 @@ def slot_stats(bars: pd.DataFrame, origin: datetime, minutes: int) -> dict:
         r[np.diff(t.as_unit("ns").asi8) > minutes * 60_000_000_000] = np.nan
         r[~market_open_mask(t[1:])] = np.nan               # a tick Yahoo prints after the Friday close
     week, tod, per_day = _slots(t[1:], minutes) if len(r) else (np.array([], int), np.array([], int), 24 * 60 // minutes)
-    out = {"slot": _stats(r, week, 7 * per_day), "tod": _stats(r, tod, per_day)}
+    ok = np.isfinite(r)
+    out = {"slot": _stats(r, week, 7 * per_day), "tod": _stats(r, tod, per_day),
+           # bars behind each slot's average (for showing the grounds of a call)
+           "n_slot": np.bincount(week[ok], minlength=7 * per_day), "n_tod": np.bincount(tod[ok], minlength=per_day)}
     if len(_CACHE) > 4096:
         _CACHE.clear()
     _CACHE[key] = out
@@ -96,13 +99,33 @@ def _stats(r: np.ndarray, key: np.ndarray, n: int) -> tuple[np.ndarray, np.ndarr
     return mu, t
 
 
-def bar_drift(stats: dict, starts, minutes: int) -> tuple[np.ndarray, np.ndarray]:
-    """Expected move (bp) of bars starting at ``starts`` and its t statistic; 0 where no slot is clear."""
-    week, tod, _ = _slots(pd.DatetimeIndex(starts), minutes)
+def explain(stats: dict, start, minutes: int) -> dict:
+    """What a bar starting at ``start`` gets its expected move from: the weekday-and-time slot or, failing
+    that, the time of day, with that slot's average move (bp), t statistic and number of bars."""
+    week, tod, per_day = _slots(pd.DatetimeIndex([start]), minutes)
+    w, d = int(week[0]), int(tod[0])
     mu_w, t_w = stats["slot"]
     mu_d, t_d = stats["tod"]
-    use_w = np.abs(t_w[week]) >= T_MIN
-    use_d = ~use_w & (np.abs(t_d[tod]) >= T_MIN)
+    base = {"weekday": w // per_day, "minute": d * minutes,
+            "slot": {"mean_bp": float(mu_w[w]), "t": float(t_w[w]), "n": int(stats["n_slot"][w])},
+            "tod": {"mean_bp": float(mu_d[d]), "t": float(t_d[d]), "n": int(stats["n_tod"][d])}}
+    reopen = not market_open_mask(pd.DatetimeIndex([start]) - pd.Timedelta(minutes=minutes))[0]
+    base["reopen"] = bool(reopen)
+    base["used"] = None if reopen else "slot" if abs(t_w[w]) >= T_MIN else "tod" if abs(t_d[d]) >= T_MIN else None
+    return base
+
+
+def bar_drift(stats: dict, starts, minutes: int) -> tuple[np.ndarray, np.ndarray]:
+    """Expected move (bp) of bars starting at ``starts`` and its t statistic; 0 where no slot is clear
+    and for the first bar after the market reopens."""
+    starts = pd.DatetimeIndex(starts)
+    week, tod, _ = _slots(starts, minutes)
+    mu_w, t_w = stats["slot"]
+    mu_d, t_d = stats["tod"]
+    # the first bar after the market reopens carries the weekend's gap, which the statistics leave out
+    reopen = ~market_open_mask(starts - pd.Timedelta(minutes=minutes))
+    use_w = (np.abs(t_w[week]) >= T_MIN) & ~reopen
+    use_d = ~use_w & ~reopen & (np.abs(t_d[tod]) >= T_MIN)
     d = np.where(use_w, mu_w[week], np.where(use_d, mu_d[tod], 0.0))
     t = np.where(use_w, t_w[week], np.where(use_d, t_d[tod], 0.0))
     return d, t

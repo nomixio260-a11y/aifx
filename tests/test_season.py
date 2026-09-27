@@ -171,3 +171,31 @@ def test_roll_bar_calls_that_agree_with_the_rate_difference_are_high_confidence(
     if season.T_MIN <= abs(t0[0]) < season.T_HIGH and d0[0] < 0:
         assert t1[0] == -season.T_HIGH
     assert np.array_equal(season.step_drift(60, bars, origin, 3, PAIRS["AUDJPY"], None)[1], t0)
+
+
+def test_no_call_for_the_first_bar_after_the_weekend_and_the_grounds_of_a_call():
+    bars = _bars(n=3000, drift_ny=(17, 0), drift_bp=4.0)
+    origin = datetime(2026, 1, 9, 22, tzinfo=UTC)                # Friday 17:00 New York: the close
+    st = season.slot_stats(bars, origin, 60)
+    sunday_open = pd.Timestamp("2026-01-11 22:00", tz="UTC")     # Sunday 17:00 New York (winter)
+    d, t = season.bar_drift(st, [sunday_open], 60)
+    assert d[0] == 0 and t[0] == 0                               # its move is the weekend's gap
+    ex = season.explain(st, sunday_open, 60)
+    assert ex["reopen"] and ex["used"] is None
+    tuesday = pd.Timestamp("2026-01-13 22:00", tz="UTC")         # Tuesday 17:00 New York
+    ex = season.explain(st, tuesday, 60)
+    d, t = season.bar_drift(st, [tuesday], 60)
+    assert not ex["reopen"] and ex["weekday"] == 1 and ex["minute"] == 17 * 60
+    assert ex["slot"]["n"] >= season.MIN_N and ex["slot"]["t"] == pytest.approx(t[0])
+    assert ex["used"] == "slot" and ex["slot"]["mean_bp"] == pytest.approx(d[0])
+
+
+def test_api_gives_the_grounds_of_the_next_bar(session):
+    from aifx.api import build_api
+    root, _ = session
+    out = build_api(root)
+    for tf in ("15m", "1h"):
+        B = out["pair/USDJPY.json"]["tf"][tf]["basis"]
+        assert B and set(B) >= {"start", "weekday", "minute", "used", "reopen", "slot", "tod", "roll"}
+        assert B["used"] in (None, "slot", "tod") and B["slot"]["n"] >= 0
+    assert out["pair/USDJPY.json"]["tf"]["1d"]["basis"] is None

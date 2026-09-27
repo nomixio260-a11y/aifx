@@ -380,7 +380,12 @@ def session_eval(log=print) -> dict:
                 if i + n_ahead >= len(c):
                     continue
                 d, t = season.bar_drift(stats, idx[i + 1: i + 1 + max(hs)], minutes)
+                # the server scores a forecast on the bars that follow the origin on the trading calendar;
+                # where the data break (Yahoo starts Sunday two hours after the open), it has no outcome
+                steps_ok = np.diff(idx[i: i + 1 + max(hs)].as_unit("ns").asi8) == minutes * 60_000_000_000
                 for h in hs:
+                    if not steps_ok[:h].all():
+                        continue
                     dh = float(d[:h].sum())
                     if dh != 0:
                         rows[tf].append((h, period, np.sign(dh), abs(season.combined_t(d[:h], t[:h])),
