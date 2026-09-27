@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +33,7 @@ from .forecaster import model_version
 from .learning import learn, samples_from_ledger
 from .models import default_models
 from .pipeline import State
-from .timeutil import iso, london_date, market_open_mask, parse_iso, utcnow
+from .timeutil import is_market_open, iso, london_date, market_open_mask, parse_iso, utcnow
 
 HISTORY = {"15m": 288, "1h": 240, "1d": 520}
 PAST = {"15m": 96, "1h": 96, "1d": 40}
@@ -501,6 +501,18 @@ def _learning(ledger, preds, outcomes) -> dict:
     return out
 
 
+def next_cycle_at(now, interval_min: float = 15):
+    """When the next cycle should land: the server starts one 90 s after each bar boundary while the
+    market is open (about two minutes to run), and waits for the Sunday open over the weekend."""
+    step = timedelta(minutes=interval_min)
+    t = datetime.fromtimestamp((now.timestamp() // step.total_seconds() + 1) * step.total_seconds(), tz=now.tzinfo)
+    for _ in range(24 * 4 * 3 + 1):          # at most three days of closed market
+        if is_market_open(t):
+            break
+        t += step
+    return t + timedelta(minutes=4)
+
+
 def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) -> dict[str, dict]:
     state = State.open(root)
     ledger = state.ledger
@@ -725,7 +737,8 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
         "cycle_at": cycle_at,
         "mode": mode,
         "interval_min": interval_min,
-        "next_update_at": iso(now + timedelta(minutes=interval_min)),
+        "next_update_at": iso(next_cycle_at(now, interval_min)),
+        "market_open": is_market_open(now),
         "pairs": pair_summaries,
         "models": [{"key": m.key, "name": m.name} for m in default_models()] + [{"key": "ensemble", "name": "アンサンブル"}],
         "timeframes": {k: {"label": tf.label, "horizons": list(tf.horizons),

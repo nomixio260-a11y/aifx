@@ -3,7 +3,7 @@
 import json
 import threading
 import urllib.request
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -299,3 +299,13 @@ def test_no_15m_forecast_when_its_first_target_has_passed(tmp_path):
     rep = run_session(tmp_path / "state", cycles=1, start=at)[0]
     preds = Ledger(tmp_path / "state").load().of_type("prediction")
     assert rep.verify["ok"] and not [p for p in preds if p["tf"] == "15m"]
+
+
+def test_the_page_knows_when_the_next_cycle_lands():
+    from aifx.api import next_cycle_at
+    utc = timezone.utc
+    assert next_cycle_at(datetime(2026, 9, 28, 10, 7, tzinfo=utc)) == datetime(2026, 9, 28, 10, 19, tzinfo=utc)
+    # Friday after the close and Saturday: the Sunday 17:00 New York open (21:00 UTC in summer)
+    for t in (datetime(2026, 9, 25, 21, 30, tzinfo=utc), datetime(2026, 9, 26, 12, 0, tzinfo=utc)):
+        assert next_cycle_at(t) == datetime(2026, 9, 27, 21, 4, tzinfo=utc)
+    assert next_cycle_at(datetime(2026, 12, 26, 12, 0, tzinfo=utc)) == datetime(2026, 12, 27, 22, 4, tzinfo=utc)

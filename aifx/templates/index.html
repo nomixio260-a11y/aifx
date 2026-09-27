@@ -744,7 +744,9 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var m = S.meta; var box = clear($("status"));
     if (!m) return;
     var pill = el("span", "pill"); var dot = el("span", "dot");
-    var stale = m.cycle_at && (Date.now() - new Date(m.cycle_at).getTime()) > 3 * m.interval_min * 60000 + 30 * 60000;
+    // late when the expected next cycle is more than 30 minutes overdue (over the weekend it is Sunday's open)
+    var stale = m.next_update_at ? Date.now() - new Date(m.next_update_at).getTime() > 30 * 60000
+      : m.cycle_at && (Date.now() - new Date(m.cycle_at).getTime()) > 3 * m.interval_min * 60000 + 30 * 60000;
     var txt;
     if (m.mode === "snapshot") {
       dot.className = "dot warn"; txt = "スナップショット";
@@ -757,6 +759,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       if (stale) { dot.className = "dot warn"; txt = "更新が遅れています"; }
     }
     pill.appendChild(dot); pill.appendChild(el("span", null, txt + " · " + jst(m.cycle_at))); box.appendChild(pill);
+    if (m.next_update_at && !stale) box.appendChild(el("span", "muted", (m.market_open === false ? "市場は休み · 次の更新 " : "次の更新 ") + jstShort(m.next_update_at) + " ごろ"));
     var v = el("a", null, (m.ledger.ok ? "✔ 台帳OK" : "✖ 台帳に問題") + " " + m.ledger.records.toLocaleString() + "件");
     v.href = "#verify"; v.style.color = m.ledger.ok ? "var(--good)" : "var(--bad)"; v.style.fontWeight = "600"; v.style.textDecoration = "none";
     v.addEventListener("click", function (e) { e.preventDefault(); showView("verify", true); });
