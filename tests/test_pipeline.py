@@ -301,11 +301,28 @@ def test_no_15m_forecast_when_its_first_target_has_passed(tmp_path):
     assert rep.verify["ok"] and not [p for p in preds if p["tf"] == "15m"]
 
 
+def test_the_chained_cycle_starts_late_enough_to_forecast(tmp_path):
+    """The server workflow starts each cycle a fixed time after the quarter hour. A bar counts as closed
+    only data.SETTLE after its end, so a cycle any earlier would see the bar before, whose next bar has
+    already closed, and issue nothing (as on 2026-09-27, when the offset was 90 s)."""
+    import re
+    from pathlib import Path
+
+    from aifx.data import SETTLE
+    wf = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "server.yml"
+    offsets = [int(x) for x in re.findall(r"\* 900 \+ (\d+) \)\)", wf.read_text(encoding="utf-8"))]
+    assert offsets and all(o >= SETTLE.total_seconds() + 30 for o in offsets)
+    at = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc) + timedelta(seconds=min(offsets) + 15)   # a quick runner
+    rep = run_session(tmp_path / "state", cycles=1, start=at)[0]
+    tfs = {p["tf"] for p in Ledger(tmp_path / "state").load().of_type("prediction")}
+    assert rep.verify["ok"] and {"15m", "1h"} <= tfs
+
+
 def test_the_page_knows_when_the_next_cycle_lands():
     from aifx.api import next_cycle_at
     utc = timezone.utc
-    assert next_cycle_at(datetime(2026, 9, 28, 10, 7, tzinfo=utc)) == datetime(2026, 9, 28, 10, 19, tzinfo=utc)
+    assert next_cycle_at(datetime(2026, 9, 28, 10, 7, tzinfo=utc)) == datetime(2026, 9, 28, 10, 20, tzinfo=utc)
     # Friday after the close and Saturday: the Sunday 17:00 New York open (21:00 UTC in summer)
     for t in (datetime(2026, 9, 25, 21, 30, tzinfo=utc), datetime(2026, 9, 26, 12, 0, tzinfo=utc)):
-        assert next_cycle_at(t) == datetime(2026, 9, 27, 21, 4, tzinfo=utc)
-    assert next_cycle_at(datetime(2026, 12, 26, 12, 0, tzinfo=utc)) == datetime(2026, 12, 27, 22, 4, tzinfo=utc)
+        assert next_cycle_at(t) == datetime(2026, 9, 27, 21, 5, tzinfo=utc)
+    assert next_cycle_at(datetime(2026, 12, 26, 12, 0, tzinfo=utc)) == datetime(2026, 12, 27, 22, 5, tzinfo=utc)

@@ -559,15 +559,16 @@ def _learning(ledger, preds, outcomes) -> dict:
 
 
 def next_cycle_at(now, interval_min: float = 15):
-    """When the next cycle should land: the server starts one 90 s after each bar boundary while the
-    market is open (about two minutes to run), and waits for the Sunday open over the weekend."""
+    """When the next cycle should land: the server starts one 4 minutes after each bar boundary while the
+    market is open (once the bar has settled, data.SETTLE; about a minute to run), and waits for the
+    Sunday open over the weekend."""
     step = timedelta(minutes=interval_min)
     t = datetime.fromtimestamp((now.timestamp() // step.total_seconds() + 1) * step.total_seconds(), tz=now.tzinfo)
     for _ in range(24 * 4 * 3 + 1):          # at most three days of closed market
         if is_market_open(t):
             break
         t += step
-    return t + timedelta(minutes=4)
+    return t + timedelta(minutes=5)
 
 
 def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) -> dict[str, dict]:

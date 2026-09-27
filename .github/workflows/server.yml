@@ -132,15 +132,16 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           now=$(date -u +%s)
-          # the next quarter hour plus 90 seconds, so the 15-minute bar has closed
-          next=$(( (now / 900 + 1) * 900 + 90 ))
+          # the next quarter hour plus 4 minutes: a bar counts as closed 3 minutes after its end (data.SETTLE),
+          # so a cycle any earlier sees the bar before, whose next bar has already closed, and forecasts nothing
+          next=$(( (now / 900 + 1) * 900 + 240 ))
           # the FX market closes from Friday 17:00 to Sunday 17:00 New York time (one more run scores Friday's last bar)
           read -r dow hm <<< "$(TZ=America/New_York date -d "@$next" +"%u %H%M")"
           hm=$((10#$hm))
           if { [ "$dow" = 5 ] && [ "$hm" -ge 1715 ]; } || [ "$dow" = 6 ] || { [ "$dow" = 7 ] && [ "$hm" -lt 1700 ]; }; then
             open=$(TZ=America/New_York date -d "$(TZ=America/New_York date -d "@$next" +%Y-%m-%d) + $(( (7 - dow) % 7 )) days 17:00" +%s)
             if [ $(( open - now )) -gt 19800 ]; then echo "market closed; the schedule restarts the chain"; exit 0; fi
-            next=$(( open + 90 ))
+            next=$(( open + 240 ))
           fi
           sleep $(( next - $(date -u +%s) > 0 ? next - $(date -u +%s) : 0 ))
           others=$(gh run list --repo "$REPO" --workflow server.yml --limit 20 --json databaseId,status \
