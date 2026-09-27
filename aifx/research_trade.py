@@ -174,8 +174,9 @@ def simulate(P: dict, sig: np.ndarray, sl_atr: float, tp_atr: float | None, hold
     return out
 
 
-def _prep(code: str, df: pd.DataFrame, hourly: bool) -> dict:
-    pair = PAIRS[code]
+def _prep(code: str, df: pd.DataFrame, hourly: bool, pair=None) -> dict:
+    """``pair``: the data.Pair of a code outside PAIRS (research_holdout.py)."""
+    pair = pair or PAIRS[code]
     o, h, lo, c = (df[k].to_numpy(float) for k in ("open", "high", "low", "close"))
     idx = df.index.tz_convert(None) if df.index.tz is not None else df.index
     idx = pd.DatetimeIndex(idx).as_unit("ns")          # asi8 below counts nanoseconds

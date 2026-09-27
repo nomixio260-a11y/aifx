@@ -138,12 +138,16 @@ def convention_check(D: pd.DataFrame) -> dict:
     return out
 
 
-def roll_table(code: str, first: pd.Timestamp, last: pd.Timestamp) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+def roll_table(code: str, first: pd.Timestamp, last: pd.Timestamp, pair=None, holidays_fn=None,
+               spot_fn=None) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """The 17:00 New York rolls from ``first`` to ``last`` (UTC ns, sorted) and, per way of counting,
     the cumulative value days rolled before each (length + 1). The roll that ends trade date D moves the
-    value date from spot(D) to spot(next weekday): "plain" counts 1 (Wednesday 3), "cal" the calendars."""
-    pair = PAIRS[code]
-    hol = {c: holidays(c, first.year - 1, last.year + 1) for c in {pair.base, pair.quote, "USD"}}
+    value date from spot(D) to spot(next weekday): "plain" counts 1 (Wednesday 3), "cal" the calendars.
+    ``pair``, ``holidays_fn`` (cur, first year, last year) and ``spot_fn`` (as spot_date) default to the 7 pairs'
+    Pair, fxcalendar.holidays and fxcalendar.spot_date (research_holdout.py passes its own)."""
+    pair = pair or PAIRS[code]
+    holidays_fn, spot_fn = holidays_fn or holidays, spot_fn or spot_date
+    hol = {c: holidays_fn(c, first.year - 1, last.year + 1) for c in {pair.base, pair.quote, "USD"}}
     days = pd.date_range(first.tz_convert(None).normalize() - pd.Timedelta(days=7),
                          last.tz_convert(None).normalize() + pd.Timedelta(days=7), freq="D")
     days = days[days.dayofweek < 5]
@@ -152,7 +156,7 @@ def roll_table(code: str, first: pd.Timestamp, last: pd.Timestamp) -> tuple[np.n
 
     def sp(d: date) -> date:
         if d not in spot:
-            spot[d] = spot_date(d, pair.base, pair.quote, hol)
+            spot[d] = spot_fn(d, pair.base, pair.quote, hol)
         return spot[d]
 
     cal = np.array([(sp(d + (3 if d.weekday() == 4 else 1) * D1) - sp(d)).days for d in days.date])
@@ -162,10 +166,10 @@ def roll_table(code: str, first: pd.Timestamp, last: pd.Timestamp) -> tuple[np.n
 
 # ------------------------------------------------------------------ rates
 
-def rate_diff_by_day(code: str, days_ns: np.ndarray) -> np.ndarray:
+def rate_diff_by_day(code: str, days_ns: np.ndarray, pair=None) -> np.ndarray:
     """Base-minus-quote short rate (% a year) known on each UTC day (ns at midnight), as history.rates_panel
-    and rates.rate_diff (same series and publication lags)."""
-    pair = PAIRS[code]
+    and rates.rate_diff (same series and publication lags). ``pair`` defaults to PAIRS[code]."""
+    pair = pair or PAIRS[code]
     uniq, inv = np.unique(days_ns, return_inverse=True)
     r = history.rates_panel(pd.DatetimeIndex(pd.to_datetime(uniq)))
     return (r[pair.base] - r[pair.quote]).to_numpy(float)[inv]
@@ -218,12 +222,14 @@ def _mu_t(S: np.ndarray, add: np.ndarray | float = 0.0) -> tuple[np.ndarray, np.
     return m, np.where(ok, m / np.where(ok, sd, 1.0) * np.sqrt(safe), 0.0)
 
 
-def build(full: pd.DataFrame, code: str, minutes: int, min_bars: int, ahead: int) -> pd.DataFrame:
+def build(full: pd.DataFrame, code: str, minutes: int, min_bars: int, ahead: int, pair=None, holidays_fn=None,
+          spot_fn=None) -> pd.DataFrame:
     """Every forecast the server makes for the next bar (origin: the end of an open-market bar with at least
     ``min_bars`` earlier open bars and ``ahead`` later ones, as research_direction.session_eval), with the live
     call (d0, t0), the called bar's move f (bp), its expected roll shift e_* and days_* per way of counting
     days, and candidate d's adjusted call (dA_*, tA_*). Slot statistics use every stored bar before the
-    origin's UTC day (bars after a pause or while the market is shut left out), as season.slot_stats."""
+    origin's UTC day (bars after a pause or while the market is shut left out), as season.slot_stats.
+    ``pair``, ``holidays_fn`` and ``spot_fn``: as roll_table (for pairs outside PAIRS)."""
     full = full[~full.index.duplicated()].sort_index()
     idx = pd.DatetimeIndex(full.index).as_unit("ns")
     ns = idx.asi8
@@ -257,9 +263,9 @@ def build(full: pd.DataFrame, code: str, minutes: int, min_bars: int, ahead: int
     F = {"origin": origin, "tstart": ns[tgt], "f": np.log(close[tgt] / close[src]) * 1e4, "d0": d0, "t0": t0,
          "ny_hour": local.hour.to_numpy(), "ny_min": local.minute.to_numpy(), "ny_dow": local.dayofweek.to_numpy()}
     F["roll"] = (F["ny_hour"] == 17) & (F["ny_min"] == 0) & (F["ny_dow"] <= 3)
-    when, cum = roll_table(code, idx[0], idx[-1])
-    diff_bar = rate_diff_by_day(code, ns // NS_DAY * NS_DAY)
-    diff_row = rate_diff_by_day(code, origin // NS_DAY * NS_DAY)
+    when, cum = roll_table(code, idx[0], idx[-1], pair, holidays_fn, spot_fn)
+    diff_bar = rate_diff_by_day(code, ns // NS_DAY * NS_DAY, pair)
+    diff_row = rate_diff_by_day(code, origin // NS_DAY * NS_DAY, pair)
     F["diff"] = diff_row
     prev_end = np.concatenate([[ns[0]], ns[:-1] + step])       # a bar's move runs from the previous close
     for key in DAYS:

@@ -146,9 +146,10 @@ def _asof(frame: pd.DataFrame, dates: pd.DatetimeIndex) -> pd.DataFrame:
     return pd.DataFrame(vals, columns=frame.columns, index=dates)
 
 
-def prepare(code: str, df: pd.DataFrame, hourly: bool, vix: pd.DataFrame, start: int | None = None) -> dict:
-    """research_trade._prep plus what the filters need, all known at each bar's close."""
-    P = _prep(code, df[["open", "high", "low", "close"]], hourly)
+def prepare(code: str, df: pd.DataFrame, hourly: bool, vix: pd.DataFrame, start: int | None = None,
+            pair=None) -> dict:
+    """research_trade._prep plus what the filters need, all known at each bar's close (``pair``: see _prep)."""
+    P = _prep(code, df[["open", "high", "low", "close"]], hourly, pair)
     if start is not None:
         P["start"] = start
     t = P["time"]
@@ -231,9 +232,11 @@ def variant_signal(P: dict, key: str, rule: dict, filters: list[str]) -> np.ndar
     return sig
 
 
-def run_variant(panel: dict, key: str, rule: dict, filters: list[str], since: pd.Timestamp | None = None) -> pd.DataFrame:
+def run_variant(panel: dict, key: str, rule: dict, filters: list[str], since: pd.Timestamp | None = None,
+                live_cost: dict | None = None) -> pd.DataFrame:
     """All trades of one variant: research_trade.simulate without costs, then each trade's cost is
-    the larger of the live cost and the recorded spread (half at entry, half at exit)."""
+    the larger of the live cost and the recorded spread (half at entry, half at exit). ``live_cost``
+    (pips per round trip by code) stands in for trade.COST_PIPS, e.g. for pairs the server does not trade."""
     rows = []
     for code, P in panel.items():
         sig = variant_signal(P, key, rule, filters)
@@ -241,7 +244,7 @@ def run_variant(panel: dict, key: str, rule: dict, filters: list[str], since: pd
         if not trades:
             continue
         i, j, d, gross = (np.array([t[k] for t in trades]) for k in range(4))
-        live = COST_PIPS[code]
+        live = (live_cost or COST_PIPS)[code]
         sp = P["spread_pips"]
         cost = np.maximum(live, (sp[i] + sp[j]) / 2) if sp is not None else np.full(len(i), live)
         risk = rule["sl"] * P["atr"][i] / P["pip"]
