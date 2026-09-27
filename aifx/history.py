@@ -119,6 +119,9 @@ def download_extra(root: Path | None = None, log=print) -> None:
 DUKA_URL = "https://datafeed.dukascopy.com/datafeed/{pair}/{year}/{month:02d}/{side}_candles_hour_1.bi5"
 DUKA_START = 2003
 DUKA_DIR = "duka"
+# pairs never used to design or choose anything: an out-of-sample check of what was adopted
+HOLDOUT_PAIRS = ("EURGBP", "EURAUD", "GBPAUD", "USDCHF", "USDCAD", "NZDUSD")
+HOLDOUT_RATES = {"CHF": [("IR3TIB01CHM156N", "m")], "CAD": [("IR3TIB01CAM156N", "m")], "NZD": [("IR3TIB01NZM156N", "m")]}
 
 
 def _duka_get(url: str, cache: Path | None) -> bytes:
@@ -170,8 +173,7 @@ def fetch_dukascopy_hourly(code: str, start_year: int = DUKA_START, until: datet
     """Hourly mid bars (the average of bid and ask) with the bid-ask spread, for every complete month
     from ``start_year``. Hours without ticks (weekends, holidays) are left out."""
     from concurrent.futures import ThreadPoolExecutor
-    pair = PAIRS[code]
-    point = 1e-3 if pair.quote == "JPY" else 1e-5
+    point = 1e-3 if code[3:] == "JPY" else 1e-5
     until = until or utcnow()
     months = [(y, m) for y in range(start_year, until.year + 1) for m in range(1, 13) if (y, m) < (until.year, until.month)]
     jobs = [(y, m, side) for y, m in months for side in ("BID", "ASK")]
@@ -189,13 +191,23 @@ def fetch_dukascopy_hourly(code: str, start_year: int = DUKA_START, until: datet
     return out[~out.index.duplicated()].sort_index()
 
 
-def download_dukascopy(root: Path | None = None, log=print, start_year: int = DUKA_START, workers: int = 3) -> None:
+def download_dukascopy(root: Path | None = None, log=print, start_year: int = DUKA_START, workers: int = 3,
+                       codes=None) -> None:
     root = (root or HIST_DIR) / DUKA_DIR
     root.mkdir(parents=True, exist_ok=True)
-    for code in PAIRS:
+    for code in codes or PAIRS:
         df = fetch_dukascopy_hourly(code, start_year, workers=workers, cache_dir=root / "raw")
         df.to_csv(root / f"{code}_1h.csv", index_label="time", float_format="%.6f")
         log(f"Dukascopy {code}: {len(df):,} hourly bars {df.index[0]:%Y-%m-%d} .. {df.index[-1]:%Y-%m-%d}")
+
+
+def download_holdout(root: Path | None = None, log=print, start_year: int = 2006, workers: int = 6) -> None:
+    """The hold-out pairs' hourly bars and the extra currencies' short rates (research only)."""
+    for cur, series in HOLDOUT_RATES.items():
+        for sid, _freq in series:
+            fetch_fred(sid).to_csv(_path(f"rate_{sid}.csv", root), index_label="date")
+            log(f"rate {cur} {sid}")
+    download_dukascopy(root, log, start_year, workers, codes=HOLDOUT_PAIRS)
 
 
 def load_long_hourly(code: str, root: Path | None = None) -> pd.DataFrame:
@@ -247,7 +259,8 @@ def load_intraday(code: str, interval: str, root: Path | None = None) -> pd.Data
 def rates_panel(index: pd.DatetimeIndex, root: Path | None = None) -> pd.DataFrame:
     """Short rates (% p.a.) per currency as they were known on each date of ``index``."""
     out = {}
-    for cur, series in RATE_SERIES.items():
+    extra = {c: v for c, v in HOLDOUT_RATES.items() if _path(f"rate_{v[0][0]}.csv", root).exists()}
+    for cur, series in {**RATE_SERIES, **extra}.items():
         known = pd.Series(np.nan, index=index)
         for sid, freq in series:
             s = pd.read_csv(_path(f"rate_{sid}.csv", root), index_col="date", parse_dates=["date"]).iloc[:, 0]
