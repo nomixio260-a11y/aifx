@@ -132,3 +132,15 @@ def test_hourly_ranges_are_measured_over_the_whole_profile_window(tmp_path, monk
     assert min(seen["1h"]) > engine.TIMEFRAMES["1h"].fit_bars
     assert max(seen["1h"]) <= engine.HOURLY_PROFILE_WINDOW + 500
     assert max(seen["1d"]) <= engine.TIMEFRAMES["1d"].fit_bars
+
+
+def test_daily_band_shapes_are_the_ones_that_held_on_the_hold_out_pairs():
+    """research/holdout.md: the daily 20-day shape (nu 30 -> 5) improved the log score on the six hold-out
+    pairs in both periods and stays; the 1-day change (nu 10 -> 6) did worse there and went back to 10."""
+    import json
+    from pathlib import Path
+
+    from aifx.engine import BAND_NU
+    res = json.loads(Path("research/holdout.json").read_text(encoding="utf-8"))["shape"]
+    assert all(res["20"][p]["pass"] for p in ("tune", "test")) and BAND_NU["1d"][20] == res["20"]["new"]
+    assert not any(res["1"][p]["pass"] for p in ("tune", "test")) and BAND_NU["1d"][1] == res["1"]["old"] == 10

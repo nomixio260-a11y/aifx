@@ -38,7 +38,7 @@ from .learning import learn, samples_from_ledger
 from .ledger import Ledger, chain_problems, data_file_problems
 from .store import PriceStore, parse_price_lines
 from .timeutil import iso, parse_iso, utcnow
-from .trade import exits as trade_exits
+from .trade import exits as trade_exits, known_rule
 
 
 class _Committed:
@@ -192,7 +192,9 @@ def verify(root: Path | str) -> dict:
         tr = p.get("trade")
         if tr is not None:
             ex = trade_exits(p["tf"], tr.get("rule"))
-            if tr.get("dir") not in (-1, 0, 1) or tr["until"] != iso(target_times(tf, origin, (ex["hold"],))[0]):
+            if not known_rule(p["tf"], tr.get("rule")):
+                add("rule", f"{tag}: trade plan made with a rule this timeframe never had")
+            elif tr.get("dir") not in (-1, 0, 1) or tr["until"] != iso(target_times(tf, origin, (ex["hold"],))[0]):
                 add("rule", f"{tag}: trade plan time limit or direction breaks the rules")
             elif tr["dir"]:
                 d = tr["dir"]

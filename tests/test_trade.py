@@ -45,11 +45,26 @@ def test_settle_checks_the_stop_first_and_fills_gaps_at_the_open():
 
 def test_rule_signals_follow_the_rate_difference_and_momentum():
     up = np.linspace(100, 110, 200)
-    assert trade.rule_signal("1d", up, 2.5) == 1 and trade.rule_signal("1d", up, -2.5) == -1
-    assert trade.rule_signal("1d", up, 1.0) == 0 and trade.rule_signal("1d", up, None) == 0
-    assert trade.rule_signal("1h", up, 1.5) == 1          # carry and 120-hour momentum agree
-    assert trade.rule_signal("1h", up, -1.5) == 0         # they disagree: no trade
-    assert trade.rule_signal("15m", up, 3.0) == 0         # no tested rule
+    carry, cmv = trade.TESTED["carry"], trade.TESTED["carry_mom_vol"]
+    assert trade.rule_signal("1d", up, 2.5, rule=carry) == 1 and trade.rule_signal("1d", up, -2.5, rule=carry) == -1
+    assert trade.rule_signal("1d", up, 1.0, rule=carry) == 0 and trade.rule_signal("1d", up, None, rule=carry) == 0
+    assert trade.rule_signal("1h", up, 1.5, rule=cmv) == 1          # carry and 120-hour momentum agree
+    assert trade.rule_signal("1h", up, -1.5, rule=cmv) == 0         # they disagree: no trade
+
+
+def test_rules_that_failed_the_hold_out_give_no_signal():
+    """research/holdout.md: both tested rules lost money on the six hold-out pairs after 2017, so no
+    timeframe has a live rule; their plans keep their exits for the ledger."""
+    import json
+    from pathlib import Path
+    assert trade.RULES == {}
+    up = np.linspace(100, 110, 200)
+    assert all(trade.rule_signal(tf, up, 3.0) == 0 for tf in ("15m", "1h", "1d"))
+    res = json.loads(Path("research/holdout.json").read_text(encoding="utf-8"))
+    assert not res["trade"]["pass"]
+    assert all(res["trade"]["rules"][k]["test"]["pips"] < 0 for k in ("carry_mom_vol", "carry_1d"))
+    for key, r in trade.TESTED.items():
+        assert trade.RETIRED[key] == {k: r[k] for k in ("sl", "tp", "hold")}
 
 
 def test_stored_rates_match_the_research_panel():
@@ -73,11 +88,11 @@ def test_live_backtest_takes_the_same_trades_as_the_research():
     df = pd.DataFrame({"open": o, "high": np.maximum(o, c) * 1.0008, "low": np.minimum(o, c) * 0.9992, "close": c}, index=idx)
     pair, tf = PAIRS["USDJPY"], TIMEFRAMES["1h"]
     item, _ = fake_rates(datetime(2026, 3, 1, tzinfo=UTC))
-    live = trade.backtest(tf, pair, df, item)
+    r = trade.TESTED["carry_mom_vol"]      # the filter cannot block yet: 900 bars < a quarter of its window
+    live = trade.backtest(tf, pair, df, item, rule=r)
     P = {"o": o, "h": df["high"].to_numpy(), "l": df["low"].to_numpy(), "c": c, "pip": pair.pip,
          "atr": trade.atr(df["high"].to_numpy(), df["low"].to_numpy(), c), "diff": np.full(n, 3.5),
          "acc": (np.zeros(n), np.zeros(n)), "start": 150}
-    r = trade.RULES["1h"]
     sig = research_trade.signal("carry_mom", {"thr": r["thr"], "L": r["L"]}, P)
     ref = research_trade.simulate(P, sig, r["sl"], r["tp"], r["hold"], trade.COST_PIPS["USDJPY"])
     ends = [iso(t + timedelta(hours=1)) for t in idx]
@@ -105,15 +120,17 @@ def test_a_trade_plan_that_does_not_follow_from_the_data_is_caught(tmp_path, mon
 def test_forged_trade_plans_are_caught(session):
     root, _ = session
     ledger = Ledger(root).load()
-    src = next(r for r in reversed(ledger.of_type("prediction")) if r.get("trade", {}).get("atr"))
+    src = next(r for r in reversed(ledger.of_type("prediction")) if r["tf"] == "1h" and r.get("trade", {}).get("atr"))
     at = parse_iso(ledger.records[-1]["at"])
     for n, change in enumerate([{"until": iso(parse_iso(src["trade"]["until"]) + timedelta(hours=3))},
-                                {"dir": 1, "rule": "carry", "sl": src["p0"] + 1.0, "tp": src["p0"] + 2.0}]):
+                                {"dir": 1, "sl": src["p0"] + 1.0, "tp": src["p0"] + 2.0},     # a signal without a rule
+                                {"rule": "carry"}]):                                          # the daily rule on 1h bars
         p = {k: v for k, v in src.items() if k not in ("seq", "prev", "hash", "at")}
         p["trade"] = dict(p["trade"], **change)
         ledger.append(p, at + timedelta(minutes=1 + n))
     msgs = " ".join(x["msg"] for x in verify(root)["problems"])
-    assert "time limit" in msgs and "wrong side" in msgs
+    assert "time limit" in msgs and "wrong side" in msgs and "never had" in msgs
+    assert trade.known_rule("1h", "carry_mom") and trade.known_rule("1d", "carry") and not trade.known_rule("15m", "carry")
 
 
 def test_rates_are_fetched_once_a_day_and_used_only_after_they_were_stored(tmp_path):
@@ -149,13 +166,19 @@ def test_api_shows_the_plan_levels_and_rule_record(session):
     out = build_api(root)
     blk = out["pair/USDJPY.json"]["tf"]["1h"]
     T = blk["trade"]
-    assert T["rule"]["key"] == "carry_mom_vol" and T["rule"]["hold"] == 120 and T["cost_pips"] == trade.COST_PIPS["USDJPY"]
+    assert T["rule"] is None and T["plan"]["dir"] == 0 and T["cost_pips"] == trade.COST_PIPS["USDJPY"]
     lv = T["plan"]["levels"]
     p0 = T["plan"]["p0"]
     assert lv["buy"]["sl"] < p0 < lv["buy"]["tp"] and lv["sell"]["tp"] < p0 < lv["sell"]["sl"]
-    assert T["plan"]["x_until"] and "stats" in T["bt"] and "stats" in T["live"]
-    assert out["pair/USDJPY.json"]["tf"]["15m"]["trade"]["rule"] is None
-    assert any(p.get("signal") is not None for p in out["meta.json"]["pairs"])
+    assert lv["hold"] == trade.DEFAULT_EXITS["1h"]["hold"] and T["plan"]["x_until"]
+    # the retired rule, its tests (the seven pairs and the hold-out pairs) and the signals recorded with it
+    R = T["retired"]
+    assert R["key"] == "carry_mom_vol" and R["research"]["holdout"]["test"]["pips"] < 0 and "stats" in R["live"]
+    assert out["pair/USDJPY.json"]["tf"]["1d"]["trade"]["retired"]["key"] == "carry"
+    assert "retired" not in out["pair/USDJPY.json"]["tf"]["15m"]["trade"]
+    assert all(v is None for p in out["meta.json"]["pairs"] for v in (p.get("signal") or {}).values())
+    calls = [p["call"]["1h"] for p in out["meta.json"]["pairs"] if p.get("call")]
+    assert calls and all(c["dir"] in (-1, 0, 1) and c["tier"] in (0, 1, 2) for c in calls)
 
 
 def test_volatility_filter_blocks_signals_in_rough_markets():
@@ -164,36 +187,41 @@ def test_volatility_filter_blocks_signals_in_rough_markets():
     scale = np.where(np.arange(n) > 2300, 12e-4, 4e-4)       # the last 200 bars three times as rough
     c = 150 * np.exp(np.cumsum(rng.normal(2e-5, scale)))
     allow = trade.vol_allowed(c, n=120, window=2000, q=0.8)
+    r = dict(trade.TESTED["carry_mom_vol"], vol={"n": 120, "window": 2000, "q": 0.8})
     assert allow[:620].all()                                    # not blocking before a quarter of the window
     assert not allow[-1] and allow[2200]
     # the single-close call and the whole-series call agree, and the filter only removes signals
     for i in (2200, 2499):
         closes = c[: i + 1]
         diff = 2.0 if closes[-1] > closes[-121] else -2.0     # carry agrees with the 120-bar move
-        one = trade.rule_signal("1h", closes, diff)
-        assert one == trade.rule_signal("1h", closes, diff, bool(trade.vol_allowed(closes, **trade.RULES["1h"]["vol"])[-1]))
-    assert trade.rule_signal("1h", c, 2.0 if c[-1] > c[-121] else -2.0) == 0
+        one = trade.rule_signal("1h", closes, diff, rule=r)
+        assert one == trade.rule_signal("1h", closes, diff, bool(trade.vol_allowed(closes, **r["vol"])[-1]), r)
+    assert trade.rule_signal("1h", c, 2.0 if c[-1] > c[-121] else -2.0, rule=r) == 0
 
 
 def test_plans_of_the_retired_rule_keep_their_time_limit():
     assert trade.exits("1h", "carry_mom")["hold"] == 24
-    assert trade.exits("1h", "carry_mom_vol")["hold"] == trade.exits("1h")["hold"] == 120
+    assert trade.exits("1h", "carry_mom_vol")["hold"] == 120 and trade.exits("1d", "carry")["hold"] == 5
+    assert trade.exits("1h") == trade.DEFAULT_EXITS["1h"]         # no live rule: the both-side levels' exits
     tf = TIMEFRAMES["1h"]
-    assert trade.history_bars(tf) >= 120 + 6000 + 1 > tf.fit_bars
+    assert trade.history_bars(tf) == tf.fit_bars
 
 
-def test_the_live_rules_are_the_tested_ones():
-    """trade.RULES must be the rules research/signals.md tested (and the page shows those numbers)."""
+def test_the_tested_rules_are_the_ones_in_the_research():
+    """trade.TESTED must be the rules research/signals.md tested (and the page shows those numbers)."""
     import json
     from pathlib import Path
 
     from aifx.api import trade_research
     res = json.loads(Path("research/signals.json").read_text(encoding="utf-8"))
     combo = res["1h"]["variants"]["combo"]
-    r = trade.RULES["1h"]
+    r = trade.TESTED["carry_mom_vol"]
     assert {k: r[k] for k in ("thr", "L", "sl", "tp", "hold")} == combo["rule"] and combo["filters"] == ["vol80"]
     assert r["vol"] == {"n": 120, "window": 250 * 24, "q": 0.8}
     base = res["1d"]["base_rule"]
-    assert {k: trade.RULES["1d"][k] for k in base} == base
+    assert {k: trade.TESTED["carry"][k] for k in base} == base
     shown = trade_research()
     assert shown["1h"]["test"]["n"] == combo["by_source"]["duka_1h"]["test"]["n"] and shown["1h"]["split"] == "2017-01-01"
+    hold = json.loads(Path("research/holdout.json").read_text(encoding="utf-8"))["trade"]["rules"]
+    assert shown["1h"]["holdout"]["test"]["n"] == hold["carry_mom_vol"]["test"]["n"]
+    assert shown["1d"]["holdout"]["test"]["n"] == hold["carry_1d"]["test"]["n"]

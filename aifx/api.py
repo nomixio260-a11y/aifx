@@ -48,22 +48,31 @@ RESEARCH_ROWS = {
 
 
 SIGNALS_RESEARCH = RESEARCH.parent / "signals.json"
-# each live rule's 20-year test (research/signals.md): timeframe, variant and data source
+HOLDOUT_RESEARCH = RESEARCH.parent / "holdout.json"
+# each tested rule's 20-year test (research/signals.md): timeframe, variant and data source;
+# and its name in the hold-out check (research/holdout.md)
 SIGNAL_VARIANT = {"carry": ("1d", "base", "duka_1d"), "carry_mom_vol": ("1h", "combo", "duka_1h")}
+HOLDOUT_RULE = {"carry": "carry_1d", "carry_mom_vol": "carry_mom_vol"}
 TRADE_BT = {"1d": timedelta(days=365), "1h": timedelta(days=90)}
 TRADE_LIST = 40
 
 
-def trade_research(path: Path = SIGNALS_RESEARCH) -> dict:
-    """Tested numbers of each timeframe's reference rule on 20 years of data (research/signals.md):
-    costs are the larger of the live spread and the recorded one; ``*_live`` with the live spread only."""
+def trade_research(path: Path = SIGNALS_RESEARCH, holdout_path: Path = HOLDOUT_RESEARCH) -> dict:
+    """Tested numbers of each timeframe's tested rule (trade.TESTED) on 20 years of the seven pairs
+    (research/signals.md: costs are the larger of the live spread and the recorded one; ``*_live`` with
+    the live spread only) and on the six hold-out pairs (research/holdout.md)."""
     try:
         res = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+    try:
+        hold = json.loads(holdout_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        hold = {}
     out = {}
-    for tf_key, rule in trade.RULES.items():
-        spec = SIGNAL_VARIANT.get(rule["key"])
+    for key, rule in trade.TESTED.items():
+        tf_key = rule["tf"]
+        spec = SIGNAL_VARIANT.get(key)
         v = ((res.get(spec[0]) or {}).get("variants") or {}).get(spec[1]) if spec else None
         r = (v or {}).get("by_source", {}).get(spec[2]) if v else None
         if not r:
@@ -73,6 +82,11 @@ def trade_research(path: Path = SIGNALS_RESEARCH) -> dict:
         out[tf_key] = {"tier": "weak", "start": span[0] if span else None, "split": res.get("split"),
                        "end": span[1] if len(span) > 1 else None, "label": v.get("label"),
                        **{part: {k: _r(r[part].get(k), 4) for k in keep} for part in ("tune", "test")}}
+        h = (((hold.get("trade") or {}).get("rules") or {}).get(HOLDOUT_RULE.get(key)))
+        if h:
+            out[tf_key]["holdout"] = {"pairs": hold.get("codes"), "split": hold.get("split"),
+                                      **{part: {k: _r(h[part].get(k), 4) for k in ("n", "win", "pips", "t")}
+                                         for part in ("tune", "test")}}
     return out
 
 
@@ -94,7 +108,8 @@ def _trade_block(tf, pair, rec: dict, bars: pd.DataFrame, ref: pd.DataFrame, pre
     dec = pair.decimals + 1
     tr = rec.get("trade")
     rule = trade.RULES.get(tf.key)
-    recorded = tr is not None and (rule is None or tr.get("rule") == rule["key"])
+    # a plan recorded with another rule (a retired one, or none when a rule is live) is not today's plan
+    recorded = tr is not None and tr.get("rule") == (rule["key"] if rule else None)
     if not recorded:    # made by an earlier version or rule: the current rule's plan, computed for display only
         tr = trade.plan(tf, pair, bars_until(tf, bars, parse_iso(rec["origin"])).iloc[-trade.history_bars(tf):],
                         parse_iso(rec["origin"]), rec["p0"], rate_item)
@@ -105,6 +120,15 @@ def _trade_block(tf, pair, rec: dict, bars: pd.DataFrame, ref: pd.DataFrame, pre
                     "x_origin": _xkey(tf.key, rec["origin"]), "x_until": _xkey(tf.key, tr["until"]) if tr.get("until") else None},
            "rule": None}
     if rule is None:
+        tested = next((r for r in trade.TESTED.values() if r["tf"] == tf.key), None)
+        if tested:          # a tested rule that no longer gives signals, and the signals recorded before
+            live = trade.live_trades([p for p in preds if (p.get("trade") or {}).get("rule")], ref,
+                                     TIMEFRAMES[tf.ref].minutes, pair)
+            done = [t["result"] for t in live if t["result"]]
+            out["retired"] = {"key": tested["key"], "name": tested["name"], "desc": tested["desc"],
+                              "research": research.get(tf.key),
+                              "live": {"stats": trade.stats(done), "trades": [_trade_item(tf.key, t, dec) for t in live[-TRADE_LIST:]],
+                                       "open": next((_trade_item(tf.key, t, dec) for t in reversed(live) if not t["result"]), None)}}
         return out
     out["rule"] = {"key": rule["key"], "name": rule["name"], "desc": rule["desc"], "sl": rule["sl"], "tp": rule["tp"],
                    "hold": rule["hold"], "research": research.get(tf.key)}
@@ -658,6 +682,9 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                                         "t": [st["t"] for st in steps_], "analog": str(info["analog_end"]),
                                         "call": info["call"], "drift_bp": [_r(float(v), 3) for v in drift],
                                         "tier": [{"high": 2, "mid": 1}.get(season.tier(v), 0) for v in drift_t]}
+                    if tf.minutes:      # the next bar's direction from the time-of-day drift (the pair list)
+                        summary.setdefault("call", {})[tf_key] = {"dir": int(np.sign(drift[0])) if len(drift) else 0,
+                                                                  "tier": block["candles"]["tier"][0] if drift_t else 0}
                 candle_rows.setdefault(tf_key, []).extend(candle_eval(tf, bars, now))
             if tf_key == "1d" and len(daily) > 80:
                 block["technical"] = indicators.technical_summary(daily, indicators.compute_all(daily))

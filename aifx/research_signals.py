@@ -37,7 +37,7 @@ from . import history
 from .data import PAIRS
 from .research_trade import (DAILY_START, HOURLY_TUNE_SHARE, MIN_TUNE_TRADES, _f, _params_text, _prep, classify, metrics,
                              signal, simulate)
-from .trade import COST_PIPS, RULES, SWAP_MARKUP, rule_signal, vol_allowed
+from .trade import COST_PIPS, SWAP_MARKUP, TESTED, rule_signal, vol_allowed
 
 REPORT_DIR = Path("research")
 SPLIT = pd.Timestamp("2017-01-01")
@@ -324,9 +324,13 @@ def beats(a: dict, b: dict) -> bool:
 
 # ------------------------------------------------------------------ search
 
-# the live rules when this study was made (trade.RULES has since adopted the 1h result: carry_mom_vol)
+# the live rules when this study was made (the 1h result, carry_mom_vol, was adopted afterwards and both
+# were retired after research/holdout.md; trade.TESTED keeps their definitions)
 STUDY_RULES = {"1d": {"key": "carry", "thr": 2.0, "sl": 4.0, "tp": 2.0, "hold": 5},
                "1h": {"key": "carry_mom", "thr": 1.0, "L": 120, "sl": 3.0, "tp": 3.0, "hold": 24}}
+
+# the rules adopted from this study (checked against trade.rule_signal by check_signals)
+ADOPTED = {"1d": TESTED["carry"], "1h": TESTED["carry_mom_vol"]}
 
 
 def _rule_of(tf: str) -> tuple[str, dict]:
@@ -440,7 +444,8 @@ def _monthly_curve(tr: pd.DataFrame) -> dict:
 def check_signals(panel: dict, tf: str) -> dict:
     """research_trade.signal (used here) against trade.rule_signal (the live function), bar by bar."""
     key, base = _rule_of(tf)
-    vol = RULES[tf].get("vol")       # the adopted 1h rule: this study's rule + the vol80 filter
+    adopted = ADOPTED[tf]
+    vol = adopted.get("vol")          # the adopted 1h rule: this study's rule + the vol80 filter
     out = {}
     for code, P in panel.items():
         research = signal(key, base, P)
@@ -448,9 +453,9 @@ def check_signals(panel: dict, tf: str) -> dict:
         if vol:
             research = np.where(_allowed(P, "vol80", research), research, 0)
             allow = vol_allowed(c, **vol)
-            live = np.array([rule_signal(tf, c[: i + 1], float(diff[i]), bool(allow[i])) for i in range(len(c))])
+            live = np.array([rule_signal(tf, c[: i + 1], float(diff[i]), bool(allow[i]), adopted) for i in range(len(c))])
         else:
-            live = np.array([rule_signal(tf, c[: i + 1], float(diff[i])) for i in range(len(c))])
+            live = np.array([rule_signal(tf, c[: i + 1], float(diff[i]), rule=adopted) for i in range(len(c))])
         out[code] = {"bars": int(len(c)), "mismatch": int(np.sum(live != research)), "active": int(np.sum(research != 0))}
     return out
 
@@ -478,7 +483,7 @@ def check_live_backtest(root: Path | None = None, codes: list[str] | None = None
         pair = PAIRS[code]
         bars = history.load_hourly(code, root)
         item = _rates_item(root, str(bars.index[0].date()))
-        live = backtest(tf, pair, bars, item)
+        live = backtest(tf, pair, bars, item, rule=STUDY_RULES["1h"])
         P = prepare(code, bars, True, vix)
         res = simulate(P, signal(key, base, P), base["sl"], base["tp"], base["hold"], COST_PIPS[code])
         ends = P["time"] + pd.Timedelta(hours=1)
@@ -517,7 +522,7 @@ def reproduce(old: dict, res: dict, yahoo_1h: dict) -> dict:
     daily bars (2017 split) and the hourly rule on Yahoo's hourly bars (split at 60 % of the bars)."""
     out = {}
     now = res["1d"]["variants"]["base"]["by_source"]["yahoo_1d"]
-    was = old["1d"]["families"][RULES["1d"]["key"]]["chosen"]
+    was = old["1d"]["families"][STUDY_RULES["1d"]["key"]]["chosen"]
     out["1d"] = {"was": {p: [was[p]["n"], was[p]["pips"]] for p in ("tune", "test")},
                  "now": {p: [now[p].get("n"), now[p].get("pips")] for p in ("tune", "test")}}
     key, base = _rule_of("1h")

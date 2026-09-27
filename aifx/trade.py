@@ -1,15 +1,17 @@
-"""Trade plans: which way to trade now, where to take profit and where to stop.
+"""Trade plans: where the stop and target would be, and which way the tested rules would trade.
 
 The rules are the ones research_trade.py tested as trades (entry at a bar's
-close, stop and target from ATR, a time limit, costs and swap). Only rules
-that were profitable on both the tuning and the later test period, with
-t >= 2 on the test period, give a signal; they are shown as reference
-signals with their tested numbers, because none reached t >= 2 on both
-periods. Every forecast record carries its plan, so a signal is written to
-the ledger before its outcome and settled from the stored prices.
+close, stop and target from ATR, a time limit, costs and swap). None gives a
+signal now: the hourly rule (carry_mom_vol) and the daily one (carry) were
+checked on six pairs they were never fitted on (research/holdout.md), and
+both lost money after 2017 once the spread and the swap were paid, so a
+buy/sell call from them has no grounds. They stay in ``TESTED`` for the
+research and in ``RETIRED`` so the plans recorded with them keep their exits.
 
 Both-side levels (where the stop and target would be for a buy or a sell)
-are given for every timeframe, signal or not.
+are given for every timeframe. Every forecast record carries its plan, so a
+signal (if a rule is ever adopted again) is written to the ledger before its
+outcome and settled from the stored prices.
 """
 
 from __future__ import annotations
@@ -41,18 +43,23 @@ def atr(h: np.ndarray, lo: np.ndarray, c: np.ndarray, n: int = 14) -> np.ndarray
         out[i] = out[i - 1] + (tr[i] - out[i - 1]) / n
     return out
 
-# Reference rules per timeframe (research/trade.md): parameters chosen on the tuning period only.
-RULES = {
-    "1d": {"key": "carry", "name": "金利差", "desc": "金利差が2%以上ある通貨ペアを、スワップがつく方向に持つ",
-           "thr": 2.0, "sl": 4.0, "tp": 2.0, "hold": 5},
-    # research/signals.md (2003-2026): the earlier 1h rule (carry_mom, 24 hours) lost money over 2003-2016;
-    # a 120-hour limit and skipping entries while volatility is above its 1-year 80 % point held on both periods
-    "1h": {"key": "carry_mom_vol", "name": "金利差 + 5日間の流れ (荒い相場は見送り)",
-           "desc": "金利差が1%以上あり、過去120時間の値動きも同じ向きで、値動きの荒さが過去1年の80%点以下のときだけ、その方向に持つ",
-           "thr": 1.0, "L": 120, "vol": {"n": 120, "window": 6000, "q": 0.8}, "sl": 3.0, "tp": 3.0, "hold": 120},
+# The rules tested as trades, by key (research/signals.md: chosen on 2003-2016, checked on 2017-2026;
+# research/holdout.md: checked on six pairs never used to choose them).
+TESTED = {
+    "carry": {"tf": "1d", "key": "carry", "name": "金利差", "desc": "金利差が2%以上ある通貨ペアを、スワップがつく方向に持つ",
+              "thr": 2.0, "sl": 4.0, "tp": 2.0, "hold": 5},
+    "carry_mom_vol": {"tf": "1h", "key": "carry_mom_vol", "name": "金利差 + 5日間の流れ (荒い相場は見送り)",
+                      "desc": "金利差が1%以上あり、過去120時間の値動きも同じ向きで、値動きの荒さが過去1年の80%点以下のときだけ、その方向に持つ",
+                      "thr": 1.0, "L": 120, "vol": {"n": 120, "window": 6000, "q": 0.8}, "sl": 3.0, "tp": 3.0, "hold": 120},
 }
+# The rules that give a signal, per timeframe: none. On the hold-out pairs after 2017 carry_mom_vol lost
+# 2.3 pips a trade (no better than the rule it replaced) and carry 5.6 pips a trade (research/holdout.md).
+RULES: dict[str, dict] = {}
 # exits of rules used before: plans recorded with them keep their own time limit
-RETIRED = {"carry_mom": {"sl": 3.0, "tp": 3.0, "hold": 24}}
+RETIRED = {"carry_mom": {"sl": 3.0, "tp": 3.0, "hold": 24},
+           "carry_mom_vol": {"sl": 3.0, "tp": 3.0, "hold": 120},
+           "carry": {"sl": 4.0, "tp": 2.0, "hold": 5}}
+RETIRED_TF = {"carry_mom": "1h", "carry_mom_vol": "1h", "carry": "1d"}     # the timeframe each was used on
 # stop / target / time limit for the both-side levels where no rule is tested
 DEFAULT_EXITS = {"15m": {"sl": 3.0, "tp": 3.0, "hold": 16}, "1h": {"sl": 3.0, "tp": 3.0, "hold": 24},
                  "1d": {"sl": 4.0, "tp": 2.0, "hold": 5}}
@@ -60,10 +67,16 @@ DEFAULT_EXITS = {"15m": {"sl": 3.0, "tp": 3.0, "hold": 16}, "1h": {"sl": 3.0, "t
 
 def exits(tf_key: str, rule_key: str | None = None) -> dict:
     """Stop, target and time limit of the timeframe's rule (or of the retired rule a plan was made with)."""
-    if rule_key in RETIRED:
+    if rule_key in RETIRED and RETIRED_TF[rule_key] == tf_key:
         return dict(RETIRED[rule_key])
     r = RULES.get(tf_key)
     return {k: r[k] for k in ("sl", "tp", "hold")} if r else DEFAULT_EXITS[tf_key]
+
+
+def known_rule(tf_key: str, rule_key: str | None) -> bool:
+    """Whether a plan of this timeframe can carry this rule key (none, the live rule or a retired one)."""
+    return (rule_key is None or rule_key == (RULES.get(tf_key) or {}).get("key")
+            or RETIRED_TF.get(rule_key) == tf_key)
 
 
 def history_bars(tf: Timeframe) -> int:
@@ -87,10 +100,12 @@ def vol_allowed(closes: np.ndarray, n: int, window: int, q: float) -> np.ndarray
     return ~(rv > limit).to_numpy()
 
 
-def rule_signal(tf_key: str, closes: np.ndarray, diff: float | None, allowed: bool | None = None) -> int:
+def rule_signal(tf_key: str, closes: np.ndarray, diff: float | None, allowed: bool | None = None,
+                rule: dict | None = None) -> int:
     """+1 buy, -1 sell, 0 none, from closes up to the origin and the known rate difference.
-    ``allowed``: the volatility filter's answer at this close, if already computed for a whole series."""
-    r = RULES.get(tf_key)
+    ``allowed``: the volatility filter's answer at this close, if already computed for a whole series.
+    ``rule``: a rule of ``TESTED`` instead of the timeframe's live one (for the research)."""
+    r = rule if rule is not None else RULES.get(tf_key)
     if not r or diff is None:
         return 0
     car = 1 if diff >= r["thr"] else -1 if diff <= -r["thr"] else 0
@@ -201,10 +216,11 @@ def live_trades(preds: list[dict], ref: pd.DataFrame, ref_minutes: int, pair: Pa
     return out
 
 
-def backtest(tf: Timeframe, pair: Pair, bars: pd.DataFrame, rates_item: dict | None, since: datetime | None = None) -> list[dict]:
-    """The reference rule replayed over stored bars (entry at each bar's close, same exits as the
-    research). Rate differences use the stored rates as they were known at each bar."""
-    r = RULES.get(tf.key)
+def backtest(tf: Timeframe, pair: Pair, bars: pd.DataFrame, rates_item: dict | None, since: datetime | None = None,
+             rule: dict | None = None) -> list[dict]:
+    """The timeframe's rule (or ``rule``) replayed over stored bars (entry at each bar's close, same exits
+    as the research). Rate differences use the stored rates as they were known at each bar."""
+    r = rule if rule is not None else RULES.get(tf.key)
     if not r or rates_item is None or len(bars) < 200:
         return []
     o, h, lo, c = (bars[k].to_numpy(float) for k in ("open", "high", "low", "close"))
@@ -220,7 +236,7 @@ def backtest(tf: Timeframe, pair: Pair, bars: pd.DataFrame, rates_item: dict | N
             i += 1
             continue
         diff = diff_by_day[ends[i].date()]
-        d = rule_signal(tf.key, c[: i + 1], diff, None if allow is None else bool(allow[i])) if np.isfinite(a[i]) else 0
+        d = rule_signal(tf.key, c[: i + 1], diff, None if allow is None else bool(allow[i]), r) if np.isfinite(a[i]) else 0
         if not d:
             i += 1
             continue
@@ -271,4 +287,4 @@ def stats(trades: list[dict]) -> dict:
             "time": sum(1 for t in done if t["how"] == "time")}
 
 
-__all__ = ["RULES", "plan", "levels", "settle", "live_trades", "backtest", "stats", "parse_iso"]
+__all__ = ["RULES", "TESTED", "RETIRED", "plan", "levels", "settle", "live_trades", "backtest", "stats", "parse_iso"]

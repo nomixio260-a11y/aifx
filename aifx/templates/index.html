@@ -802,8 +802,13 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       var b = el("button", "pchip"); b.type = "button"; b.setAttribute("aria-pressed", String(p.pair === S.pair));
       var r1 = el("span", "code"); r1.appendChild(el("span", null, p.label)); r1.appendChild(el("span", "chg num " + dirClass(p.change_24h_pct), signed(p.change_24h_pct, 2, "%")));
       b.appendChild(r1); b.appendChild(el("span", "px num", fmt(p.price, p.decimals)));
-      var sg = p.signal ? p.signal[S.tf] : null;
-      b.appendChild(el("span", "sig " + (sg > 0 ? "up" : sg < 0 ? "down" : "flat"), sg > 0 ? "▲ 買い" : sg < 0 ? "▼ 売り" : sg === 0 ? "見送り" : "—"));
+      var sg = p.signal ? p.signal[S.tf] : null, cl = p.call ? p.call[S.tf] : null;
+      if (sg != null) b.appendChild(el("span", "sig " + (sg > 0 ? "up" : sg < 0 ? "down" : "flat"), sg > 0 ? "▲ 買い" : sg < 0 ? "▼ 売り" : "見送り"));
+      else {    // no trade rule: the next bar's direction from the time-of-day drift (the call with grounds)
+        var cs = el("span", "sig " + (cl && cl.dir > 0 ? "up" : cl && cl.dir < 0 ? "down" : "flat"), cl && cl.dir ? (cl.dir > 0 ? "▲ 次は上" : "▼ 次は下") + (cl.tier === 2 ? " · 高" : "") : cl ? "次: 根拠なし" : "—");
+        cs.title = cl ? "次の足の方向 (時間帯の偏り)" + (cl.dir ? "、確度 " + (cl.tier === 2 ? "高" : "中") : "") : "日足には方向の根拠がありません";
+        b.appendChild(cs);
+      }
       b.setAttribute("aria-label", p.label + " " + fmt(p.price, p.decimals));
       b.addEventListener("click", function () { S.pair = p.pair; persist(); try { history.replaceState(null, "", "#" + p.pair); } catch (e) {} renderRail(); loadPair().then(renderPairAll); });
       rail.appendChild(b);
@@ -987,10 +992,13 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     var badge = el("span", "badge " + (dir > 0 ? "buy" : dir < 0 ? "sell" : "none"), dir > 0 ? "▲ 買い" : dir < 0 ? "▼ 売り" : R ? "見送り" : "シグナルなし");
     row.appendChild(badge);
     var ttl = el("div", "ttl");
-    ttl.appendChild(el("b", null, R ? TF_NAME[S.tf] + "「" + R.name + "」ルール" + (A && A.open ? " · 保有中" : "") : TF_NAME[S.tf] + "の売買ルールはありません"));
-    if (!R) ttl.appendChild(el("span", null, "15分足は検証に使える期間が短いため、売買シグナルは出していません。下の水準は損切り・利確の目安です。"));
+    var RT = T.retired, HO = RT && RT.research && RT.research.holdout;
+    ttl.appendChild(el("b", null, R ? TF_NAME[S.tf] + "「" + R.name + "」ルール" + (A && A.open ? " · 保有中" : "") : TF_NAME[S.tf] + "の売買シグナルは出していません"));
+    if (!R) ttl.appendChild(el("span", null, HO && HO.test ? "20年分の7ペアで選んだ「" + RT.name + "」ルールは、設計に使っていない6ペアの" + String(HO.split).slice(0, 4) + "年以降で、コスト・スワップ込みの1回平均 " + signed(HO.test.pips, 1) + " pips (" + Math.round(HO.test.n).toLocaleString() + "回) と損失でした。方向の根拠がないため、買い・売りのシグナルは出しません。下の水準は損切り・利確の目安です。"
+      : "15分足は検証に使える期間が短いため、売買シグナルは出していません。下の水準は損切り・利確の目安です。"));
     row.appendChild(ttl);
     if (R && R.research) row.appendChild(el("span", "chip " + (R.research.tier === "strong" ? "good" : "warn"), R.research.tier === "strong" ? "検証済み" : "参考シグナル · 信頼度 弱"));
+    if (!R && HO) row.appendChild(el("span", "chip bad", "検証で根拠なし"));
     box.appendChild(row);
     function pipsOf(v) { return pips(v, p); }
     if (A) {
@@ -1018,6 +1026,17 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         box.appendChild(both);
         box.appendChild(el("div", "twarn", "ATR (最近の平均的な値幅) の " + L.sl_mult + " 倍で損切り、" + L.tp_mult + " 倍で利確、最長 " + L.hold + " 本で決済する目安です。方向を当てる根拠はないため、この水準だけで売買しても期待値はほぼ「0 − 取引コスト」です。"));
       }
+    }
+    if (!R && RT) {
+      var det0 = el("details", "why"); det0.appendChild(el("summary", null, "以前のルールと検証の成績")); var st0 = el("div");
+      var rs0 = RT.research, lv0 = RT.live && RT.live.stats;
+      st0.appendChild(el("div", null, "以前のルール「" + RT.name + "」: " + RT.desc + "。"));
+      if (rs0 && rs0.test) st0.appendChild(el("div", null, "ルールを選んだ7ペア (" + String(rs0.split).slice(0, 4) + "年〜): " + Math.round(rs0.test.n).toLocaleString() + "回、勝率 " + pct(rs0.test.win) + "、1回平均 " + signed(rs0.test.pips, 1) + " pips (t = " + signed(rs0.test.t, 2) + ")"));
+      if (HO && HO.tune && HO.test) st0.appendChild(el("div", null, "設計に使っていない6ペア (" + (HO.pairs || []).join("・") + "): 〜" + (parseInt(String(HO.split).slice(0, 4), 10) - 1) + "年 " + Math.round(HO.tune.n).toLocaleString() + "回・1回平均 " + signed(HO.tune.pips, 1) + " pips / " + String(HO.split).slice(0, 4) + "年〜 " + Math.round(HO.test.n).toLocaleString() + "回・勝率 " + pct(HO.test.win) + "・1回平均 " + signed(HO.test.pips, 1) + " pips (t = " + signed(HO.test.t, 2) + ")"));
+      st0.appendChild(el("div", null, "これまで台帳に記録したシグナル (以前の各ルール): " + (lv0 && lv0.n ? lv0.n + "回決済、勝率 " + pct(lv0.win) + "、合計 " + signed(lv0.total_pips, 0) + " pips (下の一覧)" : "決済されたものはありません")));
+      st0.appendChild(el("div", null, "ルールを選んだデータでは小さなプラスでも、別のペアで確かめると損失だったため、偶然のプラスだった可能性が高いと判断しました。"));
+      if (S.meta && S.meta.repo) { var lk0 = el("a", null, "ホールドアウトでの確認のレポート"); lk0.href = S.meta.repo + "/blob/HEAD/research/holdout.md"; lk0.target = "_blank"; lk0.rel = "noopener"; var dl0 = el("div"); dl0.appendChild(lk0); st0.appendChild(dl0); }
+      det0.appendChild(st0); box.appendChild(det0);
     }
     if (R) {
       var rs = R.research; var bt = T.bt && T.bt.stats; var lv2 = T.live && T.live.stats;
@@ -1053,9 +1072,11 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   function renderSignals() {
     var p = curPair(); var blk = curBlock(); var body = clear($("sig-body")); var stbox = clear($("sig-stats"));
     var T = blk && blk.trade;
-    if (!T || !T.rule) { $("sig-note").textContent = "この時間足には売買ルールがありません。"; segment($("seg-sig-src"), [], function () {}, function () {}); return; }
-    var info = sigList(T); var d = p.decimals;
-    segment($("seg-sig-src"), [{ label: "自動", value: "auto" }, { label: "台帳の記録", value: "live" }, { label: "バックテスト", value: "bt" }], function () { return S.sigSrc; }, function (v) { S.sigSrc = v; renderSignals(); renderChart(); });
+    var RT = T && !T.rule && T.retired;
+    if (!T || (!T.rule && !RT)) { $("sig-note").textContent = "この時間足には売買ルールがありません。"; segment($("seg-sig-src"), [], function () {}, function () {}); return; }
+    var info = RT ? { src: "live", list: (RT.live && RT.live.trades) || [], stats: RT.live && RT.live.stats } : sigList(T); var d = p.decimals;
+    if (RT) segment($("seg-sig-src"), [], function () {}, function () {});
+    else segment($("seg-sig-src"), [{ label: "自動", value: "auto" }, { label: "台帳の記録", value: "live" }, { label: "バックテスト", value: "bt" }], function () { return S.sigSrc; }, function (v) { S.sigSrc = v; renderSignals(); renderChart(); });
     var sst = info.stats || { n: 0 };
     function tile(l, v, cls) { var x = el("div", "tile"); x.appendChild(el("span", "l", l)); x.appendChild(el("span", "v" + (cls ? " " + cls : ""), v)); stbox.appendChild(x); }
     tile("決済した回数", String(sst.n || 0));
@@ -1074,7 +1095,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       body.appendChild(tr);
     });
     if (!info.list.length) { var r = el("tr"); var c = el("td", "l", info.src === "live" ? "台帳に記録したシグナルはまだありません。" : "この期間にシグナルはありませんでした。"); c.colSpan = 6; r.appendChild(c); body.appendChild(r); }
-    $("sig-note").textContent = (info.src === "live" ? "結果が出る前に台帳へ記録したシグナルを、保存済みの価格で判定しています。" :
+    $("sig-note").textContent = (RT ? "以前の各ルールで、結果が出る前に台帳へ記録したシグナルです (今は新しいシグナルを出していません)。保存済みの価格で判定しています。" : info.src === "live" ? "結果が出る前に台帳へ記録したシグナルを、保存済みの価格で判定しています。" :
       "保存済みの過去データでルールをそのまま再現したバックテストです (直近" + T.bt.days + "日)。") +
       "損益はスプレッド " + T.cost_pips + " pips とスワップ (金利差 − " + T.swap_markup + "%) を含みます。1本の足の中で利確と損切りの両方に届いたときは損切りとしています。";
   }
@@ -1558,6 +1579,11 @@ aifx audit --state state --sample 20 --external</pre></div></details>
       var rs = R.research;
       if (rs && rs.test) lines4.push({ rec: "20年分の検証 (" + String(rs.split).slice(0, 4) + "年〜): " + Math.round(rs.test.n).toLocaleString() + "回、勝率 " + pct(rs.test.win) + "、1回平均 " + signed(rs.test.pips, 1) + " pips (コスト込み、t = " + fmt(rs.test.t, 2) + ")。参考シグナル (信頼度: 弱)。" });
       item("売買プラン", P.dir > 0 ? "▲ 買い" : P.dir < 0 ? "▼ 売り" : "見送り", P.dir > 0 ? "up" : P.dir < 0 ? "down" : null, lines4);
+    } else if (T && T.retired && T.retired.research && T.retired.research.holdout) {
+      var HB = T.retired.research.holdout;
+      item("売買プラン", "シグナルなし (根拠なし)", null,
+        [{ rec: "以前の「" + T.retired.name + "」ルールは、設計に使っていない6ペアの" + String(HB.split).slice(0, 4) + "年以降で1回平均 " + signed(HB.test.pips, 1) + " pips (コスト・スワップ込み、t = " + signed(HB.test.t, 2) + ") と損失だったため、買い・売りのシグナルは出していません。" },
+         "損切り・利確の水準は ATR (最近の平均的な値幅) からの目安で、方向の予想ではありません。"]);
     }
     // 5. technical and news
     var TC = blk.tech && blk.tech.consensus;

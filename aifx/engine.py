@@ -164,8 +164,9 @@ def norm_cdf(x: float) -> float:
 # the 50 % / 95 % bands follow the t shape. Degrees of freedom per horizon
 # were fitted on long history (research/report.md); None means normal.
 
-# daily 1 and 20 days: re-chosen on 20 years of data (research/bands.md), better on both periods and on Yahoo
-BAND_NU = {"15m": {1: 5, 4: 5, 16: 4}, "1h": {1: 5, 4: 5, 24: 6}, "1d": {1: 6, 5: 10, 10: 15, 20: 5}}
+# daily 20 days: re-chosen on 20 years of data (research/bands.md), better on both periods, on Yahoo and on six
+# pairs never used to choose it (research/holdout.md); daily 1 day stays 10 (the change to 6 did worse there)
+BAND_NU = {"15m": {1: 5, 4: 5, 16: 4}, "1h": {1: 5, 4: 5, 24: 6}, "1d": {1: 10, 5: 10, 10: 15, 20: 5}}
 
 
 @lru_cache(maxsize=None)
