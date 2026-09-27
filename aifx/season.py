@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+from .fxcalendar import roll_days
 from .timeutil import add_trading_minutes, market_open_mask
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -43,6 +44,8 @@ CENTRE_MINUTES = 60  # the forecast centre uses the drift of the bars in the fir
 MIN_N = 15           # bars a slot needs before its average counts
 T_MIN = 2.0          # a call
 T_HIGH = 4.0         # a high-confidence call
+ROLL_E_HIGH = 2.0    # bp: a roll-bar call agreeing with an expected roll shift this large is high confidence
+ROLL_MINUTES = (60,)  # timeframes that applies to (tested on hourly bars; research/rollover.md)
 _CACHE: dict = {}
 
 
@@ -130,13 +133,40 @@ def centre_t(bar_drift: np.ndarray, bar_t: np.ndarray, minutes: int) -> np.ndarr
     return np.array([combined_t(bar_drift[: j + 1], bar_t[: j + 1]) if j < k else 0.0 for j in range(len(bar_drift))])
 
 
-def step_drift(minutes: int, bars: pd.DataFrame | None, origin: datetime, steps: int) -> tuple[np.ndarray, np.ndarray]:
+def roll_shift(starts, base: str, quote: str, diff: float | None) -> np.ndarray:
+    """Expected move (bp) of bars starting at ``starts`` from the roll: a bar starting at 17:00 New York,
+    Monday to Thursday, carries it, and the quote moves by -(rate_base - rate_quote) x days / 360, the
+    days being how far the spot value date moves (fxcalendar.roll_days)."""
+    local = pd.DatetimeIndex(starts).tz_convert(NEW_YORK)
+    out = np.zeros(len(local))
+    if diff is None:
+        return out
+    for k, t in enumerate(local):
+        if t.hour == 17 and t.minute == 0 and t.dayofweek <= 3:
+            out[k] = -diff * roll_days(t.date(), base, quote) / 360 * 100
+    return out
+
+
+def promote(d: np.ndarray, t: np.ndarray, e: np.ndarray) -> np.ndarray:
+    """t raised to T_HIGH where a call agrees with an expected roll shift of at least ROLL_E_HIGH bp
+    (research/rollover.md); the expected move d is left as it is."""
+    up = (d * e > 0) & (np.abs(e) >= ROLL_E_HIGH) & (np.abs(t) >= T_MIN) & (np.abs(t) < T_HIGH)
+    return np.where(up, np.sign(t) * T_HIGH, t)
+
+
+def step_drift(minutes: int, bars: pd.DataFrame | None, origin: datetime, steps: int,
+               pair=None, diff: float | None = None) -> tuple[np.ndarray, np.ndarray]:
     """Expected move (bp) and its t statistic for each of the next ``steps`` bars of ``minutes`` after
-    ``origin``, from the timeframe's own ``bars``; zeros for daily bars."""
+    ``origin``, from the timeframe's own ``bars``; zeros for daily bars. With the ``pair`` and ``diff``
+    (base-minus-quote short rate known at the origin, rates.rate_diff), a roll-bar call of hourly bars
+    that agrees with the expected roll shift is high confidence (promote)."""
     if not minutes or bars is None or len(bars) < 200:
         return np.zeros(steps), np.zeros(steps)
     starts = [add_trading_minutes(origin, k, minutes) - timedelta(minutes=minutes) for k in range(1, steps + 1)]
-    return bar_drift(slot_stats(bars, origin, minutes), starts, minutes)
+    d, t = bar_drift(slot_stats(bars, origin, minutes), starts, minutes)
+    if pair is not None and diff is not None and minutes in ROLL_MINUTES:
+        t = promote(d, t, roll_shift(starts, pair.base, pair.quote, diff))
+    return d, t
 
 
 def tier(t: float) -> str | None:

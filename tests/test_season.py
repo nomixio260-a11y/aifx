@@ -136,3 +136,38 @@ def test_a_changed_or_misplaced_drift_is_caught(session):
         ledger.append(p, at + timedelta(minutes=1 + n))
     msgs = " ".join(x["msg"] for x in verify(root)["problems"])
     assert "inconsistent" in msgs and "daily forecast" in msgs
+
+
+def test_the_roll_moves_the_value_date_by_calendar_days():
+    from datetime import date
+
+    from aifx import fxcalendar
+    assert fxcalendar.roll_days(date(2026, 9, 28), "USD", "JPY") == 1          # Monday
+    assert fxcalendar.roll_days(date(2026, 9, 30), "USD", "JPY") == 3          # Wednesday: over the weekend
+    # Thanksgiving (Thursday 27 November 2025, a USD holiday): Monday's roll moves spot two days, Tuesday's none
+    assert fxcalendar.roll_days(date(2025, 11, 24), "EUR", "USD") == 2
+    assert fxcalendar.roll_days(date(2025, 11, 25), "EUR", "USD") == 0
+    # Japan's Silver Week (21-23 September 2026): spot stays on the 25th
+    assert fxcalendar.roll_days(date(2026, 9, 21), "USD", "JPY") == 0
+    hol = {c: fxcalendar.holidays(c, 2025, 2027) for c in ("USD", "JPY")}
+    assert fxcalendar.spot_date(date(2026, 9, 21), "USD", "JPY", hol) == date(2026, 9, 25)
+
+
+def test_roll_bar_calls_that_agree_with_the_rate_difference_are_high_confidence():
+    from aifx.data import PAIRS
+    idx = pd.DatetimeIndex([pd.Timestamp("2026-09-29 21:00", tz="UTC"),     # Tuesday 17:00 New York
+                            pd.Timestamp("2026-09-29 22:00", tz="UTC")])
+    e = season.roll_shift(idx, "AUD", "JPY", 3.5)                           # AUD pays 3.5% more: AUDJPY dips
+    assert e[0] == pytest.approx(-3.5 / 360 * 100) and e[1] == 0
+    d, t = np.array([-1.0, -1.0, 1.0]), np.array([-2.5, -2.5, 2.5])
+    e3 = np.array([-3.0, -1.0, -3.0])
+    assert list(season.promote(d, t, e3)) == [-season.T_HIGH, -2.5, 2.5]   # agreeing and large / too small / against
+    # through step_drift: a call at the roll that agrees is promoted, the move itself is unchanged
+    bars = _bars(n=3000, drift_ny=(17, 0), drift_bp=-1.2)
+    origin = datetime(2026, 1, 14, 21, tzinfo=UTC)                          # Wednesday 16:00 New York (winter)
+    d0, t0 = season.step_drift(60, bars, origin, 3)
+    d1, t1 = season.step_drift(60, bars, origin, 3, PAIRS["AUDJPY"], 3.5)
+    assert np.array_equal(d0, d1)
+    if season.T_MIN <= abs(t0[0]) < season.T_HIGH and d0[0] < 0:
+        assert t1[0] == -season.T_HIGH
+    assert np.array_equal(season.step_drift(60, bars, origin, 3, PAIRS["AUDJPY"], None)[1], t0)

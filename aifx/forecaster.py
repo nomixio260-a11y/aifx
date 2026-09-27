@@ -23,12 +23,13 @@ from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, bar_end, co
                      model_paths, sigma_steps, step_ends, target_times, vol_bars)
 from .learning import HorizonState
 from .rates import latest as rates_latest
+from .rates import rate_diff
 from .store import known_before
 from .timeutil import iso
 
 MAX_ORIGIN_AGE = {"15m": timedelta(minutes=30), "1h": timedelta(hours=2), "1d": timedelta(hours=36)}
 _MODEL_FILES = ("models.py", "engine.py", "volatility.py", "learning.py", "news.py", "forecaster.py", "trade.py", "rates.py",
-                "season.py")
+                "season.py", "fxcalendar.py")
 
 
 def model_version() -> str:
@@ -85,7 +86,9 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
     p0, p0_bar = origin_price(ref, origin, TIMEFRAMES[tf.ref].minutes)
     targets = target_times(tf, origin)
     sig_h = horizon_sigma(var, tf.horizons)
-    bar_drift, bar_t = season.step_drift(tf.minutes, bars, origin, steps)
+    rates_item = usable_rates(rate_items, origin)
+    diff = rate_diff(rates_item, pair.base, pair.quote, origin.date()) if rates_item else None
+    bar_drift, bar_t = season.step_drift(tf.minutes, bars, origin, steps, pair, diff)
     drift = season.centre_drift(bar_drift, tf.minutes)
     drift_t = season.centre_t(bar_drift, bar_t, tf.minutes)
     fc = []
@@ -128,7 +131,7 @@ def make_prediction(tf: Timeframe, pair: Pair, bars: pd.DataFrame, ref: pd.DataF
         "v": version,
         "fc": fc,
         # the trade plan: reference signal, stop, target and time limit (trade.py)
-        "trade": trade.plan(tf, pair, bars.iloc[-trade.history_bars(tf):], origin, p0, usable_rates(rate_items, origin)),
+        "trade": trade.plan(tf, pair, bars.iloc[-trade.history_bars(tf):], origin, p0, rates_item),
     }
     chart = chart_detail(tf, pair, bars, origin, p0, paths, var, state, x, ends, evs, analog_idx, press, drift, bar_drift,
                          bar_t)

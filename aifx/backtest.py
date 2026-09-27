@@ -30,7 +30,10 @@ from .engine import (BP, MODEL_KEYS, TIMEFRAMES, Timeframe, band_nu, band_z, bar
                      model_paths, prob_up, sigma_steps, target_times, vol_bars)
 from . import season
 from .forecaster import model_version, origin_price
+from .data import PAIRS
 from .learning import learn_arrays
+from .rates import latest as rates_latest
+from .rates import rate_diff
 from .timeutil import iso, parse_iso
 
 WINDOW = {"15m": timedelta(days=10), "1h": timedelta(days=60), "1d": timedelta(days=365)}
@@ -59,6 +62,8 @@ def update(state, tfs: list[Timeframe], pairs: list[str], now: datetime, budget:
     version = _version()
     added = 0
     report = {}
+    # the stored rates (as trade.backtest uses them): each origin reads the difference known on its day
+    rates_item = rates_latest(state.rates.load(since=now - timedelta(days=40)))
     for n_tf, tf in enumerate(tfs):
         limit = added + (budget - added) // (len(tfs) - n_tf)
         since = now - WINDOW[tf.key]
@@ -76,7 +81,8 @@ def update(state, tfs: list[Timeframe], pairs: list[str], now: datetime, budget:
             jobs[code] = (cache, bars, ref, ends, todo[::-1])
         for i in range(max((len(j[4]) for j in jobs.values()), default=0)):
             for cache, bars, ref, ends, todo in jobs.values():
-                if added < limit and i < len(todo) and _forecast(tf, cache["rows"], bars, ref, ends[todo[i]], todo[i]):
+                if added < limit and i < len(todo) and _forecast(tf, cache["rows"], bars, ref, ends[todo[i]], todo[i],
+                                                                 PAIRS[code], rates_item):
                     added += 1
             if added >= limit:
                 break
@@ -90,7 +96,8 @@ def update(state, tfs: list[Timeframe], pairs: list[str], now: datetime, budget:
     return {"added": added, "rows": report}
 
 
-def _forecast(tf: Timeframe, rows: dict, bars: pd.DataFrame, ref: pd.DataFrame, origin: datetime, o: int) -> bool:
+def _forecast(tf: Timeframe, rows: dict, bars: pd.DataFrame, ref: pd.DataFrame, origin: datetime, o: int,
+              pair=None, rates_item: dict | None = None) -> bool:
     """The forecast the models would have made at ``origin`` from the bars completed by then
     (the time-of-day drift uses bars from before the origin's day only)."""
     ref_min = TIMEFRAMES[tf.ref].minutes
@@ -104,7 +111,8 @@ def _forecast(tf: Timeframe, rows: dict, bars: pd.DataFrame, ref: pd.DataFrame, 
     var = sigma_steps(tf, bars.iloc[max(0, o + 1 - vol_bars(tf)): o + 1], origin, H, None, hourly=ref_o if tf.key == "1d" else None)
     sig = horizon_sigma(var, tf.horizons)
     targets = target_times(tf, origin)
-    bar_d, bar_t = season.step_drift(tf.minutes, bars, origin, H)
+    diff = rate_diff(rates_item, pair.base, pair.quote, origin.date()) if pair is not None and rates_item else None
+    bar_d, bar_t = season.step_drift(tf.minutes, bars, origin, H, pair, diff)
     drift, drift_t = season.centre_drift(bar_d, tf.minutes), season.centre_t(bar_d, bar_t, tf.minutes)
     rows[iso(origin)] = {"p0": p[0], "h": {
         str(h): {"t": iso(targets[j]), "m": [round(float(paths[k][h - 1]), 3) for k in MODEL_KEYS],
