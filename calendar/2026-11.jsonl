@@ -1,0 +1,23 @@
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"54.5","id":"ebdd3d20e8f26a65","impact":"Medium","previous":"54.5","time":"2026-11-02T15:00:00Z","title":"ISM Manufacturing PMI"}
+{"cur":"AUD","fetched_at":"2026-11-04T14:19:22Z","forecast":"4.85%","id":"524eecd3818a1466","impact":"High","previous":"4.60%","time":"2026-11-03T03:30:00Z","title":"Cash Rate"}
+{"cur":"AUD","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"fd087435a9b5cd26","impact":"High","previous":"","time":"2026-11-03T03:30:00Z","title":"RBA Monetary Policy Statement"}
+{"cur":"AUD","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"a7e99cede1cf722d","impact":"High","previous":"","time":"2026-11-03T03:30:00Z","title":"RBA Rate Statement"}
+{"cur":"AUD","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"c3ebceb971fab1a0","impact":"High","previous":"","time":"2026-11-03T04:30:00Z","title":"RBA Press Conference"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"7.15M","id":"fc97b83605ec2293","impact":"Medium","previous":"7.08M","time":"2026-11-03T15:00:00Z","title":"JOLTS Job Openings"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"f7a1875e7c415cbb","impact":"High","previous":"","time":"2026-11-03T15:16:00Z","title":"Congressional Elections"}
+{"cur":"EUR","fetched_at":"2026-11-04T14:19:22Z","forecast":"2.5%","id":"ca933cd771d0c407","impact":"Medium","previous":"2.5%","time":"2026-11-04T10:00:00Z","title":"Core CPI Flash Estimate y/y"}
+{"cur":"EUR","fetched_at":"2026-11-04T14:19:22Z","forecast":"4.0%","id":"41267265af9a1b65","impact":"Medium","previous":"3.8%","time":"2026-11-04T10:00:00Z","title":"CPI Flash Estimate y/y"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"54.8","id":"dd60a43d4e849bc6","impact":"Medium","previous":"54.9","time":"2026-11-04T15:00:00Z","title":"ISM Services PMI"}
+{"cur":"GBP","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"863a7aab2e85193b","impact":"High","previous":"","time":"2026-11-05T12:00:00Z","title":"BOE Monetary Policy Report"}
+{"cur":"GBP","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"59be93a1036400c6","impact":"High","previous":"","time":"2026-11-05T12:00:00Z","title":"Monetary Policy Summary"}
+{"cur":"GBP","fetched_at":"2026-11-04T14:19:22Z","forecast":"7-0-2","id":"f9c347fc671c6327","impact":"High","previous":"3-0-6","time":"2026-11-05T12:00:00Z","title":"MPC Official Bank Rate Votes"}
+{"cur":"GBP","fetched_at":"2026-11-04T14:19:22Z","forecast":"4.00%","id":"3d8beb3c15e2bbd2","impact":"High","previous":"3.75%","time":"2026-11-05T12:00:00Z","title":"Official Bank Rate"}
+{"cur":"GBP","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"3f892062f473c5da","impact":"High","previous":"","time":"2026-11-05T12:30:00Z","title":"BOE Gov Bailey Speaks"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"197K","id":"8ed164a773438897","impact":"Medium","previous":"194K","time":"2026-11-05T13:30:00Z","title":"Unemployment Claims"}
+{"cur":"EUR","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"ba3db0897361e60c","impact":"Medium","previous":"","time":"2026-11-05T18:00:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"0.3%","id":"dfda249ba1cfd7ba","impact":"High","previous":"0.1%","time":"2026-11-06T13:30:00Z","title":"Average Hourly Earnings m/m"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"65K","id":"8b9c9308fcce2148","impact":"High","previous":"29K","time":"2026-11-06T13:30:00Z","title":"Non-Farm Employment Change"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"4.2%","id":"4dc64c8780b4695d","impact":"High","previous":"4.2%","time":"2026-11-06T13:30:00Z","title":"Unemployment Rate"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"48.1","id":"c8c6878e4ab5bb60","impact":"Medium","previous":"46.3","time":"2026-11-06T15:00:00Z","title":"Prelim UoM Consumer Sentiment"}
+{"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"577b18a42e07d9fa","impact":"Medium","previous":"4.7%","time":"2026-11-06T15:00:00Z","title":"Prelim UoM Inflation Expectations"}
+{"cur":"JPY","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"138f9a882b240c0c","impact":"High","previous":"","time":"2026-11-06T16:00:00Z","title":"BOJ Gov Ueda Speaks"}
