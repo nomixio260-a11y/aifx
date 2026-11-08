@@ -21,3 +21,13 @@
 {"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"48.1","id":"c8c6878e4ab5bb60","impact":"Medium","previous":"46.3","time":"2026-11-06T15:00:00Z","title":"Prelim UoM Consumer Sentiment"}
 {"cur":"USD","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"577b18a42e07d9fa","impact":"Medium","previous":"4.7%","time":"2026-11-06T15:00:00Z","title":"Prelim UoM Inflation Expectations"}
 {"cur":"JPY","fetched_at":"2026-11-04T14:19:22Z","forecast":"","id":"138f9a882b240c0c","impact":"High","previous":"","time":"2026-11-06T16:00:00Z","title":"BOJ Gov Ueda Speaks"}
+{"cur":"GBP","fetched_at":"2026-11-08T08:17:57Z","forecast":"","id":"8a9f3ab65c42a42f","impact":"Medium","previous":"","time":"2026-11-09T17:25:00Z","title":"BOE Gov Bailey Speaks"}
+{"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"","id":"f93066bb9cfe76bb","impact":"Medium","previous":"","time":"2026-11-10T09:00:00Z","title":"FOMC Member Waller Speaks"}
+{"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.2%","id":"3301e8aa5136cb59","impact":"High","previous":"0.3%","time":"2026-11-10T13:30:00Z","title":"Core CPI m/m"}
+{"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.3%","id":"4fd28b316ecfbde8","impact":"High","previous":"0.6%","time":"2026-11-10T13:30:00Z","title":"CPI m/m"}
+{"cur":"GBP","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.0%","id":"af1ccef82b356ac2","impact":"High","previous":"0.1%","time":"2026-11-12T07:00:00Z","title":"GDP m/m"}
+{"cur":"GBP","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.7%","id":"2f514068ae9beeeb","impact":"Medium","previous":"0.5%","time":"2026-11-12T07:00:00Z","title":"Prelim GDP q/q"}
+{"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"194K","id":"42ccf838ba010a26","impact":"Medium","previous":"189K","time":"2026-11-12T13:30:00Z","title":"Unemployment Claims"}
+{"cur":"EUR","fetched_at":"2026-11-08T08:17:57Z","forecast":"","id":"01b742af507f6e5a","impact":"Medium","previous":"","time":"2026-11-12T19:30:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.3%","id":"a0f06a822e9fdf63","impact":"High","previous":"0.7%","time":"2026-11-13T13:30:00Z","title":"Core PPI m/m"}
+{"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.4%","id":"f5f8a8590e7f58fc","impact":"High","previous":"1.3%","time":"2026-11-13T13:30:00Z","title":"PPI m/m"}
