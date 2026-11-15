@@ -32,3 +32,25 @@
 {"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.3%","id":"a0f06a822e9fdf63","impact":"High","previous":"0.7%","time":"2026-11-13T13:30:00Z","title":"Core PPI m/m"}
 {"cur":"USD","fetched_at":"2026-11-08T08:17:57Z","forecast":"0.4%","id":"f5f8a8590e7f58fc","impact":"High","previous":"1.3%","time":"2026-11-13T13:30:00Z","title":"PPI m/m"}
 {"cur":"EUR","fetched_at":"2026-11-09T17:49:29Z","forecast":"","id":"045b0438ced7bdd3","impact":"Medium","previous":"","time":"2026-11-11T09:45:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"fb38360f6dce2c73","impact":"High","previous":"","time":"2026-11-16T17:00:00Z","title":"Fed Chairman Warsh Speaks"}
+{"cur":"AUD","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"f61bd66a62561c7f","impact":"High","previous":"","time":"2026-11-16T22:50:00Z","title":"RBA Gov Bullock Speaks"}
+{"cur":"GBP","fetched_at":"2026-11-15T07:10:24Z","forecast":"3.5%","id":"0c4e3f19f852f41d","impact":"Medium","previous":"3.7%","time":"2026-11-17T07:00:00Z","title":"Average Earnings Index 3m/y"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"0.4%","id":"1578e3d0a3d4170c","impact":"High","previous":"0.9%","time":"2026-11-17T13:30:00Z","title":"Core Retail Sales m/m"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"0.2%","id":"2dae4bd78b0c47fd","impact":"High","previous":"0.8%","time":"2026-11-17T13:30:00Z","title":"Retail Sales m/m"}
+{"cur":"AUD","fetched_at":"2026-11-15T07:10:24Z","forecast":"0.9%","id":"d8b18015ca18fe6a","impact":"Medium","previous":"0.8%","time":"2026-11-18T00:30:00Z","title":"Wage Price Index q/q"}
+{"cur":"GBP","fetched_at":"2026-11-15T07:10:24Z","forecast":"3.6%","id":"1594618bdc93575a","impact":"High","previous":"3.5%","time":"2026-11-18T07:00:00Z","title":"CPI y/y"}
+{"cur":"GBP","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"7a29c054983cd52e","impact":"High","previous":"","time":"2026-11-18T07:30:00Z","title":"BOE Gov Bailey Speaks"}
+{"cur":"EUR","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"78c2dab74a17ed58","impact":"Medium","previous":"","time":"2026-11-18T09:00:00Z","title":"ECB Financial Stability Review"}
+{"cur":"EUR","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"ad79b901a50c33a1","impact":"Medium","previous":"","time":"2026-11-18T14:25:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"GBP","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"bbebc33930c90378","impact":"High","previous":"","time":"2026-11-18T15:00:00Z","title":"BOE Gov Bailey Speaks"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"b8b7fe16a3871f1d","impact":"High","previous":"","time":"2026-11-18T19:00:00Z","title":"FOMC Meeting Minutes"}
+{"cur":"AUD","fetched_at":"2026-11-15T07:10:24Z","forecast":"25.2K","id":"22a63b20dd86ac5b","impact":"High","previous":"-39.3K","time":"2026-11-19T00:30:00Z","title":"Employment Change"}
+{"cur":"AUD","fetched_at":"2026-11-15T07:10:24Z","forecast":"4.7%","id":"e9e5c2c54f4a7ee9","impact":"High","previous":"4.7%","time":"2026-11-19T00:30:00Z","title":"Unemployment Rate"}
+{"cur":"EUR","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"c8b137e890c5ebca","impact":"Medium","previous":"","time":"2026-11-19T13:30:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"19.2","id":"a3e8185e6aff5c21","impact":"Medium","previous":"20.9","time":"2026-11-19T13:30:00Z","title":"Philly Fed Manufacturing Index"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"199K","id":"d3768dab2ce49417","impact":"Medium","previous":"200K","time":"2026-11-19T13:30:00Z","title":"Unemployment Claims"}
+{"cur":"GBP","fetched_at":"2026-11-15T07:10:24Z","forecast":"0.0%","id":"8b8cc97499205464","impact":"Medium","previous":"-0.4%","time":"2026-11-20T07:00:00Z","title":"Retail Sales m/m"}
+{"cur":"EUR","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"b2a6a45687ca5db5","impact":"Medium","previous":"","time":"2026-11-20T08:15:00Z","title":"ECB President Lagarde Speaks"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"84a5d038cce8212c","impact":"Medium","previous":"","time":"2026-11-20T13:25:00Z","title":"FOMC Member Waller Speaks"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"52.1","id":"f848e051edbe56ae","impact":"Medium","previous":"51.0","time":"2026-11-20T15:00:00Z","title":"Revised UoM Consumer Sentiment"}
+{"cur":"USD","fetched_at":"2026-11-15T07:10:24Z","forecast":"","id":"d60975a748b93ded","impact":"Medium","previous":"4.3%","time":"2026-11-20T15:00:00Z","title":"Revised UoM Inflation Expectations"}
