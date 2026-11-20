@@ -38,7 +38,10 @@ def test_the_drift_finds_a_steady_new_york_hour_and_uses_only_earlier_days():
     bars = _bars()                                               # June to January: across the change of US daylight time
     origin = datetime(2026, 1, 14, 20, tzinfo=UTC)               # a Wednesday, 15:00 in New York
     d, t = season.step_drift(60, bars, origin, 6)
-    assert 2.0 < d[1] < 6.5 and abs(t[1]) >= season.T_MIN       # the bar starting 16:00 New York (21:00 UTC in winter)
+    starts = [add_trading_minutes(origin, k, 60) - timedelta(minutes=60) for k in range(1, 7)]
+    raw, raw_t = season.bar_drift(season.slot_stats(bars, origin, 60), starts, 60)
+    assert 2.0 < raw[1] < 6.5 and abs(t[1]) >= season.T_MIN     # the bar starting 16:00 New York (21:00 UTC in winter)
+    assert 0 < d[1] < raw[1] and np.array_equal(t, raw_t)       # the expected move is shrunk, the call is not
     assert np.count_nonzero(d) <= 2
     # bars from the origin's day on do not matter
     later = bars.copy()
@@ -53,8 +56,40 @@ def test_15_minute_bars_use_their_own_quarter_hours():
     bars = _bars(n=5000, minutes=15, drift_ny=(17, 0), drift_bp=6.0, start=datetime(2026, 7, 20))
     origin = datetime(2026, 9, 16, 20, 45, tzinfo=UTC)          # Wednesday 16:45 New York (daylight time)
     d, t = season.step_drift(15, bars, origin, 4)
-    assert d[1] > 1.0 and not d[0] and not d[2]                  # only the quarter starting 17:00 New York
+    assert d[1] > 0.5 and not d[0] and not d[2]                  # only the quarter starting 17:00 New York (shrunk)
     assert season.centre_t(d, t, 15)[3] == pytest.approx(season.combined_t(d, t))
+
+
+def test_slot_averages_are_shrunk_by_their_reliability():
+    """research/drift.md: each slot average is shrunk toward 0 by tau^2 / (tau^2 + se^2), tau^2 from the spread
+    of all the slots of its kind; pure noise is shrunk to nothing, a real effect keeps its sign."""
+    noise = _bars(drift_bp=0.0)
+    st = season.slot_stats(noise, datetime(2026, 1, 14, tzinfo=UTC), 60)
+    f = season.shrink_factors(st)
+    assert all(((v >= 0) & (v <= 1)).all() for v in f.values())
+    real = _bars(drift_bp=8.0)
+    st = season.slot_stats(real, datetime(2026, 1, 14, tzinfo=UTC), 60)
+    f = season.shrink_factors(st)
+    mu, t = st["slot"]
+    j = int(np.argmax(np.abs(t)))
+    assert f["slot"][j] > 0.5 and f["slot"][j] > np.median(f["slot"][st["n_slot"] >= season.MIN_N])
+    # nothing real: tau^2 = 0 and every factor is 0
+    flat = {"slot": (np.zeros(5), np.zeros(5)), "tod": (np.array([0.1, -0.1]), np.array([1.0, -1.0])),
+            "n_slot": np.full(5, 30), "n_tod": np.full(2, 30)}
+    assert not season.shrink_factors(flat)["tod"].any()
+
+
+def test_15_minute_calls_need_high_confidence():
+    """research/drift.md: 15-minute calls below |t| 4 were right 52.9 % (research) and 51.1 % (live)."""
+    bars = _bars(n=5000, minutes=15, drift_ny=(17, 0), drift_bp=2.0, start=datetime(2026, 7, 20))
+    origin = datetime(2026, 9, 16, 20, 45, tzinfo=UTC)
+    starts = [add_trading_minutes(origin, k, 15) - timedelta(minutes=15) for k in range(1, 5)]
+    raw, raw_t = season.bar_drift(season.slot_stats(bars, origin, 15), starts, 15)
+    d, t = season.step_drift(15, bars, origin, 4)
+    weak = (np.abs(raw_t) >= season.T_MIN) & (np.abs(raw_t) < season.T_HIGH)
+    assert not d[weak].any() and not t[weak].any()
+    strong = np.abs(raw_t) >= season.T_HIGH
+    assert np.array_equal(np.sign(d[strong]), np.sign(raw[strong])) and np.array_equal(t[strong], raw_t[strong])
 
 
 def test_the_centre_keeps_the_first_hour_only():
@@ -101,6 +136,8 @@ def test_called_candles_point_the_called_way():
 def test_forecasts_carry_the_drift_and_audit_rebuilds_it(tmp_path, monkeypatch):
     monkeypatch.setattr(season, "T_MIN", 0.0)                  # every slot makes a call, so the drift is never 0
     monkeypatch.setattr(season, "MIN_N", 3)
+    monkeypatch.setattr(season, "CALL_T_MIN", {})
+    monkeypatch.setattr(season, "bar_factor", lambda stats, starts, minutes: np.ones(len(starts)))   # no shrink on noise
     root = tmp_path / "state"
     run_session(root, cycles=4)
     ledger = Ledger(root).load()

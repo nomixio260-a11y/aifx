@@ -874,12 +874,12 @@ aifx audit --state state --sample 20 --external</pre></div></details>
   // the next bar's direction from the time-of-day drift (season.py), if it makes a call
   function nextCallText(blk) {
     var C = blk && blk.candles; if (!C || !C.drift_bp || !TF_MIN[S.tf]) return "";
-    var d = C.drift_bp[0], when = TF_MIN[S.tf] === 60 ? "次の1時間" : "次の15分";
+    var d = C.drift_bp[0], dir = C.dir ? C.dir[0] : Math.sign(d), when = TF_MIN[S.tf] === 60 ? "次の1時間" : "次の15分";
     if (blk.basis && blk.basis.reopen) return when + ": 週明け最初の足は方向の根拠なし";
-    if (!d) return when + ": 方向の根拠なし";
+    if (!dir) return when + ": 方向の根拠なし";
     var R = (C.accuracy && C.accuracy.direction) || {}, high = (C.tier || [])[0] === 2, r = high ? R.high : R.all;
-    return when + ": " + (d > 0 ? "▲ 上がりやすい" : "▼ 下がりやすい") + " (確度 " + (high ? "高" : "中") +
-      (r && r.hit != null ? "・検証での的中率 " + pct(r.hit, 0) : "") + "、平均 " + signed(d, 1, "bp") + ")";
+    return when + ": " + (dir > 0 ? "▲ 上がりやすい" : "▼ 下がりやすい") + " (確度 " + (high ? "高" : "中") +
+      (r && r.hit != null ? "・検証での的中率 " + pct(r.hit, 0) : "") + "、見込み " + signed(d, 2, "bp") + ")";
   }
 
   var CTYPES = [{ label: "ローソク足", value: "candle" }, { label: "平均足", value: "heikin" }, { label: "ライン", value: "line" }];
@@ -1409,7 +1409,7 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     };
     var ch = chartOn("chart"); ch.setOption(option, true); ch.resize();
     box.setAttribute("aria-label", { candle: "ローソク足", heikin: "平均足", line: "終値のライン" }[ctype] + "と予想" + (panes.length ? "、" + panes.map(function (k) { return k.toUpperCase(); }).join("・") : ""));
-    var nxt = nextCallText(blk), drift0 = blk.candles && blk.candles.drift_bp ? blk.candles.drift_bp[0] : 0;
+    var nxt = nextCallText(blk), drift0 = blk.candles ? (blk.candles.dir ? blk.candles.dir[0] : (blk.candles.drift_bp || [0])[0]) : 0;
     var chip = $("next-call"); chip.textContent = S.show.pred && pc.length && !skip ? nxt : "";   // the next bar is the forecast's first
     chip.className = "callchip" + (drift0 > 0 ? " up" : drift0 < 0 ? " down" : "");
     $("chart-acc-txt").textContent = S.show.pred && pc.length ? candleAccText(blk, true) : "";
@@ -1538,7 +1538,8 @@ aifx audit --state state --sample 20 --external</pre></div></details>
     if (!TF_MIN[S.tf]) {
       item(when + "の方向", "方向の根拠なし", null, ["日足で上がるか下がるかを偶然より当てる方法は、20年分の検証でも見つかっていません (金利差・モメンタム・テクニカル・機械学習・ニュース)。"]);
     } else if (B) {
-      var d0 = C.drift_bp ? C.drift_bp[0] : 0, high = (C.tier || [])[0] === 2;
+      var e0 = C.drift_bp ? C.drift_bp[0] : 0, d0 = C.dir ? C.dir[0] : Math.sign(e0), high = (C.tier || [])[0] === 2;
+      var tCall = B.t_call || 2;
       var slot = B.used === "slot" ? B.slot : B.tod;
       var nyName = (B.used === "tod" ? "毎日の" : NY_DAY[B.weekday] + "曜の") + Math.floor(B.minute / 60) + "時" + (B.minute % 60 ? B.minute % 60 + "分" : "") + "台";
       var lines = [];
@@ -1546,12 +1547,17 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         item(when + "の方向", "方向の根拠なし", null, ["週明け最初の足は週末の値動きの窓を含み、時間帯の統計では測れないため方向を出しません。"]);
       } else if (d0) {
         lines.push("根拠: ニューヨーク時間の" + nyName + " (日本時間 " + jstShort(B.start).split(" ")[1] + " 始まり) の過去約1年 " + slot.n + "本の平均 " + signed(slot.mean_bp, 2, " bp")
-          + "、t = " + fmt(slot.t, 1) + " (|t| ≥ 2 で方向、≥ 4 で確度: 高)" + (B.used === "tod" ? "。曜日別では決め手がないため毎日の同じ時間帯を使っています。" : "。"));
+          + "、t = " + fmt(slot.t, 1) + (tCall > 2 ? " (15分足は |t| ≥ " + tCall + " のときだけ方向を出します)" : " (|t| ≥ 2 で方向、≥ 4 で確度: 高)") + (B.used === "tod" ? "。曜日別では決め手がないため毎日の同じ時間帯を使っています。" : "。"));
+        if (B.shrink != null) lines.push("見込みの値動き: 平均 " + signed(slot.mean_bp, 2, " bp") + " を信頼度で縮めて " + signed(e0, 2, " bp") + " (×" + fmt(B.shrink, 2) + ")。目立つ平均は偶然大きく出ていることが多いため、同じ種類の枠全体のばらつきから縮める割合を決めています (過去2年と本番の実績で、縮めた方が誤差が小さくなりました)。");
         if (B.roll) lines.push("ロールオーバー: 受け渡し日が " + B.roll.days + "日延び、金利差 (" + p.label.replace("/", " − ") + ") " + signed(B.roll.diff, 2, "%") + " から "
           + signed(B.roll.e_bp, 2, " bp") + " ずれる見込み" + (Math.abs(B.roll.e_bp) >= B.roll.promote_bp && B.roll.e_bp * d0 > 0 ? " (向きが同じで " + B.roll.promote_bp + " bp 以上のため確度: 高)" : "") + "。");
         var r = high ? A.high : A.all;
         if (r && r.hit != null) lines.push({ rec: "検証での的中率: " + (high ? "確度: 高" : "方向を示した回") + " " + pct(r.hit, 1) + " (" + r.n.toLocaleString() + "回、Yahoo の過去データ)。表示される価格の規則性で、スプレッドとスワップを引くと売買の利益にはなりません。" });
         item(when + "の方向", (d0 > 0 ? "▲ 上がりやすい" : "▼ 下がりやすい") + " (確度: " + (high ? "高" : "中") + ")", d0 > 0 ? "up" : "down", lines);
+      } else if (B.used && tCall > 2) {
+        var sc = B.used === "slot" ? B.slot : B.tod;
+        item(when + "の方向", "方向の根拠なし", null, ["ニューヨーク時間の" + nyName + " (過去 " + sc.n + "本) の平均 " + signed(sc.mean_bp, 2, " bp") + "、t = " + fmt(sc.t, 1) + "。15分足は |t| ≥ " + tCall + " のときだけ方向を出します。",
+          { rec: "15分足の |t| が 2〜4 の方向は、検証で 52.9% (1,943回)、本番の実績で 51.1% (861回) と、偶然とほぼ変わりませんでした。" }]);
       } else {
         var sl = B.slot.n >= 15 ? B.slot : B.tod;
         item(when + "の方向", "方向の根拠なし", null, ["ニューヨーク時間の" + (B.slot.n >= 15 ? NY_DAY[B.weekday] + "曜の" : "毎日の") + Math.floor(B.minute / 60) + "時台 (過去約1年 " + sl.n + "本) の平均 " + signed(sl.mean_bp, 2, " bp") + "、t = " + fmt(sl.t, 1) + " で、偶然と区別できません (|t| < 2)。",
@@ -1593,8 +1599,14 @@ aifx audit --state state --sample 20 --external</pre></div></details>
         [{ rec: (th && th.hit != null ? "この総合判定の検証での的中率 " + pct(th.hit, 1) + "。" : "") + "25の指標のどれも20年分の検証で偶然と区別できなかったため、予測には使っていません。" }]);
     }
     var pr = p.pressure;
-    if (pr) item("ニュース", "ペアの信号 " + signed(pr.signal, 2), null,
-      [{ rec: "見出しの読み取り (lexicon-v4) は手で確かめて改善していますが、見出しから先の値動きを当てる力は確認できないため、予測への重みは 0 です。" }]);
+    if (pr) {
+      var HL = blk.prediction.horizons[blk.prediction.horizons.length - 1];
+      var NT = S.meta && S.meta.news && S.meta.news.tilt && S.meta.news.tilt[S.tf], nr = NT && NT[String(HL.h)];
+      var nlines = ["ニュースの傾き (" + HL.label + "): 予測に使った信号 " + signed(blk.prediction.news_x, 2) + " × 学習した係数 " + signed(HL.beta, 2) + " → 中心を " + signed(HL.news_pips, 1, " pips") + " 動かしています。"];
+      nlines.push("係数は 0 から始まり、台帳で答えが出た予測だけから学習します (向きが逆になることもあります)。過去の見出しのデータ (約3か月) では、見出しの向きそのものに先の値動きを当てる力は確認できませんでした。");
+      if (nr && nr.dir_n) nlines.push({ rec: "直近" + S.meta.news.tilt.days + "日の本番の実績 (" + HL.label + "): 傾きの向きが当たった割合 " + pct(nr.hit, 1) + " (" + nr.dir_n.toLocaleString() + "回、重なりあり)、傾きを除いた場合と比べた誤差 (二乗平均) " + (nr.gain_pct >= 0 ? "−" : "+") + fmt(Math.abs(nr.gain_pct), 1) + "%。" });
+      item("ニュース", "ペアの信号 " + signed(pr.signal, 2), null, nlines);
+    }
     var ev = (blk.path && blk.path.events) || [];
     if (ev.length) item("重要指標", ev.length + "件 (予測の期間内)", null, [ev.slice(0, 3).map(function (e) { return e.cur + " " + (e.title || "") + " " + jstShort(e.time); }).join("、") + "。発表時の値動きの大きさをレンジに加えています。"]);
   }

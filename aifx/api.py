@@ -194,13 +194,13 @@ def candle_eval(tf, bars: pd.DataFrame, now) -> list[tuple]:
     for t in range(max(first, 300), len(c) - 1, every):
         drift, dts = season.step_drift(tf.minutes, bars, bar_end(tf, bars.index[t]), steps)
         target = float(c[t]) * math.exp(float(season.centre_drift(drift, tf.minutes)[-1]) / BP)
-        cs, _ = scenario.candles(tf.key, bars.iloc[: t + 1], steps, target, tf.minutes, drift)
+        cs, _ = scenario.candles(tf.key, bars.iloc[: t + 1], steps, target, tf.minutes, np.sign(dts))
         for j, (po, ph, pl, pc) in enumerate(cs):
             k = t + 1 + j
             if k >= len(c):
                 break
             out.append((j + 1, np.sign(pc - c[t]), np.sign(c[k] - c[t]), np.sign(pc - po), np.sign(c[k] - o[k]),
-                        ph - pl, h[k] - lo[k], atr[t], np.sign(drift[j]), abs(dts[j])))
+                        ph - pl, h[k] - lo[k], atr[t], np.sign(dts[j]), abs(dts[j])))
     return out
 
 
@@ -400,7 +400,7 @@ def _basis(tf, pair, bars: pd.DataFrame, rec: dict | None, rate_item: dict | Non
     ex = season.explain(season.slot_stats(hist, origin, tf.minutes), start, tf.minutes)
     out = {"start": iso(start), "weekday": ex["weekday"], "minute": ex["minute"], "used": ex["used"], "reopen": ex["reopen"],
            **{k: {"mean_bp": _r(ex[k]["mean_bp"], 2), "t": _r(ex[k]["t"], 2), "n": ex[k]["n"]} for k in ("slot", "tod")},
-           "roll": None}
+           "shrink": _r(ex.get("shrink"), 3), "t_call": ex["t_call"], "roll": None}
     ny = pd.Timestamp(start).tz_convert(season.NEW_YORK)
     diff = rate_diff(rate_item, pair.base, pair.quote, origin.date()) if rate_item else None
     if ny.hour == 17 and ny.minute == 0 and ny.day_of_week <= 3 and diff is not None:
@@ -571,6 +571,43 @@ def next_cycle_at(now, interval_min: float = 15):
     return t + timedelta(minutes=5)
 
 
+NEWS_RECORD_DAYS = 60
+
+
+def news_tilt_record(preds: list[dict], outcomes: list[dict], now, days: int = NEWS_RECORD_DAYS) -> dict:
+    """How the learned news tilt (b x news signal x sigma, learning.py) has done on the scored forecasts of the
+    last ``days`` days, per intraday timeframe and horizon: how often it pointed the way the price went, and the
+    mean squared error of the forecast centre with and without it (bp^2). It starts at 0 and is learned only from
+    these results, so it can change sign; the forecasts overlap, so the counts overstate the evidence."""
+    since = iso(now - timedelta(days=days))
+    by_seq = {p["seq"]: p for p in preds if p["tf"] in ("15m", "1h") and p["origin"] >= since}
+    acc: dict = {}
+    for o in outcomes:
+        for seq, h, actual, _end in o["items"]:
+            p = by_seq.get(seq)
+            if p is None or actual is None:
+                continue
+            f = next((x for x in p["fc"] if x["h"] == h), None)
+            if f is None:
+                continue
+            tilt = f["b"] * p["news"]["x"] * f["s"] * f["k"]
+            ret = math.log(actual / p["p0"]) * BP
+            a = acc.setdefault((p["tf"], h), {"n": 0, "hit": 0, "dir_n": 0, "se": 0.0, "se0": 0.0})
+            a["n"] += 1
+            a["se"] += (ret - f["c"]) ** 2
+            a["se0"] += (ret - (f["c"] - tilt)) ** 2
+            if tilt != 0 and ret != 0:
+                a["dir_n"] += 1
+                a["hit"] += int((tilt > 0) == (ret > 0))
+    out: dict = {"days": days}
+    for (tf, h), a in sorted(acc.items()):
+        out.setdefault(tf, {})[str(h)] = {
+            "n": a["n"], "dir_n": a["dir_n"], "hit": _r(a["hit"] / a["dir_n"], 4) if a["dir_n"] else None,
+            "mse": _r(a["se"] / a["n"], 3), "mse_without": _r(a["se0"] / a["n"], 3),
+            "gain_pct": _r((1 - a["se"] / a["se0"]) * 100, 2) if a["se0"] else None}
+    return out
+
+
 def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) -> dict[str, dict]:
     state = State.open(root)
     ledger = state.ledger
@@ -677,14 +714,17 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
                 hist = bars_until(tf, bars, parse_iso(rec["origin"]))
                 drift = np.array([st.get("bar_d") or 0.0 for st in steps_], dtype=float)
                 drift_t = [st.get("bar_t") or 0.0 for st in steps_]
-                cs, info = scenario.candles(tf_key, hist, len(steps_), steps_[-1]["c"], tf.minutes, drift)
+                # the call (direction, tier) comes from t; the shrunk expected move can be ~0 on a called bar
+                calls = np.sign(np.asarray(drift_t, dtype=float))
+                cs, info = scenario.candles(tf_key, hist, len(steps_), steps_[-1]["c"], tf.minutes, calls)
                 if cs:
                     block["candles"] = {"items": [[_r(v, dec) for v in k] for k in cs], "x": [st["x"] for st in steps_],
                                         "t": [st["t"] for st in steps_], "analog": str(info["analog_end"]),
-                                        "call": info["call"], "drift_bp": [_r(float(v), 3) for v in drift],
+                                        "call": info["call"], "dir": [int(v) for v in calls],
+                                        "drift_bp": [_r(float(v), 3) for v in drift],
                                         "tier": [{"high": 2, "mid": 1}.get(season.tier(v), 0) for v in drift_t]}
                     if tf.minutes:      # the next bar's direction from the time-of-day drift (the pair list)
-                        summary.setdefault("call", {})[tf_key] = {"dir": int(np.sign(drift[0])) if len(drift) else 0,
+                        summary.setdefault("call", {})[tf_key] = {"dir": int(calls[0]) if len(calls) else 0,
                                                                   "tier": block["candles"]["tier"][0] if drift_t else 0}
                 candle_rows.setdefault(tf_key, []).extend(candle_eval(tf, bars, now))
             if tf_key == "1d" and len(daily) > 80:
@@ -811,7 +851,8 @@ def build_api(root: Path | str, mode: str = "static", interval_min: float = 15) 
         "track": {tf: {h: {"n": s.get("n", 0), "direction": s.get("direction"), "skill": s.get("skill"),
                            "coverage80": (s.get("coverage") or {}).get("80")}
                        for h, s in tr["overall"][tf].items()} for tf in TIMEFRAMES},
-        "news": {"analyzer": out["news.json"]["analyzer"], "items_48h": len(recent_items)},
+        "news": {"analyzer": out["news.json"]["analyzer"], "items_48h": len(recent_items),
+                 "tilt": news_tilt_record(preds, outcomes, now)},
         "errors": status.get("errors", [])[:20],
         "repo": "https://github.com/nomixio260-a11y/aifx",
     }

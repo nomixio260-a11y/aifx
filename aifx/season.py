@@ -17,7 +17,11 @@ gives the expected move of a bar in it; the larger |t|, the more reliable
 
 On the test period (bars the server forecasts, i.e. while the market is open),
 next-hour calls were right about 61 % of the time overall and 78 % for
-|t| >= 4 (about 2 % of hours); 15-minute calls somewhat more (last ~60 days).
+|t| >= 4 (about 2 % of hours), and live (2026-09-23 to 11-20) 60.6 % and
+75.3 %. On 15-minute bars only the |t| >= 4 calls held (84 % research, 69 %
+live; below that about 52 %), so only those are made (CALL_T_MIN). The
+expected move of a called bar is its slot average shrunk by its reliability
+(shrink_factors, research/drift.md).
 It is a regularity of quoted prices, not a trading edge: after the spread and
 the swap the calls lose money.
 
@@ -44,6 +48,10 @@ CENTRE_MINUTES = 60  # the forecast centre uses the drift of the bars in the fir
 MIN_N = 15           # bars a slot needs before its average counts
 T_MIN = 2.0          # a call
 T_HIGH = 4.0         # a high-confidence call
+# 15-minute bars: only high-confidence calls. Below |t| 4 they were right 52.9 % of the time in the research
+# (1,943 calls) and 51.1 % live (861 calls, 2026-09-23 to 11-20), moving 0.06 bp in their direction for an
+# expected 1.1 bp (research/drift.md); the 15-minute slot averages come from only ~60 days of bars.
+CALL_T_MIN = {15: T_HIGH}
 ROLL_E_HIGH = 2.0    # bp: a roll-bar call agreeing with an expected roll shift this large is high confidence
 ROLL_MINUTES = (60,)  # timeframes that applies to (tested on hourly bars; research/rollover.md)
 _CACHE: dict = {}
@@ -99,6 +107,38 @@ def _stats(r: np.ndarray, key: np.ndarray, n: int) -> tuple[np.ndarray, np.ndarr
     return mu, t
 
 
+def shrink_factors(stats: dict) -> dict[str, np.ndarray]:
+    """Empirical-Bayes shrink factor of every slot average, per stats set ("slot", "tod"): tau^2 / (tau^2 + se^2),
+    with se = |mean / t| and the spread of true slot effects tau^2 = max(0, mean(mean^2) - mean(se^2)) over the
+    set's slots with at least ``MIN_N`` bars; 0 for slots without a usable average.
+    A slot chosen because its average stands out tends to be one whose average came out too large (the
+    winner's curse), the more so the noisier it is: live, hourly calls below |t| 4 expected 2.2 bp and got
+    1.0 bp in their direction. Shrunk this way the expected move matched what followed on two years of
+    hourly bars of the 7 pairs and of 6 pairs never used to design anything, and on the live forecasts
+    (research/drift.md); which bars get a call, and their tier, do not change."""
+    if "shrink" in stats:
+        return stats["shrink"]
+    out = {}
+    for key, n in (("slot", stats["n_slot"]), ("tod", stats["n_tod"])):
+        mu, t = stats[key]
+        use = (n >= MIN_N) & (t != 0)
+        se = np.where(use, np.abs(mu / np.where(t != 0, t, 1.0)), np.inf)
+        tau2 = max(0.0, float(np.mean(mu[use] ** 2) - np.mean(se[use] ** 2))) if use.sum() >= 2 else 0.0
+        out[key] = np.where(use, tau2 / (tau2 + se ** 2), 0.0)
+    stats["shrink"] = out
+    return out
+
+
+def bar_factor(stats: dict, starts, minutes: int) -> np.ndarray:
+    """The shrink factor of the slot each bar's call comes from (the weekday-and-time slot when it is clear,
+    else the time of day, as in bar_drift)."""
+    starts = pd.DatetimeIndex(starts)
+    week, tod, _ = _slots(starts, minutes)
+    _, t_w = stats["slot"]
+    f = shrink_factors(stats)
+    return np.where(np.abs(t_w[week]) >= T_MIN, f["slot"][week], f["tod"][tod])
+
+
 def explain(stats: dict, start, minutes: int) -> dict:
     """What a bar starting at ``start`` gets its expected move from: the weekday-and-time slot or, failing
     that, the time of day, with that slot's average move (bp), t statistic and number of bars."""
@@ -112,6 +152,9 @@ def explain(stats: dict, start, minutes: int) -> dict:
     reopen = not market_open_mask(pd.DatetimeIndex([start]) - pd.Timedelta(minutes=minutes))[0]
     base["reopen"] = bool(reopen)
     base["used"] = None if reopen else "slot" if abs(t_w[w]) >= T_MIN else "tod" if abs(t_d[d]) >= T_MIN else None
+    if base["used"]:
+        base["shrink"] = float(shrink_factors(stats)[base["used"]][w if base["used"] == "slot" else d])
+    base["t_call"] = CALL_T_MIN.get(minutes, T_MIN)
     return base
 
 
@@ -132,8 +175,9 @@ def bar_drift(stats: dict, starts, minutes: int) -> tuple[np.ndarray, np.ndarray
 
 
 def combined_t(d: np.ndarray, t: np.ndarray) -> float:
-    """t statistic of a sum of bar drifts (independent slot means)."""
-    m = t != 0
+    """t statistic of a sum of bar drifts (independent slot means); bars whose expected move was shrunk to 0
+    add nothing."""
+    m = (t != 0) & (d != 0)
     if not m.any():
         return 0.0
     se = np.abs(d[m] / t[m])
@@ -182,14 +226,19 @@ def step_drift(minutes: int, bars: pd.DataFrame | None, origin: datetime, steps:
     """Expected move (bp) and its t statistic for each of the next ``steps`` bars of ``minutes`` after
     ``origin``, from the timeframe's own ``bars``; zeros for daily bars. With the ``pair`` and ``diff``
     (base-minus-quote short rate known at the origin, rates.rate_diff), a roll-bar call of hourly bars
-    that agrees with the expected roll shift is high confidence (promote)."""
+    that agrees with the expected roll shift is high confidence (promote). Calls below the timeframe's
+    threshold (``CALL_T_MIN``) are dropped, and each expected move is the slot average shrunk by its
+    reliability (shrink_factors)."""
     if not minutes or bars is None or len(bars) < 200:
         return np.zeros(steps), np.zeros(steps)
     starts = [add_trading_minutes(origin, k, minutes) - timedelta(minutes=minutes) for k in range(1, steps + 1)]
-    d, t = bar_drift(slot_stats(bars, origin, minutes), starts, minutes)
+    stats = slot_stats(bars, origin, minutes)
+    d, t = bar_drift(stats, starts, minutes)
     if pair is not None and diff is not None and minutes in ROLL_MINUTES:
         t = promote(d, t, roll_shift(starts, pair.base, pair.quote, diff))
-    return d, t
+    keep = np.abs(t) >= CALL_T_MIN.get(minutes, T_MIN)
+    d = np.where(keep, d * bar_factor(stats, starts, minutes), 0.0)
+    return d, np.where(keep, t, 0.0)
 
 
 def tier(t: float) -> str | None:

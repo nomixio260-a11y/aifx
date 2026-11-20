@@ -174,3 +174,25 @@ def test_lexicon_v4_fixes(title, lang, expect):
     an = news.analyze_lexicon(title, lang)
     assert {c: (1 if v > 0 else -1) for c, v in an["cur"].items()} == expect
     assert an["by"] == "lexicon-v4"
+
+
+def test_the_page_reports_how_the_learned_news_tilt_has_done():
+    """api.news_tilt_record: the tilt b x news x sigma of each scored intraday forecast, against the move."""
+    import math
+    from datetime import datetime, timezone
+
+    from aifx.api import news_tilt_record
+    now = datetime(2026, 11, 20, tzinfo=timezone.utc)
+
+    def pred(seq, x, b, c):
+        return {"seq": seq, "tf": "1h", "origin": "2026-11-10T10:00:00Z", "p0": 100.0, "news": {"x": x},
+                "fc": [{"h": 24, "b": b, "s": 10.0, "k": 1.0, "c": c}]}
+    # tilt +5 bp then the price rises 10 bp; tilt -5 bp and it rises 10 bp; no tilt; a daily forecast is ignored
+    preds = [pred(1, 0.5, 1.0, 5.0), pred(2, -0.5, 1.0, -5.0), pred(3, 0.0, 1.0, 0.0),
+             dict(pred(4, 0.5, 1.0, 5.0), tf="1d")]
+    up = 100.0 * math.exp(10.0 / 1e4)
+    outcomes = [{"items": [[1, 24, up, "x"], [2, 24, up, "x"], [3, 24, up, "x"], [4, 24, up, "x"]]}]
+    r = news_tilt_record(preds, outcomes, now)["1h"]["24"]
+    assert r["n"] == 3 and r["dir_n"] == 2 and r["hit"] == 0.5
+    assert r["mse"] == round((25 + 225 + 100) / 3, 3) and r["mse_without"] == 100.0
+    assert news_tilt_record(preds, outcomes, datetime(2027, 3, 1, tzinfo=timezone.utc)).get("1h") is None   # too old
