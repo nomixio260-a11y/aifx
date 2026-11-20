@@ -62,9 +62,9 @@ def test_candle_sizes_follow_the_time_of_day():
 def test_future_bars_skip_the_weekend():
     idx = pd.DatetimeIndex([pd.Timestamp("2026-09-25 20:00", tz="UTC")])   # Friday's last hour
     nxt = scenario.future_times(idx, 3, 60)
-    assert list(nxt.dayofweek) == [6, 6, 6] and list(nxt.hour) == [21, 22, 23]   # Sunday evening
+    assert list(nxt.day_of_week) == [6, 6, 6] and list(nxt.hour) == [21, 22, 23]   # Sunday evening
     days = scenario.future_times(pd.DatetimeIndex([pd.Timestamp("2026-09-25")]), 3, 0)
-    assert list(days.dayofweek) == [0, 1, 2]                                    # Monday, Tuesday, Wednesday
+    assert list(days.day_of_week) == [0, 1, 2]                                    # Monday, Tuesday, Wednesday
 
 
 def test_api_draws_forecast_candles_with_their_record(session):

@@ -60,7 +60,7 @@ def test_synthetic_market_bars_never_change_once_they_exist():
 
 def test_synthetic_daily_prices_are_weekday_ohlc():
     df = synthetic_prices(n=100, seed=1)
-    assert len(df) == 100 and (df.index.dayofweek < 5).all()
+    assert len(df) == 100 and (df.index.day_of_week < 5).all()
     assert (df["low"] <= df[["open", "close"]].min(axis=1)).all()
     assert isinstance(df.index, pd.DatetimeIndex)
     assert timedelta(days=1)

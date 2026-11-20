@@ -262,7 +262,7 @@ def _pair_rows(code: str, df: pd.DataFrame, cross: dict, carry: pd.Series, vix: 
     F["gap_h"] = np.log(gap)
     # time: the next bar starts at the origin; New York time follows the rollover through daylight saving
     ny = (idx + pd.Timedelta(hours=1)).tz_convert(season.NEW_YORK)
-    hr, wd = ny.hour.to_numpy(), ny.dayofweek.to_numpy()
+    hr, wd = ny.hour.to_numpy(), ny.day_of_week.to_numpy()
     F["ny_hour"], F["ny_wd"] = hr.astype(float), wd.astype(float)
     F["hsin"], F["hcos"] = np.sin(2 * np.pi * hr / 24), np.cos(2 * np.pi * hr / 24)
     wk = (wd * 24 + hr) / 168
@@ -296,7 +296,7 @@ def _pair_rows(code: str, df: pd.DataFrame, cross: dict, carry: pd.Series, vix: 
     # the value date moves at 17:00 New York: the quote of the higher-yielding currency then drops by the
     # forward points of the days rolled (3 on Wednesdays, over the weekend), which the swap pays back
     bar_ny = idx.tz_convert(season.NEW_YORK)
-    cum_days = np.concatenate([[0.0], np.cumsum(np.where(bar_ny.hour == 17, np.where(bar_ny.dayofweek == 2, 3.0, 1.0), 0.0))])
+    cum_days = np.concatenate([[0.0], np.cumsum(np.where(bar_ny.hour == 17, np.where(bar_ny.day_of_week == 2, 3.0, 1.0), 0.0))])
     pos = np.arange(n)
     for H in HORIZONS:
         days = cum_days[np.minimum(pos + H + 1, n)] - cum_days[np.minimum(pos + 1, n)]
@@ -1116,7 +1116,7 @@ def live_feed_roll_check(root: Path | None = None) -> dict:
         rates = history.rates_panel(pd.DatetimeIndex(sorted(set(days))))
         carry = (rates[pair.base] - rates[pair.quote]).reindex(days).to_numpy()
         ny = df.index.tz_convert(season.NEW_YORK)
-        shift = -carry * np.where(ny.dayofweek == 2, 3.0, 1.0) / 360 * 100
+        shift = -carry * np.where(ny.day_of_week == 2, 3.0, 1.0) / 360 * 100
         rows.append(pd.DataFrame({"r": r, "shift": shift, "hour": ny.hour}))
     R = pd.concat(rows)
     R = R[np.isfinite(R.r) & (R.r != 0) & np.isfinite(R["shift"])]

@@ -94,7 +94,7 @@ def realized_daily_variance(hourly: pd.DataFrame, until: datetime) -> pd.Series:
         return pd.Series(dtype=float)
     r = np.diff(np.log(h["close"].to_numpy(dtype=float)))
     local = (h.index[1:] + pd.Timedelta(minutes=59)).tz_convert(LONDON).tz_localize(None).normalize()
-    wd = local.dayofweek
+    wd = local.day_of_week
     local = local + pd.to_timedelta(np.where(wd == 5, 2, np.where(wd == 6, 1, 0)), unit="D")
     rv = pd.Series(r * r).groupby(np.asarray(local)).sum()
     return rv.iloc[1:]   # the first day is usually incomplete
@@ -120,7 +120,7 @@ def _slot_keys(times, slot_minutes: int, tz=None, weekday: bool = False) -> np.n
     if tz is not None:
         idx = idx.tz_convert(tz)
     tod = (idx.hour.to_numpy() * 60 + idx.minute.to_numpy()) // slot_minutes
-    return idx.dayofweek.to_numpy() * (1440 // slot_minutes) + tod if weekday else tod
+    return idx.day_of_week.to_numpy() * (1440 // slot_minutes) + tod if weekday else tod
 
 
 def slot_profile(times, sq: np.ndarray, window: int = 1500, smooth: float = 0.25,

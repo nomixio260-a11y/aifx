@@ -57,8 +57,8 @@ def _slots(times, minutes: int) -> list[np.ndarray]:
     if minutes:
         times = pd.DatetimeIndex(times).tz_convert(NEW_YORK)
         tod = np.asarray(times.hour) * 60 + np.asarray(times.minute)
-        return [tod * 10 + np.asarray(times.dayofweek), tod]
-    return [np.asarray(times.dayofweek)]
+        return [tod * 10 + np.asarray(times.day_of_week), tod]
+    return [np.asarray(times.day_of_week)]
 
 
 def future_times(index: pd.DatetimeIndex, steps: int, minutes: int) -> pd.DatetimeIndex:

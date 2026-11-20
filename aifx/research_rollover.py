@@ -150,7 +150,7 @@ def roll_table(code: str, first: pd.Timestamp, last: pd.Timestamp, pair=None, ho
     hol = {c: holidays_fn(c, first.year - 1, last.year + 1) for c in {pair.base, pair.quote, "USD"}}
     days = pd.date_range(first.tz_convert(None).normalize() - pd.Timedelta(days=7),
                          last.tz_convert(None).normalize() + pd.Timedelta(days=7), freq="D")
-    days = days[days.dayofweek < 5]
+    days = days[days.day_of_week < 5]
     when = (days + pd.Timedelta(hours=17)).tz_localize(season.NEW_YORK).tz_convert("UTC").as_unit("ns").asi8
     spot = {}
 
@@ -160,7 +160,7 @@ def roll_table(code: str, first: pd.Timestamp, last: pd.Timestamp, pair=None, ho
         return spot[d]
 
     cal = np.array([(sp(d + (3 if d.weekday() == 4 else 1) * D1) - sp(d)).days for d in days.date])
-    plain = np.where(days.dayofweek == 2, 3, 1)
+    plain = np.where(days.day_of_week == 2, 3, 1)
     return when, {"plain": np.concatenate([[0], np.cumsum(plain)]), "cal": np.concatenate([[0], np.cumsum(cal)])}
 
 
@@ -261,7 +261,7 @@ def build(full: pd.DataFrame, code: str, minutes: int, min_bars: int, ahead: int
     d0, t0 = _choose(*_mu_t(Sw), *_mu_t(Sd))
     local = idx[tgt].tz_convert(season.NEW_YORK)
     F = {"origin": origin, "tstart": ns[tgt], "f": np.log(close[tgt] / close[src]) * 1e4, "d0": d0, "t0": t0,
-         "ny_hour": local.hour.to_numpy(), "ny_min": local.minute.to_numpy(), "ny_dow": local.dayofweek.to_numpy()}
+         "ny_hour": local.hour.to_numpy(), "ny_min": local.minute.to_numpy(), "ny_dow": local.day_of_week.to_numpy()}
     F["roll"] = (F["ny_hour"] == 17) & (F["ny_min"] == 0) & (F["ny_dow"] <= 3)
     when, cum = roll_table(code, idx[0], idx[-1], pair, holidays_fn, spot_fn)
     diff_bar = rate_diff_by_day(code, ns // NS_DAY * NS_DAY, pair)
@@ -526,7 +526,7 @@ def first_hour_15m(p: dict, split: pd.Timestamp) -> dict:
         idx = pd.DatetimeIndex(bars.index).as_unit("ns")
         c = bars["close"].to_numpy(float)
         ny = idx.tz_convert(season.NEW_YORK)
-        roll = (ny.hour == 17) & (ny.minute == 0) & (ny.dayofweek <= 3)
+        roll = (ny.hour == 17) & (ny.minute == 0) & (ny.day_of_week <= 3)
         when, cum = roll_table(code, idx[0], idx[-1])
         ns = idx.asi8
         step = 15 * NS_MIN
@@ -569,7 +569,7 @@ def live_roll_shift(starts, base: str, quote: str, diff: float | None) -> np.nda
     if diff is None:
         return out
     for k, t in enumerate(local):
-        if t.hour == 17 and t.minute == 0 and t.dayofweek <= 3:
+        if t.hour == 17 and t.minute == 0 and t.day_of_week <= 3:
             trade = t.date()
             hol = {c: _holidays_near(c, trade.year) for c in {base, quote, "USD"}}
             nxt = trade + timedelta(days=3 if trade.weekday() == 4 else 1)
@@ -1179,7 +1179,7 @@ def report(res: dict) -> str:
               "    if diff is None:",
               "        return out",
               "    for k, t in enumerate(local):",
-              "        if t.hour == 17 and t.minute == 0 and t.dayofweek <= 3:",
+              "        if t.hour == 17 and t.minute == 0 and t.day_of_week <= 3:",
               "            out[k] = -diff * roll_days(t.date(), base, quote) / 360 * 100",
               "    return out",
               "",

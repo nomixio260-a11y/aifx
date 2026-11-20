@@ -48,7 +48,7 @@ def test_range_variance_and_scaling():
 
 def _hourly(start: str, n: int, seed: int = 0) -> pd.DataFrame:
     idx = pd.date_range(start, periods=n, freq="h", tz="UTC")
-    idx = idx[[not (t.dayofweek == 5 or (t.dayofweek == 4 and t.hour >= 21) or (t.dayofweek == 6 and t.hour < 21))
+    idx = idx[[not (t.day_of_week == 5 or (t.day_of_week == 4 and t.hour >= 21) or (t.day_of_week == 6 and t.hour < 21))
                for t in idx]]
     close = 150 * np.exp(np.cumsum(np.random.default_rng(seed).normal(0, 0.001, len(idx))))
     return pd.DataFrame({"open": close, "high": close * 1.001, "low": close * 0.999, "close": close}, index=idx)
@@ -59,7 +59,7 @@ def test_realized_variance_groups_by_london_day_and_stops_at_the_cutoff():
     until = datetime(2026, 9, 15, 23, tzinfo=UTC)          # London midnight in summer time
     rv = realized_daily_variance(h, until)
     assert rv.index.max() == pd.Timestamp("2026-09-15")
-    assert all(d.dayofweek < 5 for d in rv.index)           # Sunday evening belongs to Monday
+    assert all(d.day_of_week < 5 for d in rv.index)           # Sunday evening belongs to Monday
     r = np.diff(np.log(h["close"].to_numpy()))
     day = (h.index[1:] + pd.Timedelta(minutes=59)).tz_convert("Europe/London").normalize().tz_localize(None)
     sel = day == pd.Timestamp("2026-09-10")

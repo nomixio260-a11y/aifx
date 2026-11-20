@@ -123,7 +123,7 @@ def london_days(h: pd.DataFrame, min_hours: int = 3) -> pd.DataFrame:
     recorded at the day's last hour."""
     local = h.index.tz_convert("Europe/London")
     day = pd.DatetimeIndex(local.date)
-    wd = day.weekday.to_numpy()
+    wd = day.day_of_week.to_numpy()
     day = day + pd.to_timedelta(np.where(wd == 5, 2, np.where(wd == 6, 1, 0)), unit="D")
     g = h.groupby(day)
     out = pd.DataFrame({"open": g["open"].first(), "high": g["high"].max(), "low": g["low"].min(),

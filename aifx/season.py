@@ -54,7 +54,7 @@ def _slots(times: pd.DatetimeIndex, minutes: int) -> tuple[np.ndarray, np.ndarra
     local = times.tz_convert(NEW_YORK)
     per_day = 24 * 60 // minutes
     tod = (local.hour.to_numpy() * 60 + local.minute.to_numpy()) // minutes
-    return local.dayofweek.to_numpy() * per_day + tod, tod, per_day
+    return local.day_of_week.to_numpy() * per_day + tod, tod, per_day
 
 
 def slot_stats(bars: pd.DataFrame, origin: datetime, minutes: int) -> dict:
@@ -165,7 +165,7 @@ def roll_shift(starts, base: str, quote: str, diff: float | None) -> np.ndarray:
     if diff is None:
         return out
     for k, t in enumerate(local):
-        if t.hour == 17 and t.minute == 0 and t.dayofweek <= 3:
+        if t.hour == 17 and t.minute == 0 and t.day_of_week <= 3:
             out[k] = -diff * roll_days(t.date(), base, quote) / 360 * 100
     return out
 

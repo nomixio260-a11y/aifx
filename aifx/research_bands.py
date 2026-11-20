@@ -159,12 +159,12 @@ def london_day_bars(h: pd.DataFrame) -> pd.DataFrame:
     weekday with hourly bars (the Sunday evening counts towards Monday), rebuilt from its hourly bars
     where they cover it and otherwise closed at the next day's opening price."""
     local = (h.index + pd.Timedelta(minutes=59)).tz_convert(LONDON).tz_localize(None).normalize()
-    wd = local.dayofweek
+    wd = local.day_of_week
     key = local + pd.to_timedelta(np.where(wd == 5, 2, np.where(wd == 6, 1, 0)), unit="D")
     g = h.groupby(np.asarray(key)).agg(open=("open", "first"), high=("high", "max"), low=("low", "min"),
                                        close=("close", "last"))
     g.index = pd.DatetimeIndex(g.index, name="date")
-    return london_days(g[g.index.dayofweek < 5], h)
+    return london_days(g[g.index.day_of_week < 5], h)
 
 
 # ------------------------------------------------------------- hourly: variance
@@ -175,7 +175,7 @@ def _open_grid(first: pd.Timestamp, last: pd.Timestamp) -> tuple[np.ndarray, np.
     grid = pd.date_range(first.floor("h"), last + pd.Timedelta(days=40), freq="h", tz="UTC")
     grid = grid[market_open_mask(grid)]
     ny = grid.tz_convert(NEW_YORK)
-    return grid.as_unit("ns").asi8, ny.dayofweek.to_numpy() * 24 + ny.hour.to_numpy()
+    return grid.as_unit("ns").asi8, ny.day_of_week.to_numpy() * 24 + ny.hour.to_numpy()
 
 
 class HourlyPaths:
@@ -207,7 +207,7 @@ class HourlyPaths:
         self.X = np.stack([np.where(ok, alt, 0.0), np.where(ok, r2, 0.0), np.where(ok, 0.0, r2)])  # A, D, B
         self.cum = np.concatenate([np.zeros((4, 1)), np.cumsum(np.vstack([self.X, ok[None, :]]), axis=1)], axis=1)
         ny = bars.index.tz_convert(NEW_YORK)
-        self.key = ny.dayofweek.to_numpy() * 24 + ny.hour.to_numpy()
+        self.key = ny.day_of_week.to_numpy() * 24 + ny.hour.to_numpy()
         self.pos, self.kcum = [], []
         for k in range(168):
             p = np.flatnonzero(self.key == k)

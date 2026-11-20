@@ -111,7 +111,7 @@ def build(tf: str) -> tuple[pd.DataFrame, list[str]]:
         if tf != "1d":
             hr = common.hour + common.minute / 60
             f["hsin"], f["hcos"] = np.sin(2 * np.pi * hr / 24), np.cos(2 * np.pi * hr / 24)
-        f["dow"] = common.dayofweek
+        f["dow"] = common.day_of_week
         for k in cfg["str_lags"]:
             f[f"str{k}"] = strength[k][pair.base] - strength[k][pair.quote]
             f[f"strb{k}"] = strength[k][pair.base]

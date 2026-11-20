@@ -149,7 +149,7 @@ def build(tf: str, until=None, range_lag: int | None = None) -> dict:
         st = {"carry": (rates[pair.base] - rates[pair.quote]).reindex(days[code]).to_numpy()}
         if hourly:
             ny = pd.to_datetime(t, utc=True).tz_convert(NY)
-            h, w = ny.hour.to_numpy(), ny.dayofweek.to_numpy()
+            h, w = ny.hour.to_numpy(), ny.day_of_week.to_numpy()
             ch["hour_sin"], ch["hour_cos"] = np.sin(2 * np.pi * h / 24), np.cos(2 * np.pi * h / 24)
             ch["wday_sin"], ch["wday_cos"] = np.sin(2 * np.pi * w / 7), np.cos(2 * np.pi * w / 7)
             ch["roll"] = (h == 17).astype(float)
@@ -157,10 +157,10 @@ def build(tf: str, until=None, range_lag: int | None = None) -> dict:
             for k in range(24):
                 st[f"next_h{k}"] = (nyo.hour.to_numpy() == k).astype(float)
             for k in range(7):
-                st[f"next_d{k}"] = (nyo.dayofweek.to_numpy() == k).astype(float)
+                st[f"next_d{k}"] = (nyo.day_of_week.to_numpy() == k).astype(float)
             st["next_roll"] = (nyo.hour.to_numpy() == 17).astype(float)
         else:
-            w = pd.to_datetime(t, utc=True).dayofweek.to_numpy()
+            w = pd.to_datetime(t, utc=True).day_of_week.to_numpy()
             ch["wday_sin"], ch["wday_cos"] = np.sin(2 * np.pi * w / 7), np.cos(2 * np.pi * w / 7)
             for k in range(7):
                 st[f"wday{k}"] = (w == k).astype(float)
@@ -394,7 +394,7 @@ def drift(D: dict) -> np.ndarray:
         r[1:][np.diff(t) > HOUR_NS] = np.nan                   # a bar after a pause carries its gap
         ny = pd.to_datetime(t, utc=True).tz_convert(NY)
         tod = ny.hour.to_numpy()
-        wk = ny.dayofweek.to_numpy() * 24 + tod
+        wk = ny.day_of_week.to_numpy() * 24 + tod
         origin = t + HOUR_NS
         cut = np.searchsorted(t, origin - origin % DAY_NS, side="left")    # bars before the origin's UTC day
         ucut, inv = np.unique(cut, return_inverse=True)

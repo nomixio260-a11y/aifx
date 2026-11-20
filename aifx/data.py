@@ -148,7 +148,7 @@ def fetch_frankfurter(pair: Pair, years: int = 5) -> pd.DataFrame:
 
 def _clean_daily(df: pd.DataFrame) -> pd.DataFrame:
     df = df[~df.index.duplicated(keep="last")].sort_index()
-    df = df[df.index.dayofweek < 5]  # FX closes at weekends; drop stray Sunday bars
+    df = df[df.index.day_of_week < 5]  # FX closes at weekends; drop stray Sunday bars
     return _fix_ohlc(df)
 
 
@@ -359,7 +359,7 @@ class SyntheticMarket:
         day = pd.DatetimeIndex(london.date)
         agg = h.groupby(day).agg({"open": "first", "high": "max", "low": "min", "close": "last"})
         agg.index.name = "date"
-        agg = agg[agg.index.dayofweek < 5]
+        agg = agg[agg.index.day_of_week < 5]
         return completed_daily(agg, cutoff), "synthetic"
 
 

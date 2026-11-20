@@ -119,7 +119,7 @@ def gotobi_days(start, end) -> set:
         days = [5, 10, 15, 20, 25, m.days_in_month]
         for d in days:
             t = pd.Timestamp(year=m.year, month=m.month, day=d)
-            while t.dayofweek >= 5:
+            while t.day_of_week >= 5:
                 t -= pd.Timedelta(days=1)
             out.add(t.date())
     return out

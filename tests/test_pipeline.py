@@ -1,6 +1,7 @@
 """End-to-end: a simulated server session, and attempts to cheat that must be caught."""
 
 import json
+from pathlib import Path
 import threading
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -316,6 +317,21 @@ def test_the_chained_cycle_starts_late_enough_to_forecast(tmp_path):
     rep = run_session(tmp_path / "state", cycles=1, start=at)[0]
     tfs = {p["tf"] for p in Ledger(tmp_path / "state").load().of_type("prediction")}
     assert rep.verify["ok"] and {"15m", "1h"} <= tfs
+
+
+def test_a_hanging_page_deployment_cannot_stop_the_cycles():
+    """2026-10-05 to 11-04: one run's deploy job stayed "waiting" for 30 days and a run-wide lock queued
+    every later run behind it. The locks are per job, a newer deployment replaces a hanging one, the chain
+    does not wait for the deployment, and only a newer open run (not an older hanging one) stops it."""
+    import yaml
+    wf = yaml.safe_load((Path(__file__).resolve().parent.parent / ".github" / "workflows" / "server.yml").read_text())
+    jobs = wf["jobs"]
+    assert "concurrency" not in wf
+    assert jobs["cycle"]["concurrency"] == {"group": "fx-server-cycle", "cancel-in-progress": False}
+    assert jobs["deploy"]["concurrency"]["cancel-in-progress"] is True and jobs["deploy"]["timeout-minutes"] <= 15
+    assert jobs["next"]["needs"] == "cycle" and "concurrency" not in jobs["next"]
+    script = jobs["next"]["steps"][0]["run"]
+    assert ".databaseId > $RUN_ID" in script and ".databaseId != $RUN_ID" not in script
 
 
 def test_the_page_knows_when_the_next_cycle_lands():

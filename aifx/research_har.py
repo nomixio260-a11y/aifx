@@ -114,7 +114,7 @@ def london_day_keys(starts) -> np.ndarray:
     """London business day of each hourly bar (by its start), as in volatility.realized_daily_variance:
     a bar belongs to the day in which it ends; Sunday-evening bars count towards Monday."""
     local = (pd.DatetimeIndex(starts) + pd.Timedelta(minutes=59)).tz_convert(LONDON).tz_localize(None).normalize()
-    wd = local.dayofweek
+    wd = local.day_of_week
     return np.asarray(local + pd.to_timedelta(np.where(wd == 5, 2, np.where(wd == 6, 1, 0)), unit="D"))
 
 

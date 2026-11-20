@@ -123,7 +123,7 @@ def walk_forward(bars: pd.DataFrame, minutes: int = 60, window: int = season.WIN
     rank = np.where(use_w, rank_all[k, week[nxt]], 0)
     local = idx[1:].tz_convert(season.NEW_YORK)
     return pd.DataFrame({"d": d, "t": t, "f": np.log(close[1:] / close[:-1]) * 1e4,
-                         "rank": rank, "ny_hour": local.hour.to_numpy(), "ny_dow": local.dayofweek.to_numpy(),
+                         "rank": rank, "ny_hour": local.hour.to_numpy(), "ny_dow": local.day_of_week.to_numpy(),
                          "gap": np.diff(ns) > minutes * 60_000_000_000, "i": np.arange(n - 1)},
                         index=pd.DatetimeIndex(origin, tz="UTC"))
 
@@ -285,7 +285,7 @@ def overlap_pair(code: str, Y: pd.DataFrame, D: pd.DataFrame) -> dict:
     b = np.log(D.loc[common, "bid"].to_numpy(float))
     a = np.log(D.loc[common, "ask"].to_numpy(float))
     ny = common.tz_convert(season.NEW_YORK)
-    hour, dow = ny.hour.to_numpy(), ny.dayofweek.to_numpy()
+    hour, dow = ny.hour.to_numpy(), ny.day_of_week.to_numpy()
     lev = pd.DataFrame({"mid": (y - m) * 1e4, "bid": (y - b) * 1e4, "ask": (y - a) * 1e4,
                         "hs": D.loc[common, "hs"].to_numpy(float), "hour": hour})
     near = np.argmin(np.abs(np.stack([lev["bid"], lev["mid"], lev["ask"]])), axis=0)
@@ -376,7 +376,7 @@ def roll_profile(code: str, D: pd.DataFrame) -> pd.DataFrame:
     idx = D.index[ok]
     sgn, diff = _carry_sign(code, idx)
     ny = idx.tz_convert(season.NEW_YORK)
-    dow = ny.dayofweek.to_numpy()
+    dow = ny.day_of_week.to_numpy()
     days = np.where(dow == 2, 3.0, 1.0)
     return pd.DataFrame({"r": r[ok] * sgn, "raw": r[ok], "sgn": sgn, "step": -np.abs(diff) / 100 / 360 * days * 1e4,
                          "diff": diff, "hour": ny.hour.to_numpy(), "dow": dow, "year": idx.year, "pair": code,

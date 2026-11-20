@@ -182,7 +182,7 @@ def roll_shift(starts, base: str, quote: str, diff: float | None, spot=spot_date
     if diff is None:
         return out
     for k, t in enumerate(local):
-        if t.hour == 17 and t.minute == 0 and t.dayofweek <= 3:
+        if t.hour == 17 and t.minute == 0 and t.day_of_week <= 3:
             out[k] = -diff * roll_days(t.date(), base, quote, spot) / 360 * 100
     return out
 

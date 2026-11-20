@@ -403,7 +403,7 @@ def _basis(tf, pair, bars: pd.DataFrame, rec: dict | None, rate_item: dict | Non
            "roll": None}
     ny = pd.Timestamp(start).tz_convert(season.NEW_YORK)
     diff = rate_diff(rate_item, pair.base, pair.quote, origin.date()) if rate_item else None
-    if ny.hour == 17 and ny.minute == 0 and ny.dayofweek <= 3 and diff is not None:
+    if ny.hour == 17 and ny.minute == 0 and ny.day_of_week <= 3 and diff is not None:
         out["roll"] = {"days": fxcalendar.roll_days(ny.date(), pair.base, pair.quote), "diff": _r(diff, 3),
                        "e_bp": _r(float(season.roll_shift([start], pair.base, pair.quote, diff)[0]), 3),
                        "promote_bp": season.ROLL_E_HIGH}
@@ -427,7 +427,7 @@ def _pivots(tf_key: str, bars: pd.DataFrame, daily: pd.DataFrame, dec: int, now)
         hi, lo, cl = float(row["high"]), float(row["low"]), float(row["close"])
     else:
         week = daily.index.to_period("W-FRI")
-        done = daily if daily.index[-1].dayofweek == 4 and now.weekday() >= 5 else daily[week < week[-1]]
+        done = daily if daily.index[-1].day_of_week == 4 and now.weekday() >= 5 else daily[week < week[-1]]
         if not len(done):
             return None
         last = done[done.index.to_period("W-FRI") == done.index.to_period("W-FRI")[-1]]

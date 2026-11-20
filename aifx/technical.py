@@ -194,7 +194,7 @@ def donchian(df: pd.DataFrame, n: int = 20) -> tuple[pd.Series, pd.Series]:
 def london_trading_day(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """London trading day of each intraday bar (UTC bar-start index); the Sunday evening counts towards Monday."""
     loc = pd.DatetimeIndex(index.tz_convert(LONDON).tz_localize(None)).normalize()
-    wd = loc.dayofweek.to_numpy()
+    wd = loc.day_of_week.to_numpy()
     return loc + pd.to_timedelta(np.where(wd == 5, 2, np.where(wd == 6, 1, 0)), unit="D")
 
 
